@@ -180,7 +180,7 @@ namespace ess
 
 		std::error_code ec;
 		if (!std::filesystem::is_directory(a_root, ec)) {
-			errors.push_back("not a folder: " + U8(a_root));
+			errors.push_back("不是文件夹：" + U8(a_root));
 			return;
 		}
 		if (a_progress) {
@@ -220,7 +220,7 @@ namespace ess
 			}
 			// the game's own Data folder (vanilla BSAs) has the lowest priority of the loaded files
 			if (a_progress) {
-				a_progress->setCurrent("the game's Data folder");
+				a_progress->setCurrent("游戏的 Data 文件夹");
 			}
 			scanGameData();
 			step();
@@ -234,7 +234,7 @@ namespace ess
 			std::sort(disabled.begin(), disabled.end());
 			for (const auto& d : disabled) {
 				if (a_progress) {
-					a_progress->setCurrent(U8(d.filename()) + " (disabled)");
+					a_progress->setCurrent(U8(d.filename()) + "（已禁用）");
 				}
 				scanFolder(d, U8(d.filename()), false);
 				++disabledScanned;
@@ -308,7 +308,7 @@ namespace ess
 		vortex = true;
 		std::error_code ec;
 		if (!std::filesystem::is_directory(root, ec)) {
-			errors.push_back("Vortex staging folder not found: " + U8(root));
+			errors.push_back("找不到 Vortex 暂存文件夹：" + U8(root));
 			return;
 		}
 		std::set<std::string> deployed(v.mods.begin(), v.mods.end());
@@ -382,13 +382,13 @@ namespace ess
 			}
 		}
 		if (a_progress) {
-			a_progress->setCurrent("the game's Data folder");
+			a_progress->setCurrent("游戏的 Data 文件夹");
 		}
 		scanGameData();
 		step();
 		for (const auto& d : disabled) {
 			if (a_progress) {
-				a_progress->setCurrent(U8(d.filename()) + " (disabled)");
+				a_progress->setCurrent(U8(d.filename()) + "（已禁用）");
 			}
 			scanFolder(d, U8(d.filename()), false);
 			++disabledScanned;
@@ -790,14 +790,14 @@ namespace ess
 		if (a_pex.bsaEntry.empty()) {
 			std::ifstream in(a_pex.file, std::ios::binary);
 			if (!in) {
-				throw std::runtime_error("cannot open " + U8(a_pex.file));
+				throw std::runtime_error("无法打开 " + U8(a_pex.file));
 			}
 			return std::vector<std::uint8_t>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 		}
 		BsaArchive bsa(a_pex.file);
 		const auto* e = bsa.find(a_pex.bsaEntry);
 		if (!e) {
-			throw std::runtime_error(a_pex.bsaEntry + " is not in " + U8(a_pex.file.filename()));
+			throw std::runtime_error(a_pex.bsaEntry + " 不在这个 BSA 归档里：" + U8(a_pex.file.filename()));
 		}
 		return bsa.extract(*e);
 	}

@@ -62,7 +62,7 @@ namespace ess::compare
 			std::map<std::string, long long> m;
 			if (p) {
 				for (const auto& a : p->activeScripts) {
-					m[a.data && !a.data->frames.empty() ? p->str(a.data->frames.front().scriptName) : std::string("<no frames>")]++;
+					m[a.data && !a.data->frames.empty() ? p->str(a.data->frames.front().scriptName) : std::string("<无栈帧>")]++;
 				}
 			}
 			return m;
@@ -75,9 +75,9 @@ namespace ess::compare
 		r.identical = a_a.buildBody() == a_b.buildBody();
 		const auto& ha = a_a.header;
 		const auto& hb = a_b.header;
-		r.header.push_back(Fmt("A: save #%u  %s, level %u, %s, %s", ha.saveNumber, text::ToUtf8(ha.playerName).c_str(), ha.playerLevel,
+		r.header.push_back(Fmt("A：存档 #%u  %s，等级 %u，%s，%s", ha.saveNumber, text::ToUtf8(ha.playerName).c_str(), ha.playerLevel,
 			text::ToUtf8(ha.location).c_str(), text::ToUtf8(ha.gameDate).c_str()));
-		r.header.push_back(Fmt("B: save #%u  %s, level %u, %s, %s", hb.saveNumber, text::ToUtf8(hb.playerName).c_str(), hb.playerLevel,
+		r.header.push_back(Fmt("B：存档 #%u  %s，等级 %u，%s，%s", hb.saveNumber, text::ToUtf8(hb.playerName).c_str(), hb.playerLevel,
 			text::ToUtf8(hb.location).c_str(), text::ToUtf8(hb.gameDate).c_str()));
 
 		auto plugSet = [](const SaveFile& s) {
@@ -114,12 +114,12 @@ namespace ess::compare
             default: return 0;
             }
 		};
-		const char* names[] = { "Scripts", "Script instances", "Arrays", "Running threads", "Suspended stacks", "Function messages", "Strings" };
+		const char* names[] = { "脚本", "脚本实例", "数组", "运行中的线程", "挂起堆栈", "函数消息", "字符串" };
 		for (int i = 0; i < 7; ++i) {
 			r.totals.push_back({ names[i], count(A, i), count(B, i) });
 		}
-		r.totals.push_back({ "Change forms", static_cast<long long>(a_a.changeForms.size()), static_cast<long long>(a_b.changeForms.size()) });
-		r.totals.push_back({ "Body size (bytes)", static_cast<long long>(a_a.buildBody().size()), static_cast<long long>(a_b.buildBody().size()) });
+		r.totals.push_back({ "变更表单", static_cast<long long>(a_a.changeForms.size()), static_cast<long long>(a_b.changeForms.size()) });
+		r.totals.push_back({ "主体大小（字节）", static_cast<long long>(a_a.buildBody().size()), static_cast<long long>(a_b.buildBody().size()) });
 
 		r.instancesByScript = Diff(InstancesByScript(A), InstancesByScript(B), a_top);
 		r.threadsByScript = Diff(ThreadsByScript(A), ThreadsByScript(B), a_top);
@@ -137,7 +137,7 @@ namespace ess::compare
 	std::vector<std::string> Result::text() const
 	{
 		std::vector<std::string> L = header;
-		L.push_back(identical ? "The two saves have identical contents." : "");
+		L.push_back(identical ? "两个存档的内容完全相同。" : "");
 		auto deltas = [&](const char* title, const std::vector<Delta>& v, bool all) {
 			L.push_back(title);
 			std::size_t shown = 0;
@@ -149,13 +149,13 @@ namespace ess::compare
 				++shown;
 			}
 			if (!shown) {
-				L.push_back("  (no change)");
+				L.push_back("  （无变化）");
 			}
 			L.push_back("");
 		};
-		deltas("Totals (A -> B):", totals, true);
+		deltas("总计（A -> B）：", totals, true);
 		if (!pluginsAdded.empty() || !pluginsRemoved.empty()) {
-			L.push_back("Plugins:");
+			L.push_back("插件：");
 			for (const auto& p : pluginsAdded) {
 				L.push_back("  + " + p);
 			}
@@ -164,9 +164,9 @@ namespace ess::compare
 			}
 			L.push_back("");
 		}
-		deltas("Running threads by script (biggest changes):", threadsByScript, false);
-		deltas("Script instances by script (biggest changes):", instancesByScript, false);
-		deltas("Change forms by type:", changeFormsByType, false);
+		deltas("按脚本统计的运行中线程（变化最大）：", threadsByScript, false);
+		deltas("按脚本统计的脚本实例（变化最大）：", instancesByScript, false);
+		deltas("按类型统计的变更表单：", changeFormsByType, false);
 		return L;
 	}
 }

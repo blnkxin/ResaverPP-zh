@@ -53,11 +53,11 @@ namespace ess::orphans
 	const char* StatusText(Status a_status)
 	{
 		switch (a_status) {
-		case Status::kNotInstalled: return "Not installed";
-		case Status::kDisabled: return "Installed, disabled";
-		case Status::kInstalled: return "Installed";
-		case Status::kEngine: return "Game link, no script";
-		default: return "Unknown";
+		case Status::kNotInstalled: return "未安装";
+		case Status::kDisabled: return "已安装，已禁用";
+		case Status::kInstalled: return "已安装";
+		case Status::kEngine: return "游戏对象链接，无脚本";
+		default: return "未知";
 		}
 	}
 
@@ -144,17 +144,17 @@ namespace ess::orphans
 			const auto* prov = scanned ? a_sources->providers(sg.script) : nullptr;
 			if (ops::IsEngineType(sg.script) || ops::IsNativeScriptName(sg.script)) {
 				status = Status::kEngine;
-				mod = "(game object types)";
+				mod = "（游戏对象类型）";
 			} else if (prov && !prov->empty()) {
 				const auto it = std::find_if(prov->begin(), prov->end(), [](const ScriptProvider& x) { return x.enabled; });
 				status = it != prov->end() ? Status::kInstalled : Status::kDisabled;
 				mod = it != prov->end() ? it->mod : prov->front().mod;
 			} else if (undefined || (scanned && a_sources->gameDataScanned)) {
 				status = Status::kNotInstalled;
-				mod = "(script file not found)";
+				mod = "（找不到脚本文件）";
 			} else {
 				status = Status::kUnknown;
-				mod = scanned ? "(not in the scanned mods)" : "(mods not scanned)";
+				mod = scanned ? "（不在已扫描的模组里）" : "（未扫描模组）";
 			}
 			auto& g = groups[{ Rank(status), Lower(mod) }];
 			g.mod = mod;

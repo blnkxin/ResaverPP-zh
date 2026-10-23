@@ -154,8 +154,8 @@ void App::pollNames()
 		if (!_dbProgress->cancel) {
 			_db = std::move(_dbBuilding);
 			_rowsDirty = true;
-			_status = Fmt("Read %zu of %zu plugins: %zu named forms%s", _db->pluginsRead, _db->plugins().size(), _db->size(),
-				_db->missing.empty() ? "" : Fmt(" (%zu plugins not found)", _db->missing.size()).c_str());
+			_status = Fmt("已读取 %zu/%zu 个插件：%zu 个已命名表单%s", _db->pluginsRead, _db->plugins().size(), _db->size(),
+				_db->missing.empty() ? "" : Fmt("（%zu 个插件未找到）", _db->missing.size()).c_str());
 		}
 		_dbBuilding.reset();
 	}
@@ -170,25 +170,25 @@ bool App::namesLoading() const { return _dbThread.joinable() && !_dbDone; }
 void App::drawLookup()
 {
 	ImGui::SetNextWindowSize(ImVec2(900, 560), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin("Find form", &_showLookup)) {
+	if (!ImGui::Begin("查找表单", &_showLookup)) {
 		ImGui::End();
 		return;
 	}
 	if (!_db) {
 		if (namesLoading()) {
-			ImGui::TextUnformatted("Reading your plugins...");
+			ImGui::TextUnformatted("正在读取插件…");
 		} else {
-			ImGui::TextWrapped("Plugin names are not loaded. Use \"Find script sources (.pex)...\" in the Mods view once (pick your MO2 mods "
-							   "folder); the plugins are then read automatically.");
+			ImGui::TextWrapped("插件名尚未加载。请在“模组”视图中使用一次 \"查找脚本源码（.pex）…\"（选择你的 MO2 模组 "
+							   "文件夹）；之后插件会被自动读取。");
 		}
 		ImGui::End();
 		return;
 	}
-	ImGui::TextDisabled("Editor ID, name, or hex form ID. Placed references show their base object after \"->\".");
+	ImGui::TextDisabled("Editor ID、名称或十六进制表单 ID。已放置的引用会在 \"->\" 之后显示其基础对象。");
 	ImGui::SetNextItemWidth(-120);
-	bool go = ImGui::InputTextWithHint("##look", "e.g. Nazeem, WhiterunGuard, 00013BBF", _lookupBuf, sizeof(_lookupBuf), ImGuiInputTextFlags_EnterReturnsTrue);
+	bool go = ImGui::InputTextWithHint("##look", "例如 Nazeem、WhiterunGuard、00013BBF", _lookupBuf, sizeof(_lookupBuf), ImGuiInputTextFlags_EnterReturnsTrue);
 	ImGui::SameLine();
-	go |= ImGui::Button("Search", ImVec2(110, 0));
+	go |= ImGui::Button("搜索", ImVec2(110, 0));
 	if (_lookupAuto) {
 		go = true;
 		_lookupAuto = false;
@@ -217,14 +217,14 @@ void App::drawLookup()
 			}
 		}
 	}
-	ImGui::Text("%zu result(s)%s", _lookupResults.size(), _lookupResults.size() >= 2000 ? " (first 2000)" : "");
+	ImGui::Text("%zu 个结果%s", _lookupResults.size(), _lookupResults.size() >= 2000 ? "（仅显示前 2000 个）" : "");
 	if (ImGui::BeginTable("look", 6, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable)) {
 		ImGui::TableSetupScrollFreeze(0, 1);
-		ImGui::TableSetupColumn("Form ID", ImGuiTableColumnFlags_WidthFixed, 80);
-		ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 45);
-		ImGui::TableSetupColumn("Editor ID / name", ImGuiTableColumnFlags_WidthStretch);
-		ImGui::TableSetupColumn("Defined last by", ImGuiTableColumnFlags_WidthFixed, 200);
-		ImGui::TableSetupColumn("In save", ImGuiTableColumnFlags_WidthFixed, 140);
+		ImGui::TableSetupColumn("表单 ID", ImGuiTableColumnFlags_WidthFixed, 80);
+		ImGui::TableSetupColumn("类型", ImGuiTableColumnFlags_WidthFixed, 45);
+		ImGui::TableSetupColumn("Editor ID / 名称", ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableSetupColumn("最后定义者", ImGuiTableColumnFlags_WidthFixed, 200);
+		ImGui::TableSetupColumn("在存档中", ImGuiTableColumnFlags_WidthFixed, 140);
 		ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 120);
 		ImGui::TableHeadersRow();
 		ImGuiListClipper clip;
@@ -248,14 +248,14 @@ void App::drawLookup()
 				ImGui::TextUnformatted(_db->pluginName(*f).c_str());
 				const auto& li = _lookupInfo[row];
 				ImGui::TableSetColumnIndex(4);
-				ImGui::TextUnformatted(((li.hasCf ? std::string("changed") : std::string("-")) + (li.scripts ? Fmt(", %zu scripts", li.scripts) : std::string())).c_str());
+				ImGui::TextUnformatted(((li.hasCf ? std::string("已变更") : std::string("-")) + (li.scripts ? Fmt(", %zu 个脚本", li.scripts) : std::string())).c_str());
 				ImGui::TableSetColumnIndex(5);
-				if (li.hasCf && ImGui::SmallButton("form")) {
+				if (li.hasCf && ImGui::SmallButton("表单")) {
 					select(Cat::kChangeForms, li.cfRaw);
 				}
 				if (li.scripts) {
 					ImGui::SameLine();
-					if (ImGui::SmallButton("scripts")) {
+					if (ImGui::SmallButton("脚本")) {
 						select(Cat::kInstances, li.firstInstance);
 						std::snprintf(_filter, sizeof(_filter), "%08X", id);
 						_rowsDirty = true;
@@ -281,21 +281,21 @@ void App::drawCfNode(const cf::Node& n, int a_depth, int a_index)
 	if (n.kids.empty()) {
 		if (n.isRef) {
 			if (n.refRaw == 0) {
-				ImGui::BulletText("%s: None", n.label.c_str());
+				ImGui::BulletText("%s：无", n.label.c_str());
 			} else {
 				RefID id;
 				id.data = n.refRaw;
 				const auto* target = _save->findChangeForm(id);
-				ImGui::BulletText("%s: %s", n.label.c_str(), n.formID ? formText(n.formID).c_str() : Fmt("RefID %06X", n.refRaw).c_str());
+				ImGui::BulletText("%s：%s", n.label.c_str(), n.formID ? formText(n.formID).c_str() : Fmt("RefID %06X", n.refRaw).c_str());
 				if (target) {
 					ImGui::SameLine();
-					if (ImGui::SmallButton("go")) {
+					if (ImGui::SmallButton("跳转")) {
 						select(Cat::kChangeForms, n.refRaw);
 					}
 				}
 			}
 		} else {
-			ImGui::BulletText("%s: %s", n.label.c_str(), n.value.c_str());
+			ImGui::BulletText("%s：%s", n.label.c_str(), n.value.c_str());
 		}
 	} else if (ImGui::TreeNodeEx(n.label.c_str(), a_depth < 2 ? ImGuiTreeNodeFlags_DefaultOpen : 0)) {
 		for (std::size_t i = 0; i < n.kids.size(); ++i) {
@@ -324,22 +324,22 @@ void App::detailChangeFormDecoded(const ChangeForm& c)
 	}
 	const auto d = cf::Decode(*_save, c, types);
 
-	ImGui::SeparatorText("Change flags");
+	ImGui::SeparatorText("变更标志");
 	const auto names = cf::FlagNames(c.typeCode(), c.changeFlags);
 	if (names.empty()) {
-		ImGui::TextDisabled("(none)");
+		ImGui::TextDisabled("（无）");
 	}
 	for (const auto& n : names) {
 		ImGui::BulletText("%s", n.c_str());
 	}
 	if (d.baseObject) {
-		ImGui::Text("Base object: %s", formText(d.baseObject).c_str());
+		ImGui::Text("基础对象：%s", formText(d.baseObject).c_str());
 	}
 	if (d.hasHavok) {
-		TextColored(theme::Warn(), Fmt("Has saved physics (Havok) state: %zu bytes.", d.havokSize));
-		if (d.complete && ImGui::SmallButton("Reset this object's Havok")) {
+		TextColored(theme::Warn(), Fmt("含已保存的物理（Havok）状态：%zu 字节。", d.havokSize));
+		if (d.complete && ImGui::SmallButton("重置此对象的 Havok")) {
 			const auto refRaw = c.refID.data;
-			confirm("Reset Havok", "Zero the saved physics state of this object? It falls back to its resting position when loaded.",
+			confirm("重置 Havok", "把此对象已保存的物理状态归零？载入后它会回到静止位置。",
 				[this, refRaw] {
 					RefID id;
 					id.data = refRaw;
@@ -350,7 +350,7 @@ void App::detailChangeFormDecoded(const ChangeForm& c)
 							std::fill(body.begin() + static_cast<std::ptrdiff_t>(dd.havokOffset),
 								body.begin() + static_cast<std::ptrdiff_t>(dd.havokOffset + dd.havokSize), std::uint8_t(0));
 							cf::SetBody(*cf, body);
-							markChanged("Reset Havok of one object");
+							markChanged("重置了一个对象的 Havok");
 						}
 					}
 				});
@@ -361,22 +361,22 @@ void App::detailChangeFormDecoded(const ChangeForm& c)
 		for (auto v : d.listRaw) {
 			nulls += v == 0;
 		}
-		ImGui::Text("Form list: %zu entries, %zu null", d.listRaw.size(), nulls);
+		ImGui::Text("FormList：%zu 个条目，其中 %zu 个为空", d.listRaw.size(), nulls);
 		if (nulls) {
-			TextColored(theme::Warn(), "This list has null entries.");
-			if (ImGui::SmallButton("Cleanse this form list")) {
+			TextColored(theme::Warn(), "这个列表含空条目。");
+			if (ImGui::SmallButton("净化此 FormList")) {
 				const auto r = cf::PurifyFormLists(*_save, false, c.refID.data);
-				markChanged(Fmt("Removed %zu null entries from the form list", r.entries));
+				markChanged(Fmt("从 FormList 中移除了 %zu 个空条目", r.entries));
 			}
 		}
 	}
-	ImGui::SeparatorText("Decoded data");
+	ImGui::SeparatorText("已解码数据");
 	if (!d.supported) {
-		ImGui::TextDisabled("This change form type is not decoded (ReSaver does not decode it either); the raw bytes are below.");
+		ImGui::TextDisabled("此变更表单类型未解码（ReSaver 也不解码它）；原始字节见下方。");
 	} else if (d.complete) {
-		TextColored(theme::Good(), Fmt("Fully decoded (%zu bytes).", d.bodySize));
+		TextColored(theme::Good(), Fmt("已完整解码（%zu 字节）。", d.bodySize));
 	} else {
-		TextColored(theme::Warn(), Fmt("Partly decoded (%zu of %zu bytes): %s", d.consumed, d.bodySize, d.error.c_str()));
+		TextColored(theme::Warn(), Fmt("部分解码（%zu / %zu 字节）：%s", d.consumed, d.bodySize, d.error.c_str()));
 	}
 	for (std::size_t i = 0; i < d.root.kids.size(); ++i) {
 		drawCfNode(d.root.kids[i], 0, static_cast<int>(i));
@@ -391,13 +391,13 @@ void App::resetHavok()
 {
 	const auto dry = cf::ResetHavok(*_save, {}, true);
 	if (!dry.reset) {
-		_status = "No object reference with saved Havok data could be decoded; nothing to reset.";
+		_status = "没有可解码的、含已保存 Havok 数据的对象引用；无需重置。";
 		return;
 	}
-	confirm("Reset Havok",
-		Fmt("Zero the saved physics (Havok) state of %zu object references?\n\n%zu reference(s) whose data could not be fully decoded "
-			"are left alone (same rule as ReSaver). Objects fall back to their resting positions when the save loads; this helps with "
-			"physics explosions and flying objects on load.",
+	confirm("重置 Havok",
+		Fmt("把 %zu 个对象引用的已保存物理（Havok）状态归零？\n\n有 %zu 个引用的数据无法完整解码，"
+			"这些引用会保持原样（与 ReSaver 规则相同）。载入存档时物体会回到静止位置，这有助于解决载入时的"
+			"物理爆炸和物体乱飞问题。",
 			dry.reset, dry.failed),
 		[this] {
 			cf::TypeLookup types;
@@ -408,7 +408,7 @@ void App::resetHavok()
 				};
 			}
 			const auto r = cf::ResetHavok(*_save, types);
-			markEdited(Fmt("Reset Havok of %zu objects (%zu left alone)", r.reset, r.failed));
+			markEdited(Fmt("重置了 %zu 个对象的 Havok（%zu 个保持原样）", r.reset, r.failed));
 		});
 }
 
@@ -416,44 +416,44 @@ void App::purifyFormLists()
 {
 	const auto dry = cf::PurifyFormLists(*_save, true);
 	if (!dry.entries) {
-		_status = Fmt("No form list has null entries%s.", dry.failed ? Fmt(" (%zu could not be decoded)", dry.failed).c_str() : "");
+		_status = Fmt("没有 FormList 含有空条目%s。", dry.failed ? Fmt("（%zu 个无法解码）", dry.failed).c_str() : "");
 		return;
 	}
-	confirm("Purify FormLists", Fmt("Remove %zu null entries from %zu form list(s)?", dry.entries, dry.forms), [this] {
+	confirm("净化 FormList", Fmt("从 %zu 个 FormList 中移除 %zu 个空条目？", dry.entries, dry.forms), [this] {
 		const auto r = cf::PurifyFormLists(*_save);
-		markEdited(Fmt("Removed %zu null entries from %zu form lists", r.entries, r.forms));
+		markEdited(Fmt("从 %zu 个 FormList 中移除了 %zu 个空条目", r.entries, r.forms));
 	});
 }
 
 void App::drawBatchModal()
 {
 	if (_batchOpen) {
-		ImGui::OpenPopup("Batch Clean");
+		ImGui::OpenPopup("批量清理");
 		_batchOpen = false;
 		_batchResolved = false;
 	}
 	ImGui::SetNextWindowSize(ImVec2(760, 600), ImGuiCond_Appearing);
-	if (!ImGui::BeginPopupModal("Batch Clean")) {
+	if (!ImGui::BeginPopupModal("批量清理")) {
 		return;
 	}
 	if (!_batchResolved) {
-		ImGui::TextWrapped("One script per line (ReSaver's batch list format). \"Name*\" matches every script starting with Name; "
-						   "\"Name @@ reason\" asks first; lines starting with ; or # are ignored.");
+		ImGui::TextWrapped("每行一个脚本（ReSaver 的批量清单格式）。\"Name*\" 匹配所有以 Name 开头的脚本；"
+						   "\"Name @@ reason\" 会先询问；以 ; 或 # 开头的行会被忽略。");
 		ImGui::InputTextMultiline("##batch", _batchBuf, sizeof(_batchBuf), ImVec2(-1, -ImGui::GetFrameHeightWithSpacing() * 1.5f));
-		if (ImGui::Button("Find these scripts", ImVec2(180, 0))) {
+		if (ImGui::Button("查找这些脚本", ImVec2(180, 0))) {
 			_batchMatches = batch::Resolve(*_save, _batchBuf);
 			_batchResolved = true;
 		}
 		ImGui::SameLine();
-		if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+		if (ImGui::Button("取消", ImVec2(120, 0))) {
 			ImGui::CloseCurrentPopup();
 		}
 	} else {
-		ImGui::Text("%zu script(s) in this save match. Untick any you want to keep:", _batchMatches.size());
+		ImGui::Text("本存档中有 %zu 个脚本匹配。要保留的请取消勾选：", _batchMatches.size());
 		ImGui::BeginChild("bm", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 1.5f), ImGuiChildFlags_Borders);
 		for (auto& m : _batchMatches) {
 			ImGui::PushID(&m);
-			ImGui::Checkbox(Fmt("%s   (%zu instances, %zu threads)", m.script.c_str(), m.instances, m.threads).c_str(), &m.selected);
+			ImGui::Checkbox(Fmt("%s   （%zu 个实例，%zu 个线程）", m.script.c_str(), m.instances, m.threads).c_str(), &m.selected);
 			if (!m.prompt.empty()) {
 				ImGui::SameLine();
 				TextColored(theme::Warn(), "@@ " + m.prompt);
@@ -463,19 +463,19 @@ void App::drawBatchModal()
 		ImGui::EndChild();
 		const auto n = std::count_if(_batchMatches.begin(), _batchMatches.end(), [](const auto& m) { return m.selected; });
 		ImGui::BeginDisabled(n == 0);
-		if (ImGui::Button(Fmt("Purge %zu script(s)", static_cast<std::size_t>(n)).c_str(), ImVec2(180, 0))) {
+		if (ImGui::Button(Fmt("清除 %zu 个脚本", static_cast<std::size_t>(n)).c_str(), ImVec2(180, 0))) {
 			const auto r = batch::Apply(*_save, _batchMatches);
 			ImGui::CloseCurrentPopup();
-			markEdited(Fmt("Batch clean: %zu scripts purged (%zu threads, %zu stacks, %zu queued calls, %zu instances)", r.scripts, r.threads,
+			markEdited(Fmt("批量清理：清除了 %zu 个脚本（%zu 个线程、%zu 个堆栈、%zu 个排队调用、%zu 个实例）", r.scripts, r.threads,
 				r.stacks, r.messages, r.instances));
 		}
 		ImGui::EndDisabled();
 		ImGui::SameLine();
-		if (ImGui::Button("Back", ImVec2(120, 0))) {
+		if (ImGui::Button("返回", ImVec2(120, 0))) {
 			_batchResolved = false;
 		}
 		ImGui::SameLine();
-		if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+		if (ImGui::Button("取消", ImVec2(120, 0))) {
 			ImGui::CloseCurrentPopup();
 		}
 	}
@@ -494,19 +494,19 @@ void App::compareWith(const std::filesystem::path& a_other)
 		_compareTitle = platform::ToUtf8(_path.filename()) + "  ->  " + platform::ToUtf8(a_other.filename());
 		_showCompare = true;
 	} catch (const std::exception& e) {
-		_error = "Could not read " + platform::ToUtf8(a_other.filename()) + ":\n\n" + e.what();
+		_error = "无法读取 " + platform::ToUtf8(a_other.filename()) + "：\n\n" + e.what();
 	}
 }
 
 void App::drawCompare()
 {
 	ImGui::SetNextWindowSize(ImVec2(820, 620), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin("Compare saves", &_showCompare)) {
+	if (!ImGui::Begin("对比存档", &_showCompare)) {
 		ImGui::End();
 		return;
 	}
 	ImGui::TextUnformatted(("A = " + _compareTitle).c_str());
-	if (ImGui::Button("Copy to clipboard")) {
+	if (ImGui::Button("复制到剪贴板")) {
 		std::string all;
 		for (const auto& l : _compareLines) {
 			all += l + "\n";
@@ -534,42 +534,42 @@ void App::drawCompare()
 void App::drawReportModal()
 {
 	if (_reportOpen) {
-		ImGui::OpenPopup("Report");
+		ImGui::OpenPopup("报告");
 		_reportOpen = false;
 	}
 	ImGui::SetNextWindowSize(ImVec2(640, 0));
-	if (!ImGui::BeginPopupModal("Report", nullptr, ImGuiWindowFlags_NoResize)) {
+	if (!ImGui::BeginPopupModal("报告", nullptr, ImGuiWindowFlags_NoResize)) {
 		return;
 	}
-	ImGui::TextWrapped("Write a report of this save. Choose what goes in it:");
+	ImGui::TextWrapped("为这个存档写一份报告。选择要包含的内容：");
 	ImGui::Spacing();
-	ImGui::Checkbox("Mods and plugins with their scripts and instances", &_reportOpt.mods);
+	ImGui::Checkbox("模组与插件，及其脚本和实例", &_reportOpt.mods);
 	ImGui::Indent(32);
 	ImGui::PushTextWrapPos(0);
-	ImGui::TextDisabled("Every mod, every script on its objects, its instances and running threads (like the Mods view).");
+	ImGui::TextDisabled("每个模组、其对象上的每个脚本、脚本实例与运行中的线程（与“模组”视图相同）。");
 	ImGui::PopTextWrapPos();
 	ImGui::Unindent(32);
-	ImGui::Checkbox("Anomalies found", &_reportOpt.anomalies);
+	ImGui::Checkbox("发现的异常", &_reportOpt.anomalies);
 	ImGui::Indent(32);
 	ImGui::PushTextWrapPos(0);
-	ImGui::TextDisabled("Analysis findings, undefined / unattached / looping scripts, terminated threads, MCM jam, form lists with null "
-						"entries, the busiest scripts.");
+	ImGui::TextDisabled("分析结果、未定义 / 未附加 / 循环脚本、已终止的线程、MCM 卡死、含空条目的 "
+						"FormList、最繁忙的脚本。");
 	ImGui::PopTextWrapPos();
 	ImGui::Unindent(32);
 	ImGui::Separator();
-	ImGui::Checkbox("Export the report as a PDF (otherwise a .txt file)", &_reportOpt.pdf);
+	ImGui::Checkbox("把报告导出为 PDF（否则为 .txt 文件）", &_reportOpt.pdf);
 	if (!_db && _sources.scanned()) {
-		ImGui::TextDisabled(namesLoading() ? "Plugin names are still being read; the report will show form IDs only." : "");
+		ImGui::TextDisabled(namesLoading() ? "插件名仍在读取中；报告只会显示表单 ID。" : "");
 	}
 	ImGui::Spacing();
 	ImGui::BeginDisabled(!_reportOpt.mods && !_reportOpt.anomalies);
-	if (ImGui::Button("Write report...", ImVec2(160, 0))) {
+	if (ImGui::Button("写报告…", ImVec2(160, 0))) {
 		const char* ext = _reportOpt.pdf ? "pdf" : "txt";
 		auto        suggested = _path;
 		suggested.replace_filename(_path.stem().u8string() + u8"_report." + std::u8string(reinterpret_cast<const char8_t*>(ext)));
 		std::optional<std::filesystem::path> target;
 		if (platform::HasNativeDialogs()) {
-			target = platform::SaveFileDialog(suggested, ext, "Save report as");
+			target = platform::SaveFileDialog(suggested, ext, "报告另存为");
 		} else {
 			target = suggested;
 		}
@@ -580,7 +580,7 @@ void App::drawReportModal()
 	}
 	ImGui::EndDisabled();
 	ImGui::SameLine();
-	if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+	if (ImGui::Button("取消", ImVec2(120, 0))) {
 		ImGui::CloseCurrentPopup();
 	}
 	ImGui::EndPopup();
@@ -593,14 +593,14 @@ void App::writeReport(const std::filesystem::path& a_path)
 		const auto lines = report::Build(*_save, *_mods, _db.get(), _reportOpt, platform::ToUtf8(_path.filename()));
 		auto       ext = Lower(platform::ToUtf8(a_path.extension()));
 		if (ext == ".pdf") {
-			report::WritePdf(a_path, "ReSaver++ report - " + platform::ToUtf8(_path.filename()), lines);
+			report::WritePdf(a_path, "ReSaver++ 报告 - " + platform::ToUtf8(_path.filename()), lines);
 		} else {
 			report::WriteText(a_path, lines);
 		}
-		_status = Fmt("Report written: %s (%zu lines)", platform::ToUtf8(a_path.filename()).c_str(), lines.size());
+		_status = Fmt("报告已写入：%s（%zu 行）", platform::ToUtf8(a_path.filename()).c_str(), lines.size());
 		platform::OpenWithDefaultApp(a_path);
 	} catch (const std::exception& e) {
-		_error = std::string("Could not write the report:\n\n") + e.what();
+		_error = std::string("无法写入报告：\n\n") + e.what();
 	}
 }
 
@@ -642,7 +642,7 @@ void App::setWatching(bool a_on)
 				}
 			}
 		}
-		_status = "Watching the saves folder: new saves open automatically.";
+		_status = "正在监视存档文件夹：新存档会自动打开。";
 	}
 	saveSettings();
 }
@@ -691,7 +691,7 @@ void App::pollWatch()
 		const auto path = it->first;
 		it = _watchPending.erase(it);
 		if (_dirty) {
-			_status = "New save " + platform::ToUtf8(path.filename()) + " appeared; not opened because this one has unsaved edits.";
+			_status = "出现了新存档 " + platform::ToUtf8(path.filename()) + "；当前存档有未保存的修改，因此未打开。";
 		} else {
 			open(path);
 		}

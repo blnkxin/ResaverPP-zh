@@ -3,6 +3,7 @@
 
 #ifdef _WIN32
 #	include <windows.h>
+#	include <shellapi.h>
 #	include <shlobj.h>
 #	include <commdlg.h>
 #endif
@@ -136,11 +137,11 @@ namespace platform
 		OPENFILENAMEW ofn{};
 		ofn.lStructSize = sizeof(ofn);
 		ofn.hwndOwner = GetActiveWindow();
-		ofn.lpstrFilter = L"Skyrim SE saves (*.ess)\0*.ess\0All files (*.*)\0*.*\0";
+		ofn.lpstrFilter = L"Skyrim SE 存档 (*.ess)\0*.ess\0所有文件 (*.*)\0*.*\0";
 		ofn.lpstrFile = file;
 		ofn.nMaxFile = static_cast<DWORD>(std::size(file));
 		ofn.lpstrInitialDir = dir.empty() ? nullptr : dir.c_str();
-		ofn.lpstrTitle = L"Open Skyrim save";
+		ofn.lpstrTitle = L"打开存档";
 		ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
 		if (GetOpenFileNameW(&ofn)) {
 			return std::filesystem::path(file);
@@ -183,12 +184,12 @@ namespace platform
 		OPENFILENAMEW ofn{};
 		ofn.lStructSize = sizeof(ofn);
 		ofn.hwndOwner = GetActiveWindow();
-		ofn.lpstrFilter = L"Skyrim SE saves (*.ess)\0*.ess\0";
+		ofn.lpstrFilter = L"Skyrim SE 存档 (*.ess)\0*.ess\0";
 		ofn.lpstrDefExt = L"ess";
 		ofn.lpstrFile = file;
 		ofn.nMaxFile = static_cast<DWORD>(std::size(file));
 		ofn.lpstrInitialDir = dir.empty() ? nullptr : dir.c_str();
-		ofn.lpstrTitle = L"Save edited save as";
+		ofn.lpstrTitle = L"将编辑后的存档另存为";
 		ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
 		if (GetSaveFileNameW(&ofn)) {
 			return std::filesystem::path(file);
@@ -202,7 +203,7 @@ namespace platform
 		std::wstring dir = a_suggested.parent_path().wstring();
 		std::wstring ext = FromUtf8(a_ext).wstring();
 		std::wstring title = FromUtf8(a_title).wstring();
-		std::wstring filter = ext + L" files (*." + ext + L")";
+		std::wstring filter = ext + L" 文件 (*." + ext + L")";
 		filter.push_back(L'\0');
 		filter += L"*." + ext;
 		filter.push_back(L'\0');
@@ -229,7 +230,7 @@ namespace platform
 		std::wstring dir = a_startDir.wstring();
 		std::wstring ext = FromUtf8(a_ext).wstring();
 		std::wstring title = FromUtf8(a_title).wstring();
-		std::wstring filter = ext + L" files (*." + ext + L")";
+		std::wstring filter = ext + L" 文件 (*." + ext + L")";
 		filter.push_back(L'\0');
 		filter += L"*." + ext;
 		filter.push_back(L'\0');

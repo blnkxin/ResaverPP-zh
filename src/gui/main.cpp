@@ -8,6 +8,7 @@
 #include "App.h"
 #include "Platform.h"
 #include "Theme.h"
+#include "UiGlyphs.h"  // generated: the code points the Chinese UI text uses (i18n/gen_glyph_ranges.py)
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -83,6 +84,44 @@ namespace
 		}
 	}
 
+	// The interface itself is Chinese: its characters must be there even when the save's text is not
+	// in a Chinese code page (in which case PickAsianFont() merges nothing, or a Japanese/Korean one).
+	const ImWchar* UiRanges()
+	{
+		static std::vector<ImWchar> ranges = [] {
+			std::vector<ImWchar> r;
+			for (const unsigned* p = kUiGlyphRanges; p[0] != 0; p += 2) {
+				r.push_back(static_cast<ImWchar>(p[0]));
+				r.push_back(static_cast<ImWchar>(p[1]));
+			}
+			if (!r.empty()) {
+				r.push_back(0);
+			}
+			return r;
+		}();
+		return ranges.empty() ? nullptr : ranges.data();
+	}
+
+	bool MergeFont(ImFont* a_font, float a_size, const std::vector<const char*>& a_files, const ImWchar* a_ranges)
+	{
+		if (!a_font || !a_ranges) {
+			return false;
+		}
+		ImGuiIO& io = ImGui::GetIO();
+		for (const char* f : a_files) {
+			std::error_code ec;
+			if (!std::filesystem::exists(f, ec)) {
+				continue;
+			}
+			ImFontConfig cfg;
+			cfg.MergeMode = true;
+			if (io.Fonts->AddFontFromFileTTF(f, a_size, &cfg, a_ranges) != nullptr) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	ImFont* AddFont(const std::vector<const char*>& a_files, float a_size, bool a_fallbackDefault)
 	{
 		ImGuiIO& io = ImGui::GetIO();
@@ -101,16 +140,13 @@ namespace
 		// merge East Asian characters into it when the game text is in such a language
 		if (font) {
 			const auto asian = PickAsianFont();
-			for (const char* f : asian.files) {
-				std::error_code ec;
-				if (!std::filesystem::exists(f, ec)) {
-					continue;
-				}
-				ImFontConfig cfg;
-				cfg.MergeMode = true;
-				if (io.Fonts->AddFontFromFileTTF(f, a_size, &cfg, asian.ranges)) {
-					break;
-				}
+			const bool merged = MergeFont(font, a_size, asian.files, asian.ranges);
+			// the complete Chinese set covers the interface too; anything less needs the interface's own glyphs
+			if (!(merged && asian.ranges == io.Fonts->GetGlyphRangesChineseFull())) {
+				MergeFont(font, a_size,
+						{ "C:\\Windows\\Fonts\\msyh.ttc", "C:\\Windows\\Fonts\\msyhl.ttc", "C:\\Windows\\Fonts\\simhei.ttf",
+								"C:\\Windows\\Fonts\\Deng.ttf", "C:\\Windows\\Fonts\\simsun.ttc" },
+						UiRanges());
 			}
 		}
 		return font;
@@ -154,14 +190,14 @@ int RunApp(int argc, char** argv)
 	SetErrorMode(GetErrorMode() | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
 #endif
 	if (!glfwInit()) {
-		std::fputs("failed to initialise GLFW\n", stderr);
+		std::fputs("初始化 GLFW 失败\n", stderr);
 		return 1;
 	}
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-	GLFWwindow* window = glfwCreateWindow(1600, 950, "ReSaver++", nullptr, nullptr);
+	GLFWwindow* window = glfwCreateWindow(1600, 950, "ReSaver++ 中文版", nullptr, nullptr);
 	if (!window) {
-		std::fputs("failed to create a window (OpenGL 3.0 required)\n", stderr);
+		std::fputs("无法创建窗口（需要 OpenGL 3.0）\n", stderr);
 		glfwTerminate();
 		return 1;
 	}

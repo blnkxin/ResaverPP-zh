@@ -68,48 +68,48 @@ bool App::drawFiltersButton()
 	auto&      F = _filters;
 	const bool active = F.noParent || F.missingParent || F.memberless || F.zeroedCanary || F.withScripts || F.longStrings || F.nullLists ||
 						F.cellMinus1 || F.emptyRef || F.parseLevel || F.flagMask || F.formFlagMask || F.content[0];
-	if (ImGui::Button(active ? "Filters *" : "Filters")) {
+	if (ImGui::Button(active ? "过滤器 *" : "过滤器")) {
 		ImGui::OpenPopup("filters");
 	}
 	if (ImGui::BeginPopup("filters")) {
 		bool ch = false;
-		ImGui::TextDisabled("Checked filters in a group are alternatives (show rows matching any).");
-		ImGui::SeparatorText("Scripts");
-		ch |= ImGui::Checkbox("Scripts with no parent", &F.noParent);
-		ch |= ImGui::Checkbox("Scripts with missing parent", &F.missingParent);
-		ImGui::SeparatorText("Script instances");
-		ch |= ImGui::Checkbox("Memberless instances (script has variables, instance has none)", &F.memberless);
-		ch |= ImGui::Checkbox("Zeroed canaries (::iPapyrusDataVerification_var = 0)", &F.zeroedCanary);
-		ch |= ImGui::Checkbox("Forms with scripts (instances on changed forms / changed forms with scripts)", &F.withScripts);
-		ImGui::SeparatorText("Strings");
-		ch |= ImGui::Checkbox("Long strings (512 characters or more)", &F.longStrings);
-		ImGui::SeparatorText("Change forms");
-		ch |= ImGui::Checkbox("Form lists containing null entries", &F.nullLists);
-		ch |= ImGui::Checkbox("Cell(-1) change forms (moved to the deleted cell)", &F.cellMinus1);
-		ch |= ImGui::Checkbox("Empty REFR (no changes but empty initial data)", &F.emptyRef);
-		const char* levels[] = { "Ignore", "Fully decoded", "Partly decoded", "Not decoded" };
+		ImGui::TextDisabled("同一组内勾选的过滤器为“或”关系（显示匹配任一项的行）。");
+		ImGui::SeparatorText("脚本");
+		ch |= ImGui::Checkbox("无父级的脚本", &F.noParent);
+		ch |= ImGui::Checkbox("父级缺失的脚本", &F.missingParent);
+		ImGui::SeparatorText("脚本实例");
+		ch |= ImGui::Checkbox("无成员实例（脚本有变量，实例没有）", &F.memberless);
+		ch |= ImGui::Checkbox("归零的 canary（::iPapyrusDataVerification_var = 0）", &F.zeroedCanary);
+		ch |= ImGui::Checkbox("带脚本的表单（变更表单上的实例／带脚本的变更表单）", &F.withScripts);
+		ImGui::SeparatorText("字符串");
+		ch |= ImGui::Checkbox("长字符串（512 个字符或更多）", &F.longStrings);
+		ImGui::SeparatorText("变更表单");
+		ch |= ImGui::Checkbox("含空项的 FormList", &F.nullLists);
+		ch |= ImGui::Checkbox("Cell(-1) 变更表单（被移到已删除的单元格）", &F.cellMinus1);
+		ch |= ImGui::Checkbox("空 REFR（无变更但初始数据为空）", &F.emptyRef);
+		const char* levels[] = { "忽略", "完全解码", "部分解码", "未解码" };
 		ImGui::SetNextItemWidth(160);
-		ch |= ImGui::Combo("Decoding", &F.parseLevel, levels, 4);
-		ImGui::TextUnformatted("Change flags: mask");
+		ch |= ImGui::Combo("解码状态", &F.parseLevel, levels, 4);
+		ImGui::TextUnformatted("变更标志：掩码");
 		ImGui::SameLine();
 		ch |= HexInput("##fm", F.flagMask);
 		ImGui::SameLine();
-		ImGui::TextUnformatted("value");
+		ImGui::TextUnformatted("值");
 		ImGui::SameLine();
 		ch |= HexInput("##fv", F.flagValue);
-		ImGui::TextUnformatted("Form flags:   mask");
+		ImGui::TextUnformatted("表单标志：掩码");
 		ImGui::SameLine();
 		ch |= HexInput("##ffm", F.formFlagMask);
 		ImGui::SameLine();
-		ImGui::TextUnformatted("value");
+		ImGui::TextUnformatted("值");
 		ImGui::SameLine();
 		ch |= HexInput("##ffv", F.formFlagValue);
-		ImGui::TextDisabled("Rows pass when (flags & mask) == (value & mask). Mask 0 = off.");
+		ImGui::TextDisabled("当（flags & mask）==（value & mask）时该行通过；掩码为 0 即关闭。");
 		ImGui::SetNextItemWidth(420);
-		ch |= ImGui::InputTextWithHint("##content", "content: e.g. EXTRADATA/Ownership; INITIAL/CELL/0000003C", F.content, sizeof(F.content));
-		ImGui::TextDisabled("Content: \";\" = and, \",\" = or, \"!\" = not; path of fields ending in a value or a field name.");
+		ch |= ImGui::InputTextWithHint("##content", "内容：例如 EXTRADATA/Ownership；INITIAL/CELL/0000003C", F.content, sizeof(F.content));
+		ImGui::TextDisabled("内容：“;” 表示与，“,” 表示或，“!” 表示非；以值或字段名结尾的字段路径。");
 		ImGui::Separator();
-		if (ImGui::Button("Clear all filters")) {
+		if (ImGui::Button("清除所有过滤器")) {
 			F = Filters{};
 			ch = true;
 		}
@@ -130,43 +130,43 @@ void App::pluginActions(const std::set<std::string>& a_plugins)
 	if (a_plugins.empty()) {
 		return;
 	}
-	const auto label = a_plugins.size() == 1 ? *a_plugins.begin() : Fmt("%zu plugins", a_plugins.size());
+	const auto label = a_plugins.size() == 1 ? *a_plugins.begin() : Fmt("%zu 个插件", a_plugins.size());
 	const auto both = ops::SelectPluginElements(*_save, a_plugins, true, true);
-	if (ImGui::Button(Fmt("Delete its change forms (%zu)", both.changeForms.size()).c_str())) {
-		confirm("Delete change forms of " + label,
-			Fmt("Delete the saved state of %zu form(s) defined by %s?\n\nThe forms go back to how the plugin defines them on the next load.",
+	if (ImGui::Button(Fmt("删除其变更表单（%zu）", both.changeForms.size()).c_str())) {
+		confirm("删除 " + label + " 的变更表单",
+			Fmt("删除 %zu 个表单的已保存状态（这些表单由 %s 定义）？\n\n下次加载时，这些表单会回到插件定义的状态。",
 				both.changeForms.size(), label.c_str()),
 			[this, a_plugins] {
 				const auto s = ops::SelectPluginElements(*_save, a_plugins, true, false);
 				ops::ApplyPluginPurge(*_save, s);
-				markEdited(Fmt("Deleted %zu change forms", s.changeForms.size()));
+				markEdited(Fmt("已删除 %zu 个变更表单", s.changeForms.size()));
 			});
 	}
 	ImGui::SameLine();
-	if (ImGui::Button(Fmt("Delete its script instances (%zu)", both.instances.size()).c_str())) {
-		confirm("Delete script instances of " + label,
-			Fmt("Delete %zu script instance(s) on forms of %s, and %zu thread(s) running on them?", both.instances.size(), label.c_str(),
+	if (ImGui::Button(Fmt("删除其脚本实例（%zu）", both.instances.size()).c_str())) {
+		confirm("删除 " + label + " 的脚本实例",
+			Fmt("删除 %zu 个脚本实例（位于 %s 的表单上），以及运行在其上的 %zu 个线程？", both.instances.size(), label.c_str(),
 				both.threads.size()),
 			[this, a_plugins] {
 				const auto s = ops::SelectPluginElements(*_save, a_plugins, false, true);
 				ops::ApplyPluginPurge(*_save, s);
-				markEdited(Fmt("Deleted %zu instances and %zu threads", s.instances.size(), s.threads.size()));
+				markEdited(Fmt("已删除 %zu 个实例和 %zu 个线程", s.instances.size(), s.threads.size()));
 			});
 	}
-	if (ImGui::Button(Fmt("Purge %s (both)", label.c_str()).c_str())) {
-		confirm("Purge " + label,
-			Fmt("Delete %zu change form(s), %zu script instance(s) and %zu thread(s) of %s?\n\nFor a safety-checked removal of one mod use "
-				"Mods > Remove mod from save.",
+	if (ImGui::Button(Fmt("清除 %s（全部）", label.c_str()).c_str())) {
+		confirm("清除 " + label,
+			Fmt("删除 %zu 个变更表单、%zu 个脚本实例和 %zu 个线程（属于 %s）？\n\n若要安全地移除单个模组，请使用 "
+				"“模组 > 从存档移除模组”。",
 				both.changeForms.size(), both.instances.size(), both.threads.size(), label.c_str()),
 			[this, a_plugins] {
 				const auto s = ops::SelectPluginElements(*_save, a_plugins, true, true);
 				ops::ApplyPluginPurge(*_save, s);
-				markEdited(Fmt("Purged %zu change forms, %zu instances, %zu threads", s.changeForms.size(), s.instances.size(), s.threads.size()));
+				markEdited(Fmt("已清除 %zu 个变更表单、%zu 个实例、%zu 个线程", s.changeForms.size(), s.instances.size(), s.threads.size()));
 			});
 	}
 	if (a_plugins.size() == 1) {
 		ImGui::SameLine();
-		if (ImGui::Button("Set filter for this plugin")) {
+		if (ImGui::Button("为此插件设置过滤器")) {
 			_pluginFilter = *a_plugins.begin();
 			_cat = Cat::kChangeForms;
 			_filter[0] = 0;
@@ -175,7 +175,7 @@ void App::pluginActions(const std::set<std::string>& a_plugins)
 			_rowsDirty = true;
 		}
 		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Change Forms, Script Instances and threads then show only this plugin's elements.");
+			ImGui::SetTooltip("“变更表单”“脚本实例”和“线程”页随后只显示此插件的元素。");
 		}
 	}
 }
@@ -199,7 +199,7 @@ void App::exportPluginList()
 	auto suggested = _path;
 	suggested.replace_filename(_path.stem().u8string() + u8"_plugins.txt");
 	std::optional<std::filesystem::path> target =
-		platform::HasNativeDialogs() ? platform::SaveFileDialog(suggested, "txt", "Export plugin list") : std::optional{ suggested };
+		platform::HasNativeDialogs() ? platform::SaveFileDialog(suggested, "txt", "导出插件列表") : std::optional{ suggested };
 	if (!target) {
 		return;
 	}
@@ -211,7 +211,7 @@ void App::exportPluginList()
 	for (std::size_t i = 0; i < _save->plugins.lite.size(); ++i) {
 		f << Fmt("FE:%03zX  ", i) << _save->plugins.lite[i] << "\r\n";
 	}
-	_status = f ? "Plugin list exported to " + platform::ToUtf8(target->filename()) : "Could not write the plugin list";
+	_status = f ? "插件列表已导出到 " + platform::ToUtf8(target->filename()) : "无法写出插件列表";
 }
 
 // ==========================================================================================
@@ -220,40 +220,40 @@ void App::exportPluginList()
 
 void App::arrayEditor(ArrayInfo& a)
 {
-	ImGui::SeparatorText("Edit elements");
+	ImGui::SeparatorText("编辑元素");
 	const int n = static_cast<int>(a.vars.size());
 	if (_arrayIndex >= n) {
 		_arrayIndex = n ? n - 1 : 0;
 	}
 	ImGui::SetNextItemWidth(110);
-	ImGui::InputInt("element #", &_arrayIndex);
+	ImGui::InputInt("元素编号", &_arrayIndex);
 	_arrayIndex = std::clamp(_arrayIndex, 0, std::max(0, n - 1));
 	ImGui::SameLine();
 	ImGui::BeginDisabled(n == 0);
-	if (ImGui::Button("Remove")) {
+	if (ImGui::Button("移除")) {
 		a.vars.erase(a.vars.begin() + _arrayIndex);
-		markChanged(Fmt("Removed element %d of an array", _arrayIndex));
+		markChanged(Fmt("已移除数组的第 %d 个元素", _arrayIndex));
 	}
 	ImGui::SameLine();
 	ImGui::BeginDisabled(_arrayIndex == 0);
-	if (ImGui::Button("Shift up")) {
+	if (ImGui::Button("上移")) {
 		std::swap(a.vars[_arrayIndex], a.vars[_arrayIndex - 1]);
 		--_arrayIndex;
-		markChanged("Moved an array element up");
+		markChanged("已上移一个数组元素");
 	}
 	ImGui::EndDisabled();
 	ImGui::SameLine();
 	ImGui::BeginDisabled(_arrayIndex + 1 >= n);
-	if (ImGui::Button("Shift down")) {
+	if (ImGui::Button("下移")) {
 		std::swap(a.vars[_arrayIndex], a.vars[_arrayIndex + 1]);
 		++_arrayIndex;
-		markChanged("Moved an array element down");
+		markChanged("已下移一个数组元素");
 	}
 	ImGui::EndDisabled();
 	ImGui::EndDisabled();
 	ImGui::SameLine();
 	ImGui::BeginDisabled(a.type == VType::kStructArray || a.type == VType::kStruct || a.type == VType::kNull);
-	if (ImGui::Button("Add entry")) {
+	if (ImGui::Button("添加条目")) {
 		// ArrayInfo::type is the element type in SE saves (Ref, String, Int, ...); array codes are mapped too
 		auto t = a.type;
 		if (IsArrayType(t)) {
@@ -276,7 +276,7 @@ void App::arrayEditor(ArrayInfo& a)
 		}
 		a.vars.push_back(std::move(v));
 		_arrayIndex = static_cast<int>(a.vars.size()) - 1;
-		markChanged("Added an array element (edit its value above)");
+		markChanged("已添加一个数组元素（在上方编辑其值）");
 	}
 	ImGui::EndDisabled();
 }
@@ -288,7 +288,7 @@ void App::arrayEditor(ArrayInfo& a)
 void App::drawArraysAnalysis()
 {
 	ImGui::SetNextWindowSize(ImVec2(820, 600), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin("Arrays block", &_showArrays)) {
+	if (!ImGui::Begin("数组区块", &_showArrays)) {
 		ImGui::End();
 		return;
 	}
@@ -363,27 +363,27 @@ void App::drawArraysAnalysis()
 	for (const auto& a : p.arrays) {
 		total += a.vars.size();
 	}
-	ImGui::Text("%zu arrays, %zu elements in all, %zu not held by anything", p.arrays.size(), total, _arrOrphans.size());
-	if (ImGui::Button("Refresh")) {
+	ImGui::Text("%zu 个数组，共 %zu 个元素，%zu 个未被任何对象持有", p.arrays.size(), total, _arrOrphans.size());
+	if (ImGui::Button("刷新")) {
 		_arraysDirty = true;
 	}
 	if (!_arrOrphans.empty()) {
 		ImGui::SameLine();
-		if (ImGui::Button(Fmt("Delete the %zu arrays nothing holds", _arrOrphans.size()).c_str())) {
+		if (ImGui::Button(Fmt("删除 %zu 个无人持有的数组", _arrOrphans.size()).c_str())) {
 			const std::set<EID> ids(_arrOrphans.begin(), _arrOrphans.end());
-			confirm("Delete unreferenced arrays",
-				Fmt("Delete %zu arrays that no instance, reference, array, thread or queued call refers to?", ids.size()), [this, ids] {
-					markEdited(Fmt("Deleted %zu unreferenced arrays", ops::DeleteArrays(*_save->papyrus(), ids)));
+			confirm("删除未被引用的数组",
+				Fmt("删除 %zu 个没有任何实例、引用、数组、线程或排队调用引用的数组？", ids.size()), [this, ids] {
+					markEdited(Fmt("已删除 %zu 个未被引用的数组", ops::DeleteArrays(*_save->papyrus(), ids)));
 					_arraysDirty = true;
 				});
 		}
 	}
 	if (ImGui::BeginTabBar("arr")) {
-		if (ImGui::BeginTabItem("By element type")) {
+		if (ImGui::BeginTabItem("按元素类型")) {
 			if (ImGui::BeginTable("as", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersInnerV)) {
-				ImGui::TableSetupColumn("Type");
-				ImGui::TableSetupColumn("Arrays", ImGuiTableColumnFlags_WidthFixed, 90);
-				ImGui::TableSetupColumn("Elements", ImGuiTableColumnFlags_WidthFixed, 90);
+				ImGui::TableSetupColumn("类型");
+				ImGui::TableSetupColumn("数组", ImGuiTableColumnFlags_WidthFixed, 90);
+				ImGui::TableSetupColumn("元素", ImGuiTableColumnFlags_WidthFixed, 90);
 				ImGui::TableHeadersRow();
 				for (const auto& [t, n, e] : _arrStats) {
 					ImGui::TableNextRow();
@@ -407,12 +407,12 @@ void App::drawArraysAnalysis()
 						continue;
 					}
 					ImGui::PushID(reinterpret_cast<const void*>(static_cast<std::uintptr_t>(id)));
-					if (ImGui::SmallButton("go")) {
+					if (ImGui::SmallButton("跳转")) {
 						select(Cat::kArrays, id);
 					}
 					ImGui::SameLine();
 					const auto t = IsRefType(a->type) ? p.str(a->refType) + "[]" : std::string(VTypeName(a->type));
-					ImGui::Text("%016" PRIX64 "  %s%s", id, t.c_str(), showSize ? Fmt("  %zu elements", a->vars.size()).c_str() : "");
+					ImGui::Text("%016" PRIX64 "  %s%s", id, t.c_str(), showSize ? Fmt("  %zu 个元素", a->vars.size()).c_str() : "");
 					ImGui::PopID();
 				}
 				ImGui::EndChild();
@@ -423,8 +423,8 @@ void App::drawArraysAnalysis()
 		for (const auto& [n, id] : _arrBiggest) {
 			big.push_back(id);
 		}
-		idList("Largest arrays", big, true);
-		idList("Held by nothing", _arrOrphans, true);
+		idList("最大的数组", big, true);
+		idList("无人持有的数组", _arrOrphans, true);
 		ImGui::EndTabBar();
 	}
 	ImGui::End();
@@ -451,18 +451,18 @@ void App::logStatus()
 	}
 	if (!_error.empty() && _error != _lastLoggedError) {
 		_lastLoggedError = _error;
-		add("ERROR: " + _error);
+		add("错误：" + _error);
 	}
 }
 
 void App::drawLog()
 {
 	ImGui::SetNextWindowSize(ImVec2(820, 420), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin("Log", &_showLog)) {
+	if (!ImGui::Begin("日志", &_showLog)) {
 		ImGui::End();
 		return;
 	}
-	if (ImGui::Button("Copy")) {
+	if (ImGui::Button("复制")) {
 		std::string all;
 		for (const auto& l : _log) {
 			all += l + "\n";
@@ -470,7 +470,7 @@ void App::drawLog()
 		ImGui::SetClipboardText(all.c_str());
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Clear")) {
+	if (ImGui::Button("清空")) {
 		_log.clear();
 	}
 	ImGui::Separator();
@@ -488,12 +488,12 @@ void App::drawLog()
 void App::drawSettings()
 {
 	ImGui::SetNextWindowSize(ImVec2(680, 0), ImGuiCond_Appearing);
-	if (!ImGui::Begin("Settings", &_showSettings, ImGuiWindowFlags_AlwaysAutoResize)) {
+	if (!ImGui::Begin("设置", &_showSettings, ImGuiWindowFlags_AlwaysAutoResize)) {
 		ImGui::End();
 		return;
 	}
 	bool ch = false;
-	ImGui::SeparatorText("Game");
+	ImGui::SeparatorText("游戏");
 	{
 		int g = _vr ? 1 : 0;
 		const char* games[] = { "Skyrim Special Edition / Anniversary Edition", "Skyrim VR" };
@@ -502,15 +502,15 @@ void App::drawSettings()
 			setGame(g == 1);
 		}
 		ImGui::SameLine();
-		ImGui::TextDisabled("(switches by itself to the game of the save you open)");
+		ImGui::TextDisabled("（会自动切换到你所打开存档所属的游戏）");
 	}
-	ImGui::SeparatorText("Script sources and plugins");
-	ImGui::TextWrapped("Mods folder: %s", _sourcesPath.empty() ? "(not set)" : _sourcesPath.c_str());
-	ImGui::TextDisabled("Your Mod Organizer \"mods\" folder, Vortex's staging folder (or the game folder: Vortex is found from it),\n"
-						"or the game's Data folder. Used for script sources, the script viewer, plugin names and Remove mod.");
-	if (ImGui::Button("Choose mods folder...")) {
+	ImGui::SeparatorText("脚本来源与插件");
+	ImGui::TextWrapped("模组文件夹：%s", _sourcesPath.empty() ? "（未设置）" : _sourcesPath.c_str());
+	ImGui::TextDisabled("你的 Mod Organizer “mods” 文件夹、Vortex 的 staging 文件夹（或游戏文件夹：Vortex 就由它找到），\n"
+						"或游戏的 Data 文件夹。用于脚本来源、脚本查看器、插件名称和移除模组。");
+	if (ImGui::Button("选择模组文件夹…")) {
 		if (platform::HasNativeDialogs()) {
-			if (auto p = platform::PickFolderDialog("Pick your Mod Organizer \"mods\" folder (or the game's Data folder)")) {
+			if (auto p = platform::PickFolderDialog("请选择你的 Mod Organizer “mods” 文件夹（或游戏的 Data 文件夹）")) {
 				scanSources(*p);
 			}
 		} else {
@@ -519,26 +519,26 @@ void App::drawSettings()
 		}
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Use a ModOrganizer.ini...") && platform::HasNativeDialogs()) {
-		if (auto p = platform::OpenFileDialog({}, "ini", "Pick ModOrganizer.ini")) {
+	if (ImGui::Button("使用 ModOrganizer.ini…") && platform::HasNativeDialogs()) {
+		if (auto p = platform::OpenFileDialog({}, "ini", "选择 ModOrganizer.ini")) {
 			if (auto m = ReadMo2Ini(*p)) {
 				scanSources(m->modsDir);
 			} else {
-				_error = "Could not read " + platform::ToUtf8(*p);
+				_error = "无法读取 " + platform::ToUtf8(*p);
 			}
 		}
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Detect automatically")) {
+	if (ImGui::Button("自动检测")) {
 		autoDetectPaths(true);
 	}
 	if (!_detectNote.empty()) {
 		ImGui::TextDisabled("%s", _detectNote.c_str());
 	}
-	ImGui::TextWrapped("Game folder: %s", gameFolder().empty() ? "(not found)" : platform::ToUtf8(gameFolder()).c_str());
+	ImGui::TextWrapped("游戏文件夹：%s", gameFolder().empty() ? "（未找到）" : platform::ToUtf8(gameFolder()).c_str());
 	ImGui::SameLine();
-	if (ImGui::SmallButton("Change...##game") && platform::HasNativeDialogs()) {
-		if (auto p = platform::PickFolderDialog(_vr ? "Pick the Skyrim VR folder (the one with SkyrimVR.exe)" : "Pick the Skyrim Special Edition folder (the one with SkyrimSE.exe)")) {
+	if (ImGui::SmallButton("更改…##game") && platform::HasNativeDialogs()) {
+		if (auto p = platform::PickFolderDialog(_vr ? "选择 Skyrim VR 文件夹（含 SkyrimVR.exe 的那个）" : "选择 Skyrim Special Edition 文件夹（含 SkyrimSE.exe 的那个）")) {
 			_gamePath = platform::ToUtf8(*p);
 			ch = true;
 		}
@@ -546,9 +546,9 @@ void App::drawSettings()
 	{
 		const auto comp = compilerPath();
 		std::error_code ec;
-		ImGui::TextDisabled("Papyrus compiler: %s", !comp.empty() && std::filesystem::exists(comp, ec) ? platform::ToUtf8(comp).c_str()
-																										: "not found (it comes with the Creation Kit)");
-		ImGui::TextDisabled("Saves: %s", platform::ToUtf8(savesFolder()).c_str());
+		ImGui::TextDisabled("Papyrus 编译器：%s", !comp.empty() && std::filesystem::exists(comp, ec) ? platform::ToUtf8(comp).c_str()
+																										: "未找到（它随 Creation Kit 一起提供）");
+		ImGui::TextDisabled("存档：%s", platform::ToUtf8(savesFolder()).c_str());
 	}
 	// Mod Organizer instances installed for this user (%LOCALAPPDATA%\ModOrganizer\<instance>)
 	if (const char* la = std::getenv("LOCALAPPDATA")) {
@@ -565,11 +565,11 @@ void App::drawSettings()
 					continue;
 				}
 				ImGui::PushID(mods.c_str());
-				if (ImGui::SmallButton("Use")) {
+				if (ImGui::SmallButton("使用")) {
 					scanSources(m->modsDir);
 				}
 				ImGui::SameLine();
-				ImGui::TextDisabled("Mod Organizer \"%s\": %s", platform::ToUtf8(e.path().filename()).c_str(), mods.c_str());
+				ImGui::TextDisabled("Mod Organizer “%s”：%s", platform::ToUtf8(e.path().filename()).c_str(), mods.c_str());
 				ImGui::PopID();
 			}
 		}
@@ -577,16 +577,16 @@ void App::drawSettings()
 	if (!_vortex && !_mo2 && !gameFolder().empty()) {
 		std::error_code ec;
 		if (std::filesystem::exists(gameFolder() / "Data" / "vortex.deployment.json", ec)) {
-			TextColored(theme::Warn(), "The game's Data folder has Vortex's vortex.deployment.json, but it could not be read: mods are credited to the Data folder.");
+			TextColored(theme::Warn(), "游戏的 Data 文件夹中有 Vortex 的 vortex.deployment.json，但无法读取：模组会被归到 Data 文件夹。");
 		}
 	}
 	if (_vortex && !_mo2) {
-		ImGui::TextWrapped("Vortex: staging folder %s, %zu mods deployed to %s (%s)", platform::ToUtf8(_vortex->stagingPath).c_str(), _vortex->mods.size(),
+		ImGui::TextWrapped("Vortex：staging 文件夹 %s，%zu 个模组已部署到 %s（%s）", platform::ToUtf8(_vortex->stagingPath).c_str(), _vortex->mods.size(),
 			platform::ToUtf8(_vortex->dataPath).c_str(), _vortex->method.empty() ? "?" : _vortex->method.c_str());
 	}
 	if (_mo2) {
-		ImGui::TextWrapped("Mod Organizer: %s", platform::ToUtf8(_mo2->ini).c_str());
-		if (ImGui::BeginCombo("MO2 profile", _profile.c_str())) {
+		ImGui::TextWrapped("Mod Organizer：%s", platform::ToUtf8(_mo2->ini).c_str());
+		if (ImGui::BeginCombo("MO2 配置", _profile.c_str())) {
 			for (const auto& pr : _mo2->profiles) {
 				if (ImGui::Selectable(pr.c_str(), pr == _profile)) {
 					_profile = pr;
@@ -599,32 +599,32 @@ void App::drawSettings()
 			ImGui::EndCombo();
 		}
 	}
-	if (!_sourcesPath.empty() && ImGui::Button("Rescan mods folder")) {
+	if (!_sourcesPath.empty() && ImGui::Button("重新扫描模组文件夹")) {
 		scanSources(platform::FromUtf8(_sourcesPath));
 	}
-	ch |= ImGui::Checkbox("Read plugin names automatically", &_autoNames);
-	ImGui::SeparatorText("Language of game text");
+	ch |= ImGui::Checkbox("自动读取插件名称", &_autoNames);
+	ImGui::SeparatorText("游戏文本语言");
 	{
 		struct Cp
 		{
 			unsigned    cp;
 			const char* name;
 		};
-		static const Cp cps[] = { { 0, "Automatic" }, { 65001, "UTF-8" }, { 1250, "Central European (Polish, Czech, Hungarian...) 1250" },
-			{ 1251, "Cyrillic (Russian, Ukrainian...) 1251" }, { 1252, "Western European 1252" }, { 1253, "Greek 1253" }, { 1254, "Turkish 1254" },
-			{ 1257, "Baltic 1257" }, { 1258, "Vietnamese 1258" }, { 874, "Thai 874" }, { 932, "Japanese 932" }, { 936, "Chinese Simplified 936" },
-			{ 949, "Korean 949" }, { 950, "Chinese Traditional 950" } };
-		std::string current = "Automatic";
+		static const Cp cps[] = { { 0, "自动" }, { 65001, "UTF-8" }, { 1250, "中欧（波兰语、捷克语、匈牙利语…）1250" },
+			{ 1251, "西里尔文（俄语、乌克兰语…）1251" }, { 1252, "西欧 1252" }, { 1253, "希腊语 1253" }, { 1254, "土耳其语 1254" },
+			{ 1257, "波罗的海 1257" }, { 1258, "越南语 1258" }, { 874, "泰语 874" }, { 932, "日语 932" }, { 936, "简体中文 936" },
+			{ 949, "韩语 949" }, { 950, "繁体中文 950" } };
+		std::string current = "自动";
 		for (const auto& c : cps) {
 			if (c.cp == text::CodePage()) {
 				current = c.name;
 			}
 		}
 		if (text::CodePage() == 0) {
-			current = Fmt("Automatic (this system: %u)", text::EffectiveCodePage());
+			current = Fmt("自动（本系统：%u）", text::EffectiveCodePage());
 		}
 		ImGui::SetNextItemWidth(420);
-		if (ImGui::BeginCombo("Text encoding", current.c_str())) {
+		if (ImGui::BeginCombo("文本编码", current.c_str())) {
 			for (const auto& c : cps) {
 				if (ImGui::Selectable(c.name, c.cp == text::CodePage())) {
 					text::SetCodePage(c.cp);
@@ -634,35 +634,35 @@ void App::drawSettings()
 			}
 			ImGui::EndCombo();
 		}
-		ImGui::TextDisabled("Names and places in saves are shown in this encoding when they are not UTF-8.\n"
-							"Japanese, Chinese, Korean and Thai characters need a restart after changing it (fonts).");
+		ImGui::TextDisabled("存档中的名称和地点在不是 UTF-8 时按此编码显示。\n"
+							"更改后，日文、中文、韩文和泰文字符需要重启（字体）。");
 	}
-	ImGui::SeparatorText("Saving");
-	const char* comp[] = { "Keep the save's compression", "LZ4 (game default)", "zlib", "Uncompressed" };
+	ImGui::SeparatorText("保存");
+	const char* comp[] = { "保持存档原有的压缩", "LZ4（游戏默认）", "zlib", "不压缩" };
 	int         c = _saveCompression + 1;
-	if (ImGui::Combo("Compression when writing", &c, comp, 4)) {
+	if (ImGui::Combo("写入时的压缩方式", &c, comp, 4)) {
 		_saveCompression = c - 1;
 		ch = true;
 	}
-	ImGui::SeparatorText("Other");
+	ImGui::SeparatorText("其他");
 	bool watch = _watch;
 	{
 		int k = static_cast<int>(theme::Current());
-		const char* names[] = { "Light", "Grey", "Dark" };
+		const char* names[] = { "浅色", "灰色", "深色" };
 		ImGui::SetNextItemWidth(160);
-		if (ImGui::Combo("Theme", &k, names, 3)) {
+		if (ImGui::Combo("主题", &k, names, 3)) {
 			setTheme(k);
 		}
 	}
-	if (ImGui::Checkbox("Watch saves folder (open new saves automatically)", &watch)) {
+	if (ImGui::Checkbox("监视存档文件夹（自动打开新存档）", &watch)) {
 		setWatching(watch);
 	}
-	const char* sorts[] = { "Save order", "Alphabetical", "Size", "Mass" };
-	if (ImGui::Combo("List sorting", &_sortMode, sorts, 4)) {
+	const char* sorts[] = { "存档顺序", "字母顺序", "大小", "总量" };
+	if (ImGui::Combo("列表排序", &_sortMode, sorts, 4)) {
 		_rowsDirty = true;
 		ch = true;
 	}
-	ImGui::TextDisabled("Settings are kept in %s", platform::ToUtf8(platform::SettingsFile()).c_str());
+	ImGui::TextDisabled("设置保存在 %s", platform::ToUtf8(platform::SettingsFile()).c_str());
 	if (ch) {
 		saveSettings();
 	}
@@ -672,12 +672,12 @@ void App::drawSettings()
 void App::drawSupport()
 {
 	ImGui::SetNextWindowSize(ImVec2(560, 0), ImGuiCond_Appearing);
-	if (!ImGui::Begin("Support", &_showSupport, ImGuiWindowFlags_AlwaysAutoResize)) {
+	if (!ImGui::Begin("支持", &_showSupport, ImGuiWindowFlags_AlwaysAutoResize)) {
 		ImGui::End();
 		return;
 	}
-	ImGui::TextWrapped("ReSaver++ is a C++ port of ReSaver from FallrimTools by Mark Fairchild. These are his support links, "
-					   "as listed in ReSaver's own Support dialog:");
+	ImGui::TextWrapped("ReSaver++ 是 Mark Fairchild 的 FallrimTools ReSaver 的 C++ 移植版。以下是他的支持链接，"
+					   "与 ReSaver 自带的“支持”对话框中所列的一致：");
 	ImGui::Spacing();
 	const char* links[][2] = { { "Patreon", "https://www.patreon.com/user?u=18285974" }, { "PayPal", "https://www.paypal.me/MarkDFSoftware" },
 		{ "Nexus Mods", "https://www.nexusmods.com/users/723902" } };
@@ -710,7 +710,7 @@ void App::openAny(const std::filesystem::path& a_path)
 		if (auto m = ReadMo2Ini(a_path)) {
 			scanSources(m->modsDir);
 		} else {
-			_error = "Could not read " + platform::ToUtf8(a_path);
+			_error = "无法读取 " + platform::ToUtf8(a_path);
 		}
 	} else {
 		open(a_path);

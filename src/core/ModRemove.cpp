@@ -67,16 +67,16 @@ namespace ess::modremove
 	{
 		std::ifstream f(a_plugin, std::ios::binary);
 		if (!f) {
-			throw std::runtime_error("cannot open " + U8(a_plugin.filename()));
+			throw std::runtime_error("无法打开 " + U8(a_plugin.filename()));
 		}
 		std::uint8_t hdr[24];
 		if (!f.read(reinterpret_cast<char*>(hdr), 24) || std::memcmp(hdr, "TES4", 4) != 0) {
-			throw std::runtime_error(U8(a_plugin.filename()) + " is not a plugin");
+			throw std::runtime_error(U8(a_plugin.filename()) + " 不是插件文件");
 		}
 		std::uint32_t size;
 		std::memcpy(&size, hdr + 4, 4);
 		if (size > (16u << 20)) {
-			throw std::runtime_error(U8(a_plugin.filename()) + ": header too large");
+			throw std::runtime_error(U8(a_plugin.filename()) + "：文件头过大");
 		}
 		std::vector<std::uint8_t> data(size);
 		f.read(reinterpret_cast<char*>(data.data()), size);
@@ -115,7 +115,7 @@ namespace ess::modremove
 		plan.name = a_mod;
 		auto* p = a_save.papyrus();
 		if (!p) {
-			plan.blockers.push_back("The save has no Papyrus section.");
+			plan.blockers.push_back("存档里没有 Papyrus 区块。");
 			return plan;
 		}
 		const bool haveSources = a_src && !a_src->empty();
@@ -131,7 +131,7 @@ namespace ess::modremove
 		}
 		if (plan.isPlugin) {
 			if (IsVanillaPlugin(lowerName)) {
-				plan.blockers.push_back(a_mod + " is part of the base game or Creation Club content and cannot be removed.");
+				plan.blockers.push_back(a_mod + " 属于游戏本体或 Creation Club 内容，无法移除。");
 				return plan;
 			}
 			if (haveSources) {
@@ -145,19 +145,19 @@ namespace ess::modremove
 			plan.folder = a_mod;
 		}
 		if (!plan.isPlugin && (!haveSources || plan.folder.empty())) {
-			plan.blockers.push_back(a_mod + " is not a plugin in this save, and without a scanned mods folder its scripts cannot be identified.");
+			plan.blockers.push_back(a_mod + " 在这个存档里不是插件；没有扫描过模组文件夹，它的脚本就无法识别。");
 			return plan;
 		}
 		if (plan.folder == "Game Data" || plan.folder == "Overwrite") {
-			plan.blockers.push_back("\"" + plan.folder + "\" is not a mod and cannot be removed.");
+			plan.blockers.push_back("\"" + plan.folder + "\" 不是模组，无法移除。");
 			return plan;
 		}
 
 		// ---- scripts that only this mod provides ------------------------------------------------
 		std::unordered_set<std::string> ownLower;
 		if (haveSources && plan.folder.empty() && plan.isPlugin) {
-			plan.notes.push_back(a_mod + " is not installed in the scanned mods folder any more (already uninstalled). Its scripts on other "
-										 "objects cannot be identified, so only what sits on its own objects is removed.");
+			plan.notes.push_back(a_mod + " 已不在扫描的模组文件夹里（可能已经卸载）。它在其他对象上的 "
+										 "脚本无法识别，因此只移除挂在它自己对象上的内容。");
 			if (a_src->ranked) {
 				plan.enabledInProfile = 0;
 			}
@@ -165,8 +165,8 @@ namespace ess::modremove
 		if (haveSources && !plan.folder.empty()) {
 			if (!a_src->gameDataScanned) {
 				plan.notes.push_back(
-					"The game's Data folder was not scanned, so vanilla scripts this mod overrides cannot be told apart; "
-					"only scripts on its own objects are removed.");
+					"没有扫描游戏的 Data 文件夹，因此分不清它覆盖了哪些原版脚本；"
+					"只移除挂在它自己对象上的脚本。");
 			} else if (a_opt.otherObjects) {
 				std::unordered_set<std::string> seen;
 				for (const auto& s : p->scripts) {
@@ -194,7 +194,7 @@ namespace ess::modremove
 				}
 			}
 		} else if (!haveSources) {
-			plan.notes.push_back("Mods folder not scanned: only scripts on this plugin's own objects are removed, masters and DLLs are not checked.");
+			plan.notes.push_back("未扫描模组文件夹：只移除这个插件自己对象上的脚本，不检查主文件和 DLL。");
 		}
 		auto isOwn = [&](TStr t) { return !ownLower.empty() && ownLower.contains(Lower(p->str(t))); };
 
@@ -333,7 +333,7 @@ namespace ess::modremove
 		for (const auto& a : p->activeScripts) {
 			if (!plan.threads.contains(a.id) && a.data) {
 				for (const auto& f : a.data->frames) {
-					scanRemaining(f.vars, p->str(f.scriptName) + " (running)");
+					scanRemaining(f.vars, p->str(f.scriptName) + "（运行中）");
 				}
 			}
 		}
@@ -346,7 +346,7 @@ namespace ess::modremove
 		}
 		for (const auto& a : p->arrays) {
 			if (!removedArrays.contains(a.id)) {
-				scanRemaining(a.vars, std::string("array of ") + VTypeName(a.type));
+				scanRemaining(a.vars, std::string("数组 ") + VTypeName(a.type));
 			}
 		}
 		for (auto id : removedArrays) {
@@ -416,17 +416,17 @@ namespace ess::modremove
 					for (const auto& d : plan.dependents) {
 						list += "\n    " + d;
 					}
-					plan.blockers.push_back(Fmt("%zu plugin(s) in this save need %s as a master; the game crashes at load without it:", plan.dependents.size(),
+					plan.blockers.push_back(Fmt("存档里有 %zu 个插件把 %s 当作主文件；缺少它，游戏加载时会崩溃：", plan.dependents.size(),
 												a_mod.c_str()) +
 											list);
 				}
 				if (plan.uncheckedPlugins) {
-					plan.notes.push_back(Fmt("%zu plugin(s) in the save were not found in the scanned folders, so their masters were not checked.",
+					plan.notes.push_back(Fmt("存档里有 %zu 个插件在扫描的文件夹中找不到，因此没有检查它们的主文件。",
 						plan.uncheckedPlugins));
 				}
 			} else {
-				plan.warnings.push_back("Masters were not checked (scan your mods folder first). If another plugin needs " + a_mod +
-										" as a master, the game crashes at load.");
+				plan.warnings.push_back("没有检查主文件（请先扫描模组文件夹）。如果有别的插件需要 " + a_mod +
+										" 作为主文件，游戏加载时会崩溃。");
 			}
 		}
 		if (haveSources && !plan.folder.empty()) {
@@ -453,22 +453,22 @@ namespace ess::modremove
 		}
 		if (plan.enabledInProfile == 1) {
 			plan.warnings.push_back("\"" + plan.folder +
-									"\" is still enabled in your MO2 profile. Disable it before loading the new save, or the mod starts again from scratch.");
+									"\" 在你的 MO2 配置里仍然启用。载入新存档前请把它禁用，否则这个模组会从头重新运行。");
 		}
 		if (!plan.dlls.empty()) {
 			std::string list;
 			for (const auto& d : plan.dlls) {
 				list += (list.empty() ? "" : ", ") + d;
 			}
-			plan.warnings.push_back("The mod has an SKSE plugin (" + list +
-									"). Whatever it stored in the .skse co-save cannot be removed by a save editor; disable the whole mod so the DLL is not loaded.");
+			plan.warnings.push_back("这个模组带有 SKSE 插件（" + list +
+									"）。它在 .skse 协同存档里存的东西，存档编辑器无法移除；请禁用整个模组，别让这个 DLL 被加载。");
 		}
 		if (!plan.threads.empty()) {
-			plan.warnings.push_back(Fmt("%zu of its scripts are running right now and will be cut off mid-way.", plan.threads.size()));
+			plan.warnings.push_back(Fmt("它有 %zu 个脚本正在运行，会被中途打断。", plan.threads.size()));
 		}
 		if (plan.threadsOfOtherMods) {
-			plan.warnings.push_back(Fmt("%zu thread(s) started by other mods are inside this mod right now; they are removed too, so those "
-										"other mods' events end early.",
+			plan.warnings.push_back(Fmt("目前有 %zu 个线程由其他模组启动、却正运行在这个模组里；它们也会被一起移除，所以那些 "
+										"模组的事件会提前结束。",
 				plan.threadsOfOtherMods));
 		}
 		if (!plan.linksFromOthers.empty()) {
@@ -479,9 +479,9 @@ namespace ess::modremove
 				list += Fmt("\n    %s (%zu)", v[i].first.c_str(), v[i].second);
 			}
 			if (v.size() > 8) {
-				list += Fmt("\n    ... and %zu more", v.size() - 8);
+				list += Fmt("\n    …另有 %zu 个", v.size() - 8);
 			}
-			plan.warnings.push_back(Fmt("%zu variable(s) in other scripts point at its scripts and will read None:", [&] {
+			plan.warnings.push_back(Fmt("其他脚本里有 %zu 个变量指向它的脚本，读取时会得到 None：", [&] {
 				std::size_t n = 0;
 				for (auto& x : v) {
 					n += x.second;
@@ -490,51 +490,51 @@ namespace ess::modremove
 			}()) + list);
 		}
 		if (plan.instances.empty() && plan.threads.empty() && plan.changeForms.empty()) {
-			plan.blockers.push_back("Nothing of " + a_mod + " was found in this save.");
+			plan.blockers.push_back("在这个存档里没有找到 " + a_mod + " 的任何内容。");
 		}
-		plan.notes.push_back("The plugin list in the save is left as it is; the game drops a missing plugin's forms by itself when loading.");
-		plan.notes.push_back("Items, spells, perks or effects it gave the player are dropped by the game when the plugin is gone; nothing can restore what they changed.");
+		plan.notes.push_back("存档里的插件列表保持原样；加载时游戏会自己丢弃缺失插件对应的表单。");
+		plan.notes.push_back("它给过玩家的物品、法术、天赋或效果，会在插件消失后由游戏丢弃；它们造成的变化无法恢复。");
 		return plan;
 	}
 
 	std::string Plan::summary() const
 	{
 		std::string s;
-		s += Fmt("Remove %s%s\n\n", name.c_str(), folder.empty() || folder == name ? "" : (" (mod folder: " + folder + ")").c_str());
-		s += "Will delete:\n";
-		s += Fmt("  - %zu script instance(s): %zu on its own objects, %zu of its scripts on other objects\n", instances.size(), instancesOnOwnForms,
+		s += Fmt("移除 %s%s\n\n", name.c_str(), folder.empty() || folder == name ? "" : ("（模组文件夹：" + folder + "）").c_str());
+		s += "将删除：\n";
+		s += Fmt("  - %zu 个脚本实例：%zu 个在它自己的对象上，%zu 个它的脚本在其他对象上\n", instances.size(), instancesOnOwnForms,
 			instancesElsewhere);
-		s += Fmt("  - %zu running thread(s), %zu suspended stack(s), %zu queued call(s)\n", threads.size(), stacks.size(), messages.size());
+		s += Fmt("  - %zu 个运行中的线程，%zu 个挂起堆栈，%zu 个排队调用\n", threads.size(), stacks.size(), messages.size());
 		if (!arrays.empty() || !unbinds.empty()) {
-			s += Fmt("  - %zu array(s) only it used, %zu queued unbind(s)\n", arrays.size(), unbinds.size());
+			s += Fmt("  - %zu 个只有它用过的数组，%zu 个排队解绑\n", arrays.size(), unbinds.size());
 		}
 		if (!changeForms.empty()) {
-			s += Fmt("  - saved state of %zu of its forms:", changeForms.size());
+			s += Fmt("  - 其中 %zu 个表单的已保存状态：", changeForms.size());
 			for (const auto& [t, n] : changeFormsByType) {
 				s += Fmt(" %s %zu", t.c_str(), n);
 			}
 			s += "\n";
 		}
 		if (!spawnedForms.empty()) {
-			s += Fmt("  - %zu spawned object(s) that only carried its scripts\n", spawnedForms.size());
+			s += Fmt("  - %zu 个只承载它脚本的生成对象\n", spawnedForms.size());
 		}
 		if (!ownScripts.empty()) {
-			s += Fmt("  (%zu script(s) only this mod provides are removed wherever they are attached)\n", ownScripts.size());
+			s += Fmt("  （%zu 个只有这个模组提供的脚本，无论在哪儿附加都会被移除）\n", ownScripts.size());
 		}
 		if (!blockers.empty()) {
-			s += "\nCANNOT REMOVE:\n";
+			s += "\n无法移除：\n";
 			for (const auto& b : blockers) {
 				s += "  * " + b + "\n";
 			}
 		}
 		if (!warnings.empty()) {
-			s += "\nRead before continuing:\n";
+			s += "\n继续之前请先阅读：\n";
 			for (const auto& w : warnings) {
 				s += "  * " + w + "\n";
 			}
 		}
 		if (!notes.empty()) {
-			s += "\nNotes:\n";
+			s += "\n说明：\n";
 			for (const auto& n : notes) {
 				s += "  - " + n + "\n";
 			}
@@ -566,7 +566,7 @@ namespace ess::modremove
 
 	std::string Result::text() const
 	{
-		return Fmt("%zu instances, %zu threads, %zu suspended stacks, %zu queued calls, %zu arrays, %zu unbinds, %zu change forms", instances, threads,
+		return Fmt("%zu 个实例，%zu 个线程，%zu 个挂起堆栈，%zu 个排队调用，%zu 个数组，%zu 个解绑，%zu 个变更表单", instances, threads,
 			stacks, messages, arrays, unbinds, changeForms);
 	}
 }

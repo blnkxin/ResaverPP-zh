@@ -640,9 +640,9 @@ namespace ess::ops
 	std::string McmFixResult::text() const
 	{
 		char buf[512];
-		std::snprintf(buf, sizeof(buf), "%zu registration threads, %zu suspended stacks, %zu queued calls%s%s", threads, stacks, messages,
-			stateReset ? "; SKI_ConfigManager taken out of its stuck BUSY state" : "",
-			managerFound ? "" : " (SKI_ConfigManager not found in this save)");
+		std::snprintf(buf, sizeof(buf), "%zu 个注册线程、%zu 个挂起堆栈、%zu 个排队调用%s%s", threads, stacks, messages,
+			stateReset ? "；SKI_ConfigManager 已从卡住的 BUSY 状态中解除" : "",
+			managerFound ? "" : "（这个存档里没有找到 SKI_ConfigManager）");
 		return buf;
 	}
 
@@ -662,7 +662,7 @@ namespace ess::ops
 		auto                  scanVars = [&](const std::vector<Variable>& vars, Referrer::Kind k, std::uint64_t id, const std::string& owner) {
             for (std::size_t i = 0; i < vars.size(); ++i) {
                 if (VarRefersTo(vars[i], a_target)) {
-                    out.push_back({ k, id, owner + " var[" + std::to_string(i) + "]" });
+                    out.push_back({ k, id, owner + " 变量[" + std::to_string(i) + "]" });
                 }
             }
 		};
@@ -678,7 +678,7 @@ namespace ess::ops
 		}
 		for (const auto& a : p.arrays) {
 			if (a.id != a_target) {
-				scanVars(a.vars, Referrer::Kind::kArray, a.id, std::string("array ") + VTypeName(a.type));
+				scanVars(a.vars, Referrer::Kind::kArray, a.id, std::string("数组 ") + VTypeName(a.type));
 			}
 		}
 		for (const auto& t : p.activeScripts) {
@@ -688,7 +688,7 @@ namespace ess::ops
 			for (const auto& f : t.data->frames) {
 				const std::string where = p.str(f.baseName) + "." + p.str(f.event);
 				if (VarRefersTo(f.owner, a_target)) {
-					out.push_back({ Referrer::Kind::kThread, t.id, where + " (owner)" });
+					out.push_back({ Referrer::Kind::kThread, t.id, where + "（所属对象）" });
 				}
 				scanVars(f.vars, Referrer::Kind::kThread, t.id, where);
 			}
@@ -726,7 +726,7 @@ namespace ess::ops
 
 		const auto* pp = s.papyrus();
 		if (!pp) {
-			r.warnings.push_back("This save has no Papyrus section.");
+			r.warnings.push_back("这个存档里没有 Papyrus 段。");
 			return r;
 		}
 		const auto& p = *pp;
@@ -763,7 +763,7 @@ namespace ess::ops
 		std::unordered_map<std::string, std::size_t> waitByScript;
 		for (const auto& a : p.activeScripts) {
 			if (!a.data || a.data->frames.empty()) {
-				top["<no frames>"]++;
+				top["<无栈帧>"]++;
 				continue;
 			}
 			top[p.str(a.data->frames.front().scriptName)]++;
@@ -783,11 +783,11 @@ namespace ess::ops
 		}
 		for (const auto* list : { &p.suspended1, &p.suspended2 }) {
 			for (const auto& st : *list) {
-				susp[st.data ? MsgName(p, *st.data) : "<no data>"]++;
+				susp[st.data ? MsgName(p, *st.data) : "<无数据>"]++;
 			}
 		}
 		for (const auto& m : p.functionMessages) {
-			msg[m.data ? MsgName(p, *m.data) : "<no data>"]++;
+			msg[m.data ? MsgName(p, *m.data) : "<无数据>"]++;
 		}
 
 		r.instancesByScript = Sorted(inst);
@@ -802,8 +802,8 @@ namespace ess::ops
 			if (c.n >= 20) {
 				r.loopingScripts.push_back(c.name);
 				std::snprintf(buf, sizeof(buf),
-					"%zu threads of '%s' are sleeping in Utility.Wait loops. That many copies of one looping script usually means "
-					"a script that never exits (each wakes several times a second). Consider purging '%s'.",
+					"%zu 个 '%s' 的线程正睡在 Utility.Wait 循环里。同一个脚本攒出这么多份，通常意味着"
+					"这个脚本根本不会退出（每一份每秒都会醒来好几次）。建议清除 '%s'。",
 					c.n, c.name.c_str(), c.name.c_str());
 				r.warnings.push_back(buf);
 			}
@@ -829,33 +829,33 @@ namespace ess::ops
 		r.mcmJam = mcmThreads > 0 && (mcmThreads >= 10 || registerMod >= 10 || busy);
 		if (mcmThreads >= 10 || registerMod >= 10) {
 			std::snprintf(buf, sizeof(buf),
-				"SkyUI MCM registration was still running when this save was made: %zu menus are inside OnConfigManagerReady and "
-				"%zu RegisterMod calls are queued%s. Loading replays all of it. Fix: Clean > Fix SkyUI MCM registration jam "
-				"(removes the stuck registration work; SkyUI registers the remaining menus again on the next load).",
-				mcmThreads, registerMod, busy ? ", and SKI_ConfigManager was saved in its BUSY state" : "");
+				"做这个存档的时候，SkyUI MCM 的注册还没跑完：有 %zu 个菜单卡在 OnConfigManagerReady 里，另外还有 "
+				"%zu 个 RegisterMod 调用在排队%s。读档时这些会全部重放一遍。修复办法：清理 > 修复 SkyUI MCM 注册卡死"
+				"（它会清掉卡住的注册工作；下次读档时 SkyUI 会重新注册剩下的菜单）。",
+				mcmThreads, registerMod, busy ? "，而且 SKI_ConfigManager 存档时正处于 BUSY 状态" : "");
 			r.warnings.push_back(buf);
 		}
 		if (r.suspended >= 50) {
-			std::snprintf(buf, sizeof(buf), "%zu suspended stacks are queued (normal is a handful).", r.suspended);
+			std::snprintf(buf, sizeof(buf), "有 %zu 个挂起堆栈在排队（正常只有几个）。", r.suspended);
 			r.warnings.push_back(buf);
 		}
 		if (r.threads >= 300) {
-			std::snprintf(buf, sizeof(buf), "%zu active script threads were saved (a healthy save usually has under ~150).", r.threads);
+			std::snprintf(buf, sizeof(buf), "存档里保存了 %zu 个活动脚本线程（健康的存档一般在 150 个以下）。", r.threads);
 			r.warnings.push_back(buf);
 		}
 		if (r.undefinedInstances || r.undefinedThreads) {
 			std::snprintf(buf, sizeof(buf),
-				"%zu script instances and %zu threads belong to scripts that are no longer installed. Clean > Remove Undefined fixes this.",
+				"有 %zu 个脚本实例和 %zu 个线程属于已经不再安装的脚本。用“清理 > 移除未定义元素”可以修复。",
 				r.undefinedInstances, r.undefinedThreads);
 			r.warnings.push_back(buf);
 		}
 		if (r.unattached >= 100) {
-			std::snprintf(buf, sizeof(buf), "%zu script instances are attached to nothing (Clean > Remove Unattached).", r.unattached);
+			std::snprintf(buf, sizeof(buf), "有 %zu 个脚本实例没有附加到任何对象上（清理 > 移除未附加实例）。", r.unattached);
 			r.warnings.push_back(buf);
 		}
 		if (r.instances >= 150000) {
 			std::snprintf(buf, sizeof(buf),
-				"%zu script instances is very high; every load has to rebuild them, which makes the script engine slow to settle after loading.",
+				"%zu 个脚本实例非常多；每次读档都得把它们重建一遍，导致脚本引擎读档后要很久才能稳定下来。",
 				r.instances);
 			r.warnings.push_back(buf);
 		}
@@ -867,13 +867,13 @@ namespace ess::ops
 		std::string out;
 		char        buf[512];
 		std::snprintf(buf, sizeof(buf),
-			"Scripts %zu | instances %zu | references %zu | arrays %zu | threads %zu | function messages %zu | suspended stacks %zu | change forms %zu | strings %zu\n"
-			"Unattached instances %zu | undefined scripts %zu | undefined instances %zu | undefined threads %zu | terminated threads %zu | instances on missing created forms %zu\n",
+			"脚本 %zu | 实例 %zu | 引用 %zu | 数组 %zu | 线程 %zu | 函数消息 %zu | 挂起堆栈 %zu | 变更表单 %zu | 字符串 %zu\n"
+			"未附加实例 %zu | 未定义脚本 %zu | 未定义实例 %zu | 未定义线程 %zu | 已终止线程 %zu | 位于缺失生成对象上的实例 %zu\n",
 			r.scripts, r.instances, r.references, r.arrays, r.threads, r.functionMessages, r.suspended, r.changeForms, r.strings, r.unattached,
 			r.undefinedScripts, r.undefinedInstances, r.undefinedThreads, r.terminatedThreads, r.createdWithoutForm);
 		out += buf;
 		if (!r.warnings.empty()) {
-			out += "\nFINDINGS\n";
+			out += "\n诊断结论\n";
 			for (const auto& w : r.warnings) {
 				out += "  * " + w + "\n";
 			}
@@ -888,12 +888,12 @@ namespace ess::ops
 				out += buf;
 			}
 		};
-		section("Threads by event script (frame 0)", r.threadsByTopScript);
-		section("Threads by current frame (what they are waiting in)", r.threadsByCurrentFrame);
-		section("Suspended stacks", r.suspendedByFunction);
-		section("Function messages", r.messagesByFunction);
-		section("Script instances by script", r.instancesByScript);
-		section("Change forms by type", r.changeFormsByType);
+		section("按事件脚本统计的线程（第 0 帧）", r.threadsByTopScript);
+		section("按当前栈帧统计的线程（它们正等在哪里）", r.threadsByCurrentFrame);
+		section("挂起堆栈", r.suspendedByFunction);
+		section("函数消息", r.messagesByFunction);
+		section("按脚本统计的脚本实例", r.instancesByScript);
+		section("按类型统计的变更表单", r.changeFormsByType);
 		return out;
 	}
 }

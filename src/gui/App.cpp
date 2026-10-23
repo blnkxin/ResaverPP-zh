@@ -28,19 +28,19 @@ namespace
 	const char* CatName(App::Cat c)
 	{
 		switch (c) {
-		case App::Cat::kOverview: return "Overview";
-		case App::Cat::kMods: return "Mods";
-		case App::Cat::kPlugins: return "Plugins";
-		case App::Cat::kChangeForms: return "Change Forms";
-		case App::Cat::kStrings: return "Strings";
-		case App::Cat::kScripts: return "Scripts";
-		case App::Cat::kInstances: return "Script Instances";
-		case App::Cat::kReferences: return "References";
-		case App::Cat::kArrays: return "Arrays";
-		case App::Cat::kThreads: return "Active Scripts (threads)";
-		case App::Cat::kMessages: return "Function Messages";
-		case App::Cat::kSuspended: return "Suspended Stacks";
-		case App::Cat::kUnbinds: return "Queued Unbinds";
+		case App::Cat::kOverview: return "概览";
+		case App::Cat::kMods: return "模组";
+		case App::Cat::kPlugins: return "插件";
+		case App::Cat::kChangeForms: return "变更表单";
+		case App::Cat::kStrings: return "字符串";
+		case App::Cat::kScripts: return "脚本";
+		case App::Cat::kInstances: return "脚本实例";
+		case App::Cat::kReferences: return "引用";
+		case App::Cat::kArrays: return "数组";
+		case App::Cat::kThreads: return "活动脚本（线程）";
+		case App::Cat::kMessages: return "函数消息";
+		case App::Cat::kSuspended: return "挂起堆栈";
+		case App::Cat::kUnbinds: return "排队解绑";
 		default: return "?";
 		}
 	}
@@ -99,7 +99,7 @@ void App::open(const std::filesystem::path& a_path)
 	try {
 		auto s = SaveFile::load(a_path);
 		if (!s->papyrus()) {
-			throw std::runtime_error("the save has no Papyrus section");
+			throw std::runtime_error("存档中没有 Papyrus 区块");
 		}
 		_save = std::move(s);
 		// a Skyrim VR save lists SkyrimVR.esm: use the VR setup (mods, load order, saves)
@@ -149,12 +149,12 @@ void App::open(const std::filesystem::path& a_path)
 		// the load order is known now: the banner shows at once (which mods are still installed is
 		// known when the scan of the mods is done; that can take a while inside Mod Organizer)
 		checkMissingPlugins();
-		_status = "Loaded " + platform::ToUtf8(a_path.filename());
+		_status = "已加载 " + platform::ToUtf8(a_path.filename());
 		if (!_report->warnings.empty()) {
-			_status += Fmt("  -  %zu finding(s): see Tools > Analysis", _report->warnings.size());
+			_status += Fmt("  -  %zu 个问题：见 工具 > 分析", _report->warnings.size());
 		}
 	} catch (const std::exception& e) {
-		_error = std::string("Could not open ") + platform::ToUtf8(a_path.filename()) + ":\n\n" + e.what();
+		_error = std::string("无法打开 ") + platform::ToUtf8(a_path.filename()) + ":\n\n" + e.what();
 	}
 }
 
@@ -189,14 +189,14 @@ void App::doSave(const std::filesystem::path& a_path)
 		// read it straight back: a save we cannot read is never left silently behind
 		auto check = SaveFile::load(a_path);
 		if (!check->papyrus()) {
-			throw std::runtime_error("verification failed: written save has no Papyrus section");
+			throw std::runtime_error("校验失败：写出的存档没有 Papyrus 区块");
 		}
 		_path = a_path;
 		_save->path = a_path;
 		_dirty = false;
-		_status = "Saved and verified " + platform::ToUtf8(a_path.filename());
+		_status = "已保存并通过校验 " + platform::ToUtf8(a_path.filename());
 	} catch (const std::exception& e) {
-		_error = std::string("Save failed:\n\n") + e.what();
+		_error = std::string("保存失败：\n\n") + e.what();
 	}
 }
 
@@ -233,7 +233,7 @@ void App::startSaveAsDialog()
 void App::requestQuit()
 {
 	if (_dirty) {
-		confirm("Unsaved changes", "The edited save has not been written. Quit anyway?", [this] { _quit = true; });
+		confirm("未保存的修改", "修改后的存档尚未写入。仍要退出吗？", [this] { _quit = true; });
 	} else {
 		_quit = true;
 	}
@@ -257,7 +257,7 @@ void App::markEdited(const std::string& a_what)
 	_focus.reset();
 	_report = std::make_unique<ops::Report>(ops::Analyze(*_save));
 	_modsDirty = true;
-	_status = a_what + "  (not saved yet: File > Save As)";
+	_status = a_what + "  （尚未保存：文件 > 另存为）";
 }
 
 void App::markChanged(const std::string& a_what)
@@ -267,7 +267,7 @@ void App::markChanged(const std::string& a_what)
 	_dirty = true;
 	_rowsDirty = true;
 	_modsDirty = true;
-	_status = a_what + "  (not saved yet: File > Save As)";
+	_status = a_what + "  （尚未保存：文件 > 另存为）";
 }
 
 void App::select(Cat a_cat, std::uint64_t a_key)
@@ -289,11 +289,11 @@ void App::select(Cat a_cat, std::uint64_t a_key)
 std::string App::formLabel(const RefID& a_id) const
 {
 	if (a_id.isZero()) {
-		return "None";
+		return "无";
 	}
 	const auto fid = _save->formIDOf(a_id);
 	if (!fid) {
-		return Fmt("RefID %06X (unresolved)", a_id.data);
+		return Fmt("RefID %06X（未解析）", a_id.data);
 	}
 	std::string s = Fmt("%08X (%s)", fid, _save->pluginOf(fid).c_str());
 	if (_db) {
@@ -308,7 +308,7 @@ std::string App::formLabel(const RefID& a_id) const
 std::string App::instanceLabel(const ScriptInstance& i) const
 {
 	const auto& p = *_save->papyrus();
-	std::string s = p.str(i.script) + "  on  " + formLabel(i.refID);
+	std::string s = p.str(i.script) + "  于  " + formLabel(i.refID);
 	if (ops::IsUnattached(i)) {
 		s += "  [UNATTACHED]";
 	}
@@ -323,7 +323,7 @@ std::string App::threadLabel(const ActiveScript& a) const
 	const auto& p = *_save->papyrus();
 	std::string s = Fmt("#%08X  ", a.id);
 	if (!a.data || a.data->frames.empty()) {
-		s += "(no frames)";
+		s += "（无栈帧）";
 	} else {
 		const auto& f0 = a.data->frames.front();
 		const auto& fn = a.data->frames.back();
@@ -367,17 +367,17 @@ std::string App::describeVar(const Variable& v) const
 {
 	const auto& p = *_save->papyrus();
 	switch (v.type) {
-	case VType::kNull: return "None";
+	case VType::kNull: return "无";
 	case VType::kInt: return std::to_string(static_cast<std::int32_t>(v.value));
 	case VType::kFloat: return Fmt("%g", v.asFloat());
 	case VType::kBool: return v.value ? "True" : "False";
 	case VType::kString: return "\"" + text::ToUtf8(p.str(static_cast<TStr>(v.value))) + "\"";
-	case VType::kVariant: return v.inner ? "Variant: " + describeVar(*v.inner) : "Variant: None";
+	case VType::kVariant: return v.inner ? "变体：" + describeVar(*v.inner) : "变体：无";
 	case VType::kRef:
 	case VType::kStruct:
 		{
 			if (v.value == 0) {
-				return p.str(v.refType) + ": None";
+				return p.str(v.refType) + ": 无";
 			}
 			std::string s = p.str(v.refType) + ": ";
 			if (const auto* i = p.findInstance(v.value)) {
@@ -392,12 +392,12 @@ std::string App::describeVar(const Variable& v) const
 				s = p.str(v.refType) + "[]";
 			}
 			if (v.value == 0) {
-				return s + " None";
+				return s + " 无";
 			}
 			if (const auto* a = p.findArray(v.value)) {
-				return s + Fmt(" (%zu elements)", a->vars.size());
+				return s + Fmt("（%zu 个元素）", a->vars.size());
 			}
-			return s + " id " + Hex64(v.value) + " (missing)";
+			return s + " id " + Hex64(v.value) + "（缺失）";
 		}
 	}
 }
@@ -413,13 +413,13 @@ void App::varValueWidget(const Variable& v, const char* a_id)
 	ImGui::PushID(a_id);
 	if ((x->type == VType::kRef || x->type == VType::kStruct) && x->value != 0) {
 		if (p.findInstance(x->value)) {
-			if (ImGui::SmallButton("go")) {
+			if (ImGui::SmallButton("跳转")) {
 				select(Cat::kInstances, x->value);
 			}
 			ImGui::SameLine();
 		}
 	} else if (IsArrayType(x->type) && x->value != 0 && p.findArray(x->value)) {
-		if (ImGui::SmallButton("go")) {
+		if (ImGui::SmallButton("跳转")) {
 			select(Cat::kArrays, x->value);
 		}
 		ImGui::SameLine();
@@ -431,13 +431,13 @@ void App::varValueWidget(const Variable& v, const char* a_id)
 void App::varsTable(const char* a_id, std::vector<Variable>& a_vars, const std::vector<std::string>& a_names)
 {
 	if (a_vars.empty()) {
-		ImGui::TextDisabled("(no variables)");
+		ImGui::TextDisabled("（没有变量）");
 		return;
 	}
 	if (ImGui::BeginTable(a_id, 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
 		ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 40.0f);
-		ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 230.0f);
-		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableSetupColumn("名称", ImGuiTableColumnFlags_WidthFixed, 230.0f);
+		ImGui::TableSetupColumn("值", ImGuiTableColumnFlags_WidthStretch);
 		ImGui::TableHeadersRow();
 		ImGuiListClipper clip;
 		clip.Begin(static_cast<int>(a_vars.size()));
@@ -450,7 +450,7 @@ void App::varsTable(const char* a_id, std::vector<Variable>& a_vars, const std::
 				ImGui::TextUnformatted(i < static_cast<int>(a_names.size()) ? a_names[i].c_str() : "");
 				ImGui::TableSetColumnIndex(2);
 				ImGui::PushID(i);
-				if (ImGui::SmallButton("edit")) {
+				if (ImGui::SmallButton("编辑")) {
 					beginEdit(&a_vars[i]);
 				}
 				ImGui::PopID();
@@ -543,7 +543,7 @@ void App::rebuildRows()
 				std::string name = _db ? _db->describe(fid) : std::string();
 				const auto  nulls = fact ? fact->nulls : 0;
 				add(c.refID.data,
-					Fmt("%s  %08X  %-28s  flags %08X  %u bytes", ChangeFormTypeName(c.typeCode()), fid, _save->pluginOf(fid).c_str(), c.changeFlags,
+					Fmt("%s  %08X  %-28s  flags %08X  %u 字节", ChangeFormTypeName(c.typeCode()), fid, _save->pluginOf(fid).c_str(), c.changeFlags,
 						static_cast<unsigned>(c.data.size())) +
 						(name.empty() ? "" : "  " + name) + (nulls ? Fmt("  [%zu NULL ENTRIES]", nulls) : std::string()),
 					nulls ? theme::Warn() : 0, true, c.data.size(), c.length2 ? c.length2 : c.data.size());
@@ -632,7 +632,7 @@ void App::rebuildRows()
 	case Cat::kArrays:
 		for (const auto& a : p.arrays) {
 			std::string t = IsRefType(a.type) ? p.str(a.refType) + "[]" : std::string(VTypeName(a.type));
-			add(a.id, Fmt("%-24s  %6zu elements   id %s", t.c_str(), a.vars.size(), Hex64(a.id).c_str()), 0, true, a.vars.size(), a.vars.size());
+			add(a.id, Fmt("%-24s  %6zu 个元素   id %s", t.c_str(), a.vars.size(), Hex64(a.id).c_str()), 0, true, a.vars.size(), a.vars.size());
 		}
 		break;
 	case Cat::kThreads:
@@ -664,9 +664,9 @@ void App::rebuildRows()
 		for (std::size_t i = 0; i < p.functionMessages.size(); ++i) {
 			const auto& m = p.functionMessages[i];
 			std::string t = Fmt("%4zu  ", i);
-			t += m.data ? p.str(m.data->scriptName) + "." + p.str(m.data->event) : std::string("(no data)");
+			t += m.data ? p.str(m.data->scriptName) + "." + p.str(m.data->event) : std::string("（无数据）");
 			if (m.id) {
-				t += Fmt("   thread #%08X", *m.id);
+				t += Fmt("   线程 #%08X", *m.id);
 			}
 			const std::uint64_t n = m.data ? m.data->vars.size() : 0;
 			add(i, t, 0, true, n, n);
@@ -676,8 +676,8 @@ void App::rebuildRows()
 		for (int table = 1; table <= 2; ++table) {
 			const auto& list = table == 1 ? p.suspended1 : p.suspended2;
 			for (const auto& s : list) {
-				std::string t = Fmt("table %d  #%08X  ", table, s.id);
-				t += s.data ? p.str(s.data->scriptName) + "." + p.str(s.data->event) : std::string("(no data)");
+				std::string t = Fmt("表 %d  #%08X  ", table, s.id);
+				t += s.data ? p.str(s.data->scriptName) + "." + p.str(s.data->event) : std::string("（无数据）");
 				const std::uint64_t n = s.data ? s.data->vars.size() : 0;
 				add((std::uint64_t(table) << 32) | s.id, t, 0, true, n, n);
 			}
@@ -686,7 +686,7 @@ void App::rebuildRows()
 	case Cat::kUnbinds:
 		for (const auto& u : p.unbinds) {
 			const auto* i = p.findInstance(u.id);
-			add(u.id, Hex64(u.id) + "  " + (i ? instanceLabel(*i) : std::string("(instance gone)")), i ? 0 : theme::Warn(), !_onlyFlagged || !i, 1, 1);
+			add(u.id, Hex64(u.id) + "  " + (i ? instanceLabel(*i) : std::string("（实例已不存在）")), i ? 0 : theme::Warn(), !_onlyFlagged || !i, 1, 1);
 		}
 		break;
 	default:
@@ -778,13 +778,13 @@ void App::draw()
 		ImGui::Dummy(ImVec2(0, 80));
 		ImGui::Indent(40);
 		ImGui::TextUnformatted("ReSaver++");
-		ImGui::TextDisabled("Skyrim Special Edition / Anniversary Edition / VR save editor");
+		ImGui::TextDisabled("Skyrim Special Edition / Anniversary Edition / VR 存档编辑器");
 		ImGui::Spacing();
-		if (ImGui::Button("Open save...", ImVec2(180, 0))) {
+		if (ImGui::Button("打开存档…", ImVec2(180, 0))) {
 			startOpenDialog();
 		}
 		ImGui::Spacing();
-		ImGui::TextDisabled("or drag a .ess file onto this window (a .pex script shows its code)");
+		ImGui::TextDisabled("或将 .ess 文件拖到此窗口（.pex 脚本会显示其代码）");
 		ImGui::Unindent(40);
 	} else {
 		drawCategories();
@@ -794,7 +794,7 @@ void App::draw()
 			drawOverview();
 			ImGui::EndChild();
 		} else {
-			const float listW = ImGui::GetContentRegionAvail().x * 0.48f;
+			const float listW = ImGui::GetContentRegionAvail().x * (_cat == Cat::kMods ? 0.42f : 0.48f);
 			ImGui::BeginChild("##list", ImVec2(listW, 0), ImGuiChildFlags_Borders);
 			if (_cat == Cat::kMods) {
 				drawModsList();
@@ -808,7 +808,7 @@ void App::draw()
 				if (_focus) {
 					detailMod(*_focus);
 				} else {
-					ImGui::TextDisabled("Click a mod to see its scripts.");
+					ImGui::TextDisabled("点击一个模组查看其脚本。");
 				}
 			} else {
 				drawDetail();
@@ -871,20 +871,20 @@ void App::drawMenu()
 	if (!ImGui::BeginMenuBar()) {
 		return;
 	}
-	if (ImGui::BeginMenu("File")) {
-		if (ImGui::MenuItem("Open...", "Ctrl+O")) {
+	if (ImGui::BeginMenu("文件")) {
+		if (ImGui::MenuItem("打开…", "Ctrl+O")) {
 			startOpenDialog();
 		}
-		if (ImGui::MenuItem("Save", "Ctrl+S", false, _save != nullptr)) {
-			confirm("Overwrite save", "Write the edits over " + platform::ToUtf8(_path.filename()) +
-										  "?\n\nThe current file is kept next to it as a .bak copy.",
+		if (ImGui::MenuItem("保存", "Ctrl+S", false, _save != nullptr)) {
+			confirm("覆盖存档", "将修改写入 " + platform::ToUtf8(_path.filename()) +
+										  "？\n\n当前文件会以 .bak 副本保留在它旁边。",
 				[this] { doSave(_path); });
 		}
-		if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S", false, _save != nullptr)) {
+		if (ImGui::MenuItem("另存为…", "Ctrl+Shift+S", false, _save != nullptr)) {
 			startSaveAsDialog();
 		}
 		ImGui::Separator();
-		if (ImGui::MenuItem("Compare to another save...", nullptr, false, _save != nullptr)) {
+		if (ImGui::MenuItem("与另一个存档比较…", nullptr, false, _save != nullptr)) {
 			if (platform::HasNativeDialogs()) {
 				if (auto p = platform::OpenSaveDialog(_path.parent_path())) {
 					compareWith(*p);
@@ -894,11 +894,11 @@ void App::drawMenu()
 			}
 		}
 		bool watch = _watch;
-		if (ImGui::MenuItem("Watch saves folder (open new saves automatically)", nullptr, &watch)) {
+		if (ImGui::MenuItem("监视存档文件夹（自动打开新存档）", nullptr, &watch)) {
 			setWatching(watch);
 		}
-		if (ImGui::BeginMenu("Compression when saving")) {
-			const char* comp[] = { "Keep the save's compression", "LZ4 (game default)", "zlib", "Uncompressed" };
+		if (ImGui::BeginMenu("保存时的压缩")) {
+			const char* comp[] = { "保持存档原有的压缩", "LZ4（游戏默认）", "zlib", "不压缩" };
 			for (int i = 0; i < 4; ++i) {
 				if (ImGui::MenuItem(comp[i], nullptr, _saveCompression == i - 1)) {
 					_saveCompression = i - 1;
@@ -907,14 +907,14 @@ void App::drawMenu()
 			}
 			ImGui::EndMenu();
 		}
-		if (ImGui::MenuItem("Export plugin list...", nullptr, false, _save != nullptr)) {
+		if (ImGui::MenuItem("导出插件列表…", nullptr, false, _save != nullptr)) {
 			exportPluginList();
 		}
 		ImGui::Separator();
-		if (ImGui::MenuItem("Open script (.pex)...")) {
+		if (ImGui::MenuItem("打开脚本（.pex）…")) {
 			if (platform::HasNativeDialogs()) {
 				if (auto p = platform::OpenFileDialog(_sourcesPath.empty() ? std::filesystem::path() : platform::FromUtf8(_sourcesPath), "pex",
-						"Open compiled Papyrus script")) {
+						"打开已编译的 Papyrus 脚本")) {
 					openScript(*p);
 				}
 			} else if (const char* s = std::getenv("RESAVERPP_TEST_PEX")) {
@@ -922,71 +922,71 @@ void App::drawMenu()
 			}
 		}
 		ImGui::Separator();
-		if (ImGui::MenuItem("Exit")) {
+		if (ImGui::MenuItem("退出")) {
 			requestQuit();
 		}
 		ImGui::EndMenu();
 	}
-	if (ImGui::BeginMenu("Clean", _save != nullptr)) {
+	if (ImGui::BeginMenu("清理", _save != nullptr)) {
 		auto* p = _save ? _save->papyrus() : nullptr;
-		if (ImGui::MenuItem("Remove unattached instances")) {
-			confirm("Remove unattached instances",
-				Fmt("Delete %zu script instances that are attached to nothing?", _report ? _report->unattached : 0),
-				[this, p] { markEdited(Fmt("Removed %zu unattached instances", ops::RemoveUnattachedInstances(*p))); });
+		if (ImGui::MenuItem("移除未附加实例")) {
+			confirm("移除未附加实例",
+				Fmt("删除 %zu 个未附着到任何对象的脚本实例？", _report ? _report->unattached : 0),
+				[this, p] { markEdited(Fmt("已移除 %zu 个未附加实例", ops::RemoveUnattachedInstances(*p))); });
 		}
-		if (ImGui::MenuItem("Remove undefined elements")) {
-			confirm("Remove undefined elements",
-				"Delete scripts whose .pex is no longer installed, their instances and references, and terminate threads running them?",
-				[this, p] { markEdited(Fmt("Removed/terminated %zu undefined elements", ops::RemoveUndefinedElements(*p))); });
+		if (ImGui::MenuItem("移除未定义元素")) {
+			confirm("移除未定义元素",
+				"删除 .pex 已不再安装的脚本、它们的实例与引用，并终止运行它们的线程？",
+				[this, p] { markEdited(Fmt("已移除/终止 %zu 个未定义元素", ops::RemoveUndefinedElements(*p))); });
 		}
-		if (ImGui::MenuItem("Terminate undefined threads")) {
-			confirm("Terminate undefined threads", "Terminate every thread that runs a script that is no longer installed?",
-				[this, p] { markEdited(Fmt("Terminated %zu undefined threads", ops::TerminateUndefinedThreads(*p))); });
+		if (ImGui::MenuItem("终止未定义线程")) {
+			confirm("终止未定义线程", "终止所有正在运行已不再安装的脚本的线程？",
+				[this, p] { markEdited(Fmt("已终止 %zu 个未定义线程", ops::TerminateUndefinedThreads(*p))); });
 		}
-		if (ImGui::MenuItem("Remove instances on missing spawned objects...")) {
+		if (ImGui::MenuItem("移除位于缺失生成对象上的实例…")) {
 			openOrphans();
 		}
 		ImGui::Separator();
-		if (ImGui::MenuItem("Fix SkyUI MCM registration jam...")) {
+		if (ImGui::MenuItem("修复 SkyUI MCM 注册卡死…")) {
 			fixMcmJam();
 		}
-		if (ImGui::MenuItem("Reset Havok...")) {
+		if (ImGui::MenuItem("重置 Havok…")) {
 			resetHavok();
 		}
-		if (ImGui::MenuItem("Purify FormLists...")) {
+		if (ImGui::MenuItem("净化 FormList…")) {
 			purifyFormLists();
 		}
 		ImGui::Separator();
-		if (ImGui::MenuItem("Batch Clean...")) {
+		if (ImGui::MenuItem("批量清理…")) {
 			_batchOpen = true;
 		}
-		if (ImGui::MenuItem("Purge a script...")) {
+		if (ImGui::MenuItem("清除某个脚本…")) {
 			_purgeName[0] = 0;
 			_purgeOpen = true;
 		}
 		ImGui::EndMenu();
 	}
-	if (ImGui::BeginMenu("Tools", _save != nullptr)) {
-		ImGui::MenuItem("Analysis", nullptr, &_showAnalysis);
-		if (ImGui::MenuItem("Report...")) {
+	if (ImGui::BeginMenu("工具", _save != nullptr)) {
+		ImGui::MenuItem("分析", nullptr, &_showAnalysis);
+		if (ImGui::MenuItem("报告…")) {
 			_reportOpen = true;
 		}
 		ImGui::Separator();
-		ImGui::MenuItem("Find form by name / editor ID...", nullptr, &_showLookup);
-		if (ImGui::MenuItem("Analyze arrays block...", nullptr, &_showArrays)) {
+		ImGui::MenuItem("按名称/编辑器 ID 查找表单…", nullptr, &_showLookup);
+		if (ImGui::MenuItem("分析数组区块…", nullptr, &_showArrays)) {
 			_arraysDirty = true;
 		}
-		if (ImGui::MenuItem(_db ? "Read plugin names again" : "Read plugin names", nullptr, false, _sources.scanned() && !namesLoading())) {
+		if (ImGui::MenuItem(_db ? "重新读取插件名称" : "读取插件名称", nullptr, false, _sources.scanned() && !namesLoading())) {
 			startNames(true);
 		}
-		if (ImGui::MenuItem("Read plugin names automatically", nullptr, &_autoNames)) {
+		if (ImGui::MenuItem("自动读取插件名称", nullptr, &_autoNames)) {
 			saveSettings();
 		}
 		ImGui::EndMenu();
 	}
-	if (ImGui::BeginMenu("Options")) {
-		ImGui::MenuItem("Settings...", nullptr, &_showSettings);
-		if (ImGui::BeginMenu("Theme")) {
+	if (ImGui::BeginMenu("选项")) {
+		ImGui::MenuItem("设置…", nullptr, &_showSettings);
+		if (ImGui::BeginMenu("主题")) {
 			for (int k = 0; k < 3; ++k) {
 				if (ImGui::MenuItem(theme::Name(static_cast<theme::Kind>(k)), nullptr, static_cast<int>(theme::Current()) == k)) {
 					setTheme(k);
@@ -996,10 +996,10 @@ void App::drawMenu()
 		}
 		ImGui::EndMenu();
 	}
-	if (ImGui::BeginMenu("Help")) {
-		ImGui::MenuItem("Show log", nullptr, &_showLog);
-		ImGui::MenuItem("Support...", nullptr, &_showSupport);
-		if (ImGui::MenuItem("About")) {
+	if (ImGui::BeginMenu("帮助")) {
+		ImGui::MenuItem("显示日志", nullptr, &_showLog);
+		ImGui::MenuItem("支持…", nullptr, &_showSupport);
+		if (ImGui::MenuItem("关于")) {
 			_showAbout = true;
 		}
 		ImGui::EndMenu();
@@ -1015,7 +1015,7 @@ void App::drawMenu()
 	} else if (_save && io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S, false)) {
 		startSaveAsDialog();
 	} else if (_save && io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S, false)) {
-		confirm("Overwrite save", "Write the edits over " + platform::ToUtf8(_path.filename()) + "?\n\nThe current file is kept next to it as a .bak copy.",
+		confirm("覆盖存档", "将修改写入 " + platform::ToUtf8(_path.filename()) + "?\n\n当前文件会以 .bak 副本保留在它旁边。",
 			[this] { doSave(_path); });
 	}
 	ImGui::EndMenuBar();
@@ -1058,7 +1058,7 @@ void App::drawCategories()
 		}
 		item(Cat::kMods, withScripts);
 	}
-	ImGui::SeparatorText("Save");
+	ImGui::SeparatorText("存档");
 	item(Cat::kPlugins, _save->plugins.full.size() + _save->plugins.lite.size());
 	item(Cat::kChangeForms, _save->changeForms.size());
 	ImGui::SeparatorText("Papyrus");
@@ -1080,13 +1080,13 @@ void App::drawList()
 		rebuildRows();
 	}
 	ImGui::SetNextItemWidth(-330);
-	if (ImGui::InputTextWithHint("##filter", "filter (case-insensitive)", _filter, sizeof(_filter))) {
+	if (ImGui::InputTextWithHint("##filter", "过滤（不区分大小写）", _filter, sizeof(_filter))) {
 		_rowsDirty = true;
 	}
 	const bool flaggable = _cat == Cat::kScripts || _cat == Cat::kInstances || _cat == Cat::kReferences || _cat == Cat::kThreads || _cat == Cat::kUnbinds;
 	if (flaggable) {
 		ImGui::SameLine();
-		if (ImGui::Checkbox("problems only", &_onlyFlagged)) {
+		if (ImGui::Checkbox("仅问题项", &_onlyFlagged)) {
 			_rowsDirty = true;
 		}
 	}
@@ -1094,27 +1094,27 @@ void App::drawList()
 	const bool filtersActive = drawFiltersButton();
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(110);
-	const char* sorts[] = { "Save order", "Alphabetical", "Size", "Mass" };
+	const char* sorts[] = { "存档顺序", "字母顺序", "大小", "总量" };
 	if (ImGui::Combo("##sort", &_sortMode, sorts, 4)) {
 		_rowsDirty = true;
 		saveSettings();
 	}
 	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("Sorting (ReSaver's Data > Sorting):\nSize = the element's own size (variables, elements, frames, bytes)\n"
-						  "Mass = size including what it owns (arrays of an instance, variables of a thread's frames, ...)");
+		ImGui::SetTooltip("排序（对应 ReSaver 的 Data > Sorting）：\n大小 = 元素自身的大小（变量、元素、栈帧、字节）\n"
+						  "总量 = 包含其拥有内容的大小（实例的数组、线程各栈帧的变量等）");
 	}
 	if (!_pluginFilter.empty()) {
-		TextColored(theme::Warn(), "Only elements of " + _pluginFilter);
+		TextColored(theme::Warn(), "仅显示属于该插件的元素：" + _pluginFilter);
 		ImGui::SameLine();
-		if (ImGui::SmallButton("clear plugin filter")) {
+		if (ImGui::SmallButton("清除插件过滤")) {
 			_pluginFilter.clear();
 			_rowsDirty = true;
 		}
 	}
 	if (filtersActive) {
-		TextColored(theme::Warn(), "Filters are active (see Filters).");
+		TextColored(theme::Warn(), "过滤器生效中（见“过滤器”）。");
 	}
-	ImGui::TextDisabled("%zu shown, %zu selected  (Ctrl/Shift-click to multi-select, Ctrl+A selects all shown)", _rows.size(), _selected.size());
+	ImGui::TextDisabled("%zu 项显示，%zu 项选中  （Ctrl/Shift 单击多选，Ctrl+A 全选当前列表）", _rows.size(), _selected.size());
 
 	// actions
 	if (_cat == Cat::kPlugins) {
@@ -1122,14 +1122,14 @@ void App::drawList()
 		if (sel.size() > 1) {
 			pluginActions(sel);
 		}
-		if (ImGui::Button("Export plugin list...")) {
+		if (ImGui::Button("导出插件列表…")) {
 			exportPluginList();
 		}
 	}
 	const bool deletable = _cat != Cat::kStrings && _cat != Cat::kPlugins;
 	if (deletable) {
 		ImGui::BeginDisabled(_rows.empty());
-		if (ImGui::Button(Fmt("Delete all listed (%zu)", _rows.size()).c_str())) {
+		if (ImGui::Button(Fmt("删除列出的全部（%zu）", _rows.size()).c_str())) {
 			// ReSaver's "Kill Listed": everything the filter shows
 			_selected.clear();
 			for (const auto& r : _rows) {
@@ -1140,23 +1140,23 @@ void App::drawList()
 		ImGui::EndDisabled();
 		ImGui::SameLine();
 		ImGui::BeginDisabled(_selected.empty());
-		if (ImGui::Button("Delete selected")) {
+		if (ImGui::Button("删除选中")) {
 			deleteSelected();
 		}
 		if (_cat == Cat::kThreads) {
 			ImGui::SameLine();
-			if (ImGui::Button("Terminate selected")) {
+			if (ImGui::Button("终止选中")) {
 				auto ids = std::set<ThreadID>();
 				for (auto k : _selected) {
 					ids.insert(static_cast<ThreadID>(k));
 				}
-				confirm("Terminate threads", Fmt("Terminate %zu thread(s)? They finish as soon as the game resumes them.", ids.size()),
-					[this, ids] { markEdited(Fmt("Terminated %zu threads", ops::TerminateThreads(*_save->papyrus(), ids))); });
+				confirm("终止线程", Fmt("终止 %zu 个线程？游戏恢复它们时就会结束。", ids.size()),
+					[this, ids] { markEdited(Fmt("已终止 %zu 个线程", ops::TerminateThreads(*_save->papyrus(), ids))); });
 			}
 		}
 		if (_cat == Cat::kInstances) {
 			ImGui::SameLine();
-			if (ImGui::Button("Delete + their spawned objects")) {
+			if (ImGui::Button("删除并连同其生成对象")) {
 				std::set<EID>           ids;
 				std::set<std::uint32_t> forms;
 				for (auto k : _selected) {
@@ -1165,27 +1165,27 @@ void App::drawList()
 						forms.insert(i->refID.data);
 					}
 				}
-				confirm("Delete instances and spawned objects",
-					Fmt("Delete %zu instance(s) and the %zu in-game-created object(s) they are attached to?\n\nObjects from plugins are never "
-						"deleted, only spawned (FF......) ones.",
+				confirm("删除实例与生成对象",
+					Fmt("删除 %zu 个实例以及它们附着其上的 %zu 个游戏内创建对象？\n\n来自插件的对象永远不会被删除，"
+						"只删除生成对象（FF......）。",
 						ids.size(), forms.size()),
 					[this, ids, forms] {
 						const auto a = ops::DeleteInstances(*_save->papyrus(), ids);
 						const auto b = ops::DeleteChangeForms(*_save, forms);
-						markEdited(Fmt("Deleted %zu instances and %zu spawned objects", a, b));
+						markEdited(Fmt("已删除 %zu 个实例和 %zu 个生成对象", a, b));
 					});
 			}
 		}
 		if (_cat == Cat::kScripts) {
 			ImGui::SameLine();
-			if (ImGui::Button("Purge selected scripts")) {
+			if (ImGui::Button("清除选中脚本")) {
 				std::vector<std::string> names;
 				for (auto k : _selected) {
 					names.push_back(_save->papyrus()->str(static_cast<TStr>(k)));
 				}
-				confirm("Purge scripts",
-					Fmt("Remove every thread, suspended stack, function message and instance of %zu script(s), plus the spawned objects they "
-						"sit on? The script definitions stay.",
+				confirm("清除脚本",
+					Fmt("移除 %zu 个脚本的所有线程、挂起堆栈、函数消息和实例，以及它们"
+						"所在的生成对象？脚本定义会保留。",
 						names.size()),
 					[this, names] {
 						ops::PurgeResult tot;
@@ -1197,7 +1197,7 @@ void App::drawList()
 							tot.stacks += r.stacks;
 							tot.messages += r.messages;
 						}
-						markEdited(Fmt("Purged: %zu threads, %zu stacks, %zu messages, %zu instances, %zu spawned objects", tot.threads,
+						markEdited(Fmt("已清除：%zu 个线程、%zu 个堆栈、%zu 条消息、%zu 个实例、%zu 个生成对象", tot.threads,
 							tot.stacks, tot.messages, tot.instances, tot.forms));
 					});
 			}
@@ -1285,7 +1285,7 @@ void App::deleteSelected()
 			for (auto k : _selected) {
 				ids.insert(static_cast<std::uint32_t>(k));
 			}
-			act = [this, ids] { markEdited(Fmt("Deleted %zu change forms", ops::DeleteChangeForms(*_save, ids))); };
+			act = [this, ids] { markEdited(Fmt("已删除 %zu 个变更表单", ops::DeleteChangeForms(*_save, ids))); };
 			break;
 		}
 	case Cat::kScripts:
@@ -1294,22 +1294,22 @@ void App::deleteSelected()
 			for (auto k : _selected) {
 				ids.insert(static_cast<TStr>(k));
 			}
-			act = [this, ids] { markEdited(Fmt("Deleted %zu scripts/instances", ops::DeleteScripts(*_save->papyrus(), ids))); };
+			act = [this, ids] { markEdited(Fmt("已删除 %zu 个脚本/实例", ops::DeleteScripts(*_save->papyrus(), ids))); };
 			break;
 		}
 	case Cat::kInstances:
 		act = [this, ids = std::set<EID>(_selected.begin(), _selected.end())] {
-			markEdited(Fmt("Deleted %zu script instances", ops::DeleteInstances(*_save->papyrus(), ids)));
+			markEdited(Fmt("已删除 %zu 个脚本实例", ops::DeleteInstances(*_save->papyrus(), ids)));
 		};
 		break;
 	case Cat::kReferences:
 		act = [this, ids = std::set<EID>(_selected.begin(), _selected.end())] {
-			markEdited(Fmt("Deleted %zu references", ops::DeleteReferences(*_save->papyrus(), ids)));
+			markEdited(Fmt("已删除 %zu 个引用", ops::DeleteReferences(*_save->papyrus(), ids)));
 		};
 		break;
 	case Cat::kArrays:
 		act = [this, ids = std::set<EID>(_selected.begin(), _selected.end())] {
-			markEdited(Fmt("Deleted %zu arrays", ops::DeleteArrays(*_save->papyrus(), ids)));
+			markEdited(Fmt("已删除 %zu 个数组", ops::DeleteArrays(*_save->papyrus(), ids)));
 		};
 		break;
 	case Cat::kThreads:
@@ -1318,13 +1318,13 @@ void App::deleteSelected()
 			for (auto k : _selected) {
 				ids.insert(static_cast<ThreadID>(k));
 			}
-			act = [this, ids] { markEdited(Fmt("Deleted %zu threads", ops::DeleteThreads(*_save->papyrus(), ids))); };
+			act = [this, ids] { markEdited(Fmt("已删除 %zu 个线程", ops::DeleteThreads(*_save->papyrus(), ids))); };
 			break;
 		}
 	case Cat::kMessages:
 		{
 			std::set<std::size_t> ids(_selected.begin(), _selected.end());
-			act = [this, ids] { markEdited(Fmt("Deleted %zu function messages", ops::DeleteFunctionMessages(*_save->papyrus(), ids))); };
+			act = [this, ids] { markEdited(Fmt("已删除 %zu 条函数消息", ops::DeleteFunctionMessages(*_save->papyrus(), ids))); };
 			break;
 		}
 	case Cat::kSuspended:
@@ -1333,19 +1333,19 @@ void App::deleteSelected()
 			for (auto k : _selected) {
 				ids.insert(static_cast<ThreadID>(k & 0xFFFFFFFF));
 			}
-			act = [this, ids] { markEdited(Fmt("Deleted %zu suspended stacks", ops::DeleteSuspendedStacks(*_save->papyrus(), ids))); };
+			act = [this, ids] { markEdited(Fmt("已删除 %zu 个挂起堆栈", ops::DeleteSuspendedStacks(*_save->papyrus(), ids))); };
 			break;
 		}
 	case Cat::kUnbinds:
 		act = [this, ids = std::set<EID>(_selected.begin(), _selected.end())] {
-			markEdited(Fmt("Deleted %zu queued unbinds", ops::DeleteUnbinds(*_save->papyrus(), ids)));
+			markEdited(Fmt("已删除 %zu 个排队解绑", ops::DeleteUnbinds(*_save->papyrus(), ids)));
 		};
 		break;
 	default:
 		return;
 	}
 	(void)p;
-	confirm("Delete", Fmt("Delete %zu selected %s?", n, CatName(_cat)), act);
+	confirm("删除", Fmt("删除选中的 %zu 个%s？", n, CatName(_cat)), act);
 }
 
 // ==========================================================================================
@@ -1355,7 +1355,7 @@ void App::deleteSelected()
 void App::drawDetail()
 {
 	if (!_focus) {
-		ImGui::TextDisabled("Select an item to see its details.");
+		ImGui::TextDisabled("选择一个条目以查看其详情。");
 		return;
 	}
 	const auto k = *_focus;
@@ -1384,7 +1384,7 @@ void App::detailPlugin(std::uint64_t k)
 		return;
 	}
 	ImGui::TextUnformatted(list[i].c_str());
-	ImGui::TextDisabled(lite ? "Light plugin (ESL), index FE:%03X" : "Full plugin, load index %02X", static_cast<unsigned>(i));
+	ImGui::TextDisabled(lite ? "轻型插件（ESL），索引 FE:%03X" : "完整插件，加载索引 %02X", static_cast<unsigned>(i));
 	std::size_t forms = 0;
 	for (const auto& c : _save->changeForms) {
 		const auto fid = _save->formIDOf(c.refID);
@@ -1392,7 +1392,7 @@ void App::detailPlugin(std::uint64_t k)
 			++forms;
 		}
 	}
-	ImGui::Text("%zu change forms belong to this plugin.", forms);
+	ImGui::Text("%zu 个变更表单属于此插件。", forms);
 	ImGui::Spacing();
 	pluginActions({ list[i] });
 }
@@ -1408,12 +1408,12 @@ void App::detailChangeForm(std::uint64_t k)
 	const auto fid = _save->formIDOf(c->refID);
 	ImGui::Text("%s  %08X", ChangeFormTypeName(c->typeCode()), fid);
 	if (BeginKV("cf")) {
-		KV("Plugin", _save->pluginOf(fid));
+		KV("插件", _save->pluginOf(fid));
 		KV("RefID", Fmt("%06X (%s)", c->refID.data,
-						c->refID.type() == RefID::Type::kCreated ? "created in game" : c->refID.type() == RefID::Type::kDefault ? "Skyrim.esm" : "form index"));
-		KV("Change flags", Fmt("%08X", c->changeFlags));
-		KV("Version", std::to_string(c->version));
-		KV("Data", Fmt("%zu bytes%s", c->data.size(), c->length2 ? Fmt(" (zlib, %u bytes unpacked)", c->length2).c_str() : ""));
+						c->refID.type() == RefID::Type::kCreated ? "游戏中创建" : c->refID.type() == RefID::Type::kDefault ? "Skyrim.esm" : "表单索引"));
+		KV("变更标志", Fmt("%08X", c->changeFlags));
+		KV("版本", std::to_string(c->version));
+		KV("数据", Fmt("%zu 字节%s", c->data.size(), c->length2 ? Fmt("（zlib，解包后 %u 字节）", c->length2).c_str() : ""));
 		ImGui::EndTable();
 	}
 	// scripts attached to this form
@@ -1423,10 +1423,10 @@ void App::detailChangeForm(std::uint64_t k)
 			attached.push_back(&i);
 		}
 	}
-	ImGui::SeparatorText(Fmt("Scripts attached (%zu)", attached.size()).c_str());
+	ImGui::SeparatorText(Fmt("附加于此的脚本（%zu）", attached.size()).c_str());
 	for (const auto* i : attached) {
 		ImGui::PushID(i);
-		if (ImGui::SmallButton("go")) {
+		if (ImGui::SmallButton("跳转")) {
 			select(Cat::kInstances, i->id);
 		}
 		ImGui::SameLine();
@@ -1434,7 +1434,7 @@ void App::detailChangeForm(std::uint64_t k)
 		ImGui::PopID();
 	}
 	detailChangeFormDecoded(*c);
-	if (ImGui::CollapsingHeader("Raw data (first 512 bytes, as stored)")) {
+	if (ImGui::CollapsingHeader("原始数据（前 512 字节，按存储原样）")) {
 		std::string hex;
 		for (std::size_t i = 0; i < c->data.size() && i < 512; ++i) {
 			hex += Fmt("%02X%s", c->data[i], (i % 16 == 15) ? "\n" : " ");
@@ -1449,7 +1449,7 @@ void App::detailString(std::uint64_t k)
 	if (k >= p.strings.size()) {
 		return;
 	}
-	ImGui::Text("String #%" PRIu64, k);
+	ImGui::Text("字符串 #%" PRIu64, k);
 	ImGui::TextWrapped("%s", text::ToUtf8(p.strings[k]).c_str());
 }
 
@@ -1463,11 +1463,11 @@ void App::detailScript(std::uint64_t k)
 	ImGui::TextUnformatted(p.str(s->name).c_str());
 	scriptItem(p.str(s->name));
 	ImGui::SameLine();
-	if (ImGui::SmallButton("View script")) {
+	if (ImGui::SmallButton("查看脚本")) {
 		viewScript(p.str(s->name));
 	}
 	if (ops::IsScriptUndefined(p, *s)) {
-		TextColored(theme::Bad(), "UNDEFINED: the game could not load this script's .pex when the save was made (mod removed?).");
+		TextColored(theme::Bad(), "UNDEFINED：存档创建时游戏无法加载该脚本的 .pex（模组已被移除？）。");
 	}
 	std::size_t n = 0;
 	for (const auto& i : p.instances) {
@@ -1487,22 +1487,22 @@ void App::detailScript(std::uint64_t k)
 		}
 	}
 	if (BeginKV("script")) {
-		KV("Extends", p.str(s->parent).empty() ? "(nothing)" : p.str(s->parent));
+		KV("继承自", p.str(s->parent).empty() ? "（无）" : p.str(s->parent));
 		scriptItem(p.str(s->parent));
-		KV("Instances", std::to_string(n));
-		KV("Threads running it", std::to_string(threads));
+		KV("实例", std::to_string(n));
+		KV("运行它的线程", std::to_string(threads));
 		ImGui::EndTable();
 	}
-	if (ImGui::Button("Show its instances")) {
+	if (ImGui::Button("查看其脚本实例")) {
 		_cat = Cat::kInstances;
-		std::snprintf(_filter, sizeof(_filter), "%s  on", p.str(s->name).c_str());
+		std::snprintf(_filter, sizeof(_filter), "%s  于", p.str(s->name).c_str());
 		_rowsDirty = true;
 		_selected.clear();
 		_focus.reset();
 		return;
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Show its threads")) {
+	if (ImGui::Button("查看其线程")) {
 		_cat = Cat::kThreads;
 		std::snprintf(_filter, sizeof(_filter), "%s.", p.str(s->name).c_str());
 		_rowsDirty = true;
@@ -1510,10 +1510,10 @@ void App::detailScript(std::uint64_t k)
 		_focus.reset();
 		return;
 	}
-	ImGui::SeparatorText(Fmt("Members (%zu own)", s->members.size()).c_str());
+	ImGui::SeparatorText(Fmt("成员（自有 %zu 个）", s->members.size()).c_str());
 	if (ImGui::BeginTable("members", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV)) {
-		ImGui::TableSetupColumn("Name");
-		ImGui::TableSetupColumn("Type");
+		ImGui::TableSetupColumn("名称");
+		ImGui::TableSetupColumn("类型");
 		ImGui::TableHeadersRow();
 		for (const auto& m : s->members) {
 			ImGui::TableNextRow();
@@ -1536,48 +1536,48 @@ void App::detailInstance(std::uint64_t k)
 	ImGui::TextUnformatted(p.str(i->script).c_str());
 	scriptItem(p.str(i->script));
 	ImGui::SameLine();
-	if (ImGui::SmallButton("View script")) {
+	if (ImGui::SmallButton("查看脚本")) {
 		viewScript(p.str(i->script));
 	}
 	if (ops::IsUnattached(*i)) {
-		TextColored(theme::Warn(), "UNATTACHED: not attached to any object. Clean > Remove unattached instances deletes these.");
+		TextColored(theme::Warn(), "UNATTACHED：未附加到任何对象。用“清理 > 移除未附加实例”可删除这些。");
 	}
 	if (ops::IsInstanceUndefined(p, i->script)) {
-		TextColored(theme::Bad(), "UNDEFINED: its script is no longer installed.");
+		TextColored(theme::Bad(), "UNDEFINED：其脚本已不再安装。");
 	}
 	if (ops::IsCreatedWithoutForm(*_save, *i)) {
-		TextColored(theme::Warn(), "Its spawned object no longer exists in the save. Clean > Remove instances on missing spawned objects shows "
-								   "which mod it comes from and whether that mod is still installed.");
+		TextColored(theme::Warn(), "其生成对象已不在存档中。“清理 > 移除位于缺失生成对象上的实例”会显示 "
+								   "它来自哪个模组，以及该模组是否仍安装。");
 	}
 	if (BeginKV("inst")) {
-		KV("Instance id", Hex64(i->id));
-		KV("Attached to", formLabel(i->refID));
+		KV("实例 id", Hex64(i->id));
+		KV("附加到", formLabel(i->refID));
 		if (i->data) {
-			KV("State", p.str(i->data->state).empty() ? "(default)" : p.str(i->data->state));
-			KV("Flags", Fmt("%02X  unknown %08X", i->data->flag, i->data->unknown1));
+			KV("状态", p.str(i->data->state).empty() ? "（默认）" : p.str(i->data->state));
+			KV("标志", Fmt("%02X  unknown %08X", i->data->flag, i->data->unknown1));
 		}
 		ImGui::EndTable();
 	}
 	if (i->refID.type() == RefID::Type::kCreated || i->refID.type() == RefID::Type::kFormIdx) {
-		if (_save->findChangeForm(i->refID) && ImGui::Button("Go to its change form")) {
+		if (_save->findChangeForm(i->refID) && ImGui::Button("转到其变更表单")) {
 			select(Cat::kChangeForms, i->refID.data);
 			return;
 		}
 	}
 	if (i->data) {
-		ImGui::SeparatorText(Fmt("Variables (%zu)", i->data->vars.size()).c_str());
+		ImGui::SeparatorText(Fmt("变量（%zu）", i->data->vars.size()).c_str());
 		varsTable("vars", i->data->vars, memberNames(i->script));
 	}
 	const auto refs = ops::FindReferrers(p, i->id);
-	ImGui::SeparatorText(Fmt("Referenced by (%zu)", refs.size()).c_str());
+	ImGui::SeparatorText(Fmt("被引用（%zu）", refs.size()).c_str());
 	int n = 0;
 	for (const auto& r : refs) {
 		if (++n > 200) {
-			ImGui::TextDisabled("...");
+			ImGui::TextDisabled("…");
 			break;
 		}
 		ImGui::PushID(n);
-		if (ImGui::SmallButton("go")) {
+		if (ImGui::SmallButton("跳转")) {
 			switch (r.kind) {
 			case ops::Referrer::Kind::kInstance: select(Cat::kInstances, r.id); break;
 			case ops::Referrer::Kind::kReference: select(Cat::kReferences, r.id); break;
@@ -1601,14 +1601,14 @@ void App::detailReference(std::uint64_t k)
 	}
 	ImGui::TextUnformatted(p.str(r->script).c_str());
 	if (BeginKV("ref")) {
-		KV("Reference id", Hex64(r->id));
+		KV("引用 id", Hex64(r->id));
 		if (r->data) {
-			KV("Type", p.str(r->data->state));
+			KV("类型", p.str(r->data->state));
 		}
 		ImGui::EndTable();
 	}
 	if (r->data) {
-		ImGui::SeparatorText("Variables");
+		ImGui::SeparatorText("变量");
 		varsTable("rvars", r->data->vars, memberNames(r->script));
 	}
 }
@@ -1620,17 +1620,17 @@ void App::detailArray(std::uint64_t k)
 	if (!a) {
 		return;
 	}
-	ImGui::Text("%s array, %zu elements", IsRefType(a->type) ? (p.str(a->refType) + "[]").c_str() : VTypeName(a->type), a->vars.size());
+	ImGui::Text("%s 数组，%zu 个元素", IsRefType(a->type) ? (p.str(a->refType) + "[]").c_str() : VTypeName(a->type), a->vars.size());
 	ImGui::TextDisabled("id %s", Hex64(a->id).c_str());
 	const auto refs = ops::FindReferrers(p, a->id);
-	ImGui::SeparatorText(Fmt("Held by (%zu)", refs.size()).c_str());
+	ImGui::SeparatorText(Fmt("持有者（%zu）", refs.size()).c_str());
 	int n = 0;
 	for (const auto& r : refs) {
 		if (++n > 100) {
 			break;
 		}
 		ImGui::PushID(n);
-		if (ImGui::SmallButton("go")) {
+		if (ImGui::SmallButton("跳转")) {
 			select(r.kind == ops::Referrer::Kind::kThread ? Cat::kThreads : r.kind == ops::Referrer::Kind::kArray ? Cat::kArrays : Cat::kInstances, r.id);
 		}
 		ImGui::SameLine();
@@ -1638,15 +1638,15 @@ void App::detailArray(std::uint64_t k)
 		ImGui::PopID();
 	}
 	if (!refs.empty()) {
-		if (ImGui::Button("Find owner")) {
+		if (ImGui::Button("查找持有者")) {
 			const auto& r = refs.front();
 			select(r.kind == ops::Referrer::Kind::kThread ? Cat::kThreads : r.kind == ops::Referrer::Kind::kArray ? Cat::kArrays : Cat::kInstances, r.id);
 			return;
 		}
 	} else {
-		TextColored(theme::Warn(), "Nothing holds this array (Tools > Analyze arrays block lists all such arrays).");
+		TextColored(theme::Warn(), "没有任何对象持有此数组（“工具 > 分析数组区块”会列出所有这类数组）。");
 	}
-	ImGui::SeparatorText("Elements");
+	ImGui::SeparatorText("元素");
 	varsTable("avars", a->vars, {});
 	arrayEditor(*a);
 }
@@ -1660,49 +1660,49 @@ void App::detailThread(std::uint64_t k)
 	}
 	ImGui::TextUnformatted(threadLabel(*a).c_str());
 	if (ops::IsThreadTerminated(p, *a)) {
-		TextColored(theme::Dim(), "TERMINATED: all its code was replaced by no-ops; it ends when the game resumes it.");
+		TextColored(theme::Dim(), "TERMINATED：其代码已被替换为空操作，游戏恢复它时就会结束。");
 	}
 	if (ops::IsThreadSuspended(p, a->id)) {
-		TextColored(theme::Warn(), "SUSPENDED: it is waiting on a queued call (see Suspended Stacks).");
+		TextColored(theme::Warn(), "SUSPENDED：它正在等待一个排队调用（见“挂起堆栈”）。");
 	}
 	if (ops::IsThreadUndefined(p, *a)) {
-		TextColored(theme::Bad(), "UNDEFINED: runs a script that is no longer installed.");
+		TextColored(theme::Bad(), "UNDEFINED：运行的脚本已不再安装。");
 	}
 	if (!a->data) {
 		return;
 	}
 	auto& d = *a->data;
 	if (BeginKV("thr")) {
-		KV("Thread id", Fmt("%08X  type %u", a->id, a->type));
-		KV("Version", Fmt("%d.%d", d.major, d.minor));
-		KV("Flags", Fmt("%02X  unknown3 %u", d.flag, d.unknown3));
+		KV("线程 id", Fmt("%08X  类型 %u", a->id, a->type));
+		KV("版本", Fmt("%d.%d", d.major, d.minor));
+		KV("标志", Fmt("%02X  unknown3 %u", d.flag, d.unknown3));
 		if (d.fragment) {
-			KV("Fragment", d.fragment->typeCode.empty() ? "kind 2" : d.fragment->typeCode);
+			KV("片段", d.fragment->typeCode.empty() ? "类型 2" : d.fragment->typeCode);
 		}
-		KV("Frames", std::to_string(d.frames.size()));
+		KV("栈帧", std::to_string(d.frames.size()));
 		ImGui::EndTable();
 	}
 	for (std::size_t fi = 0; fi < d.frames.size(); ++fi) {
 		auto& f = d.frames[fi];
-		const auto  title = Fmt("Frame %zu: %s.%s  (%s)%s##f%zu", fi, p.str(f.baseName).c_str(), p.str(f.event).c_str(), p.str(f.scriptName).c_str(),
-			 ops::IsFrameNative(f) ? "  native" : ops::IsFrameZeroed(f) ? "  zeroed" : "", fi);
+		const auto  title = Fmt("帧 %zu：%s.%s  （%s）%s##f%zu", fi, p.str(f.baseName).c_str(), p.str(f.event).c_str(), p.str(f.scriptName).c_str(),
+			 ops::IsFrameNative(f) ? "  原生" : ops::IsFrameZeroed(f) ? "  归零" : "", fi);
 		if (ImGui::CollapsingHeader(title.c_str(), fi + 1 == d.frames.size() || fi == 0 ? ImGuiTreeNodeFlags_DefaultOpen : 0)) {
 			ImGui::PushID(static_cast<int>(fi));
-			if (ImGui::SmallButton(fi + 1 == d.frames.size() ? "View script where it is stopped" : "View script at this call")) {
+			if (ImGui::SmallButton(fi + 1 == d.frames.size() ? "查看停止处的脚本" : "查看此调用处的脚本")) {
 				viewScript(p.str(f.baseName), p.str(f.event), f.status ? p.str(*f.status) : std::string(), static_cast<int>(f.ptr));
 			}
 			if (BeginKV("frame")) {
-				KV("Owner", describeVar(f.owner));
-				KV("Returns", p.str(f.returnType));
-				KV("Instruction", Fmt("%u of %zu", f.ptr, f.code.size()));
+				KV("所有者", describeVar(f.owner));
+				KV("返回类型", p.str(f.returnType));
+				KV("指令", Fmt("%u / %zu", f.ptr, f.code.size()));
 				if (!p.str(f.docString).empty()) {
-					KV("Doc", p.str(f.docString));
+					KV("文档", p.str(f.docString));
 				}
 				ImGui::EndTable();
 			}
 			std::vector<std::string> names;
 			for (const auto& m : f.params) {
-				names.push_back(p.str(m.name) + " (param)");
+				names.push_back(p.str(m.name) + "（参数）");
 			}
 			for (const auto& m : f.locals) {
 				names.push_back(p.str(m.name));
@@ -1721,26 +1721,26 @@ void App::detailMessage(std::uint64_t k)
 	}
 	auto& m = p.functionMessages[k];
 	if (BeginKV("fm")) {
-		KV("Flag", Fmt("%u / %02X", m.flag, m.flags));
-		KV("Thread", m.id ? Fmt("%08X", *m.id) : std::string("(none)"));
+		KV("标志", Fmt("%u / %02X", m.flag, m.flags));
+		KV("线程", m.id ? Fmt("%08X", *m.id) : std::string("（无）"));
 		if (m.data) {
-			KV("Call", p.str(m.data->scriptName) + "." + p.str(m.data->event));
-			KV("Self", describeVar(m.data->unknownVar));
+			KV("调用", p.str(m.data->scriptName) + "." + p.str(m.data->event));
+			KV("自身", describeVar(m.data->unknownVar));
 		}
 		ImGui::EndTable();
 	}
-	if (m.data && ImGui::Button("View script")) {
+	if (m.data && ImGui::Button("查看脚本")) {
 		viewScript(p.str(m.data->scriptName), p.str(m.data->event));
 	}
 	if (m.data) {
 		ImGui::SameLine();
 	}
-	if (m.id && p.findActive(*m.id) && ImGui::Button("Go to thread")) {
+	if (m.id && p.findActive(*m.id) && ImGui::Button("转到线程")) {
 		select(Cat::kThreads, *m.id);
 		return;
 	}
 	if (m.data) {
-		ImGui::SeparatorText("Arguments");
+		ImGui::SeparatorText("参数");
 		varsTable("fmv", m.data->vars, {});
 	}
 }
@@ -1756,26 +1756,26 @@ void App::detailSuspended(std::uint64_t k)
 			continue;
 		}
 		if (BeginKV("ss")) {
-			KV("Table", std::to_string(table));
-			KV("Thread", Fmt("%08X", s.id));
+			KV("表", std::to_string(table));
+			KV("线程", Fmt("%08X", s.id));
 			if (s.data) {
-				KV("Call", p.str(s.data->scriptName) + "." + p.str(s.data->event));
-				KV("Self", describeVar(s.data->unknownVar));
+				KV("调用", p.str(s.data->scriptName) + "." + p.str(s.data->event));
+				KV("自身", describeVar(s.data->unknownVar));
 			}
 			ImGui::EndTable();
 		}
-		if (s.data && ImGui::Button("View script")) {
+		if (s.data && ImGui::Button("查看脚本")) {
 			viewScript(p.str(s.data->scriptName), p.str(s.data->event));
 		}
 		if (s.data) {
 			ImGui::SameLine();
 		}
-		if (p.findActive(id) && ImGui::Button("Go to thread")) {
+		if (p.findActive(id) && ImGui::Button("转到线程")) {
 			select(Cat::kThreads, id);
 			return;
 		}
 		if (s.data) {
-			ImGui::SeparatorText("Arguments");
+			ImGui::SeparatorText("参数");
 			varsTable("ssv", s.data->vars, {});
 		}
 		return;
@@ -1786,14 +1786,14 @@ void App::detailUnbind(std::uint64_t k)
 {
 	auto&       p = *_save->papyrus();
 	const auto* i = p.findInstance(k);
-	ImGui::Text("Queued unbind of %s", Hex64(k).c_str());
+	ImGui::Text("排队解绑 %s", Hex64(k).c_str());
 	if (i) {
 		ImGui::TextUnformatted(instanceLabel(*i).c_str());
-		if (ImGui::Button("Go to instance")) {
+		if (ImGui::Button("转到实例")) {
 			select(Cat::kInstances, k);
 		}
 	} else {
-		TextColored(theme::Warn(), "The instance it refers to is not in the save.");
+		TextColored(theme::Warn(), "它引用的实例不在存档中。");
 	}
 }
 
@@ -1811,17 +1811,17 @@ void App::drawOverview()
 		ImGui::SameLine();
 	}
 	ImGui::BeginGroup();
-	ImGui::Text("%s, level %u", text::ToUtf8(h.playerName).c_str(), h.playerLevel);
+	ImGui::Text("%s，等级 %u", text::ToUtf8(h.playerName).c_str(), h.playerLevel);
 	ImGui::TextUnformatted(text::ToUtf8(h.location).c_str());
 	ImGui::TextDisabled("%s  |  %s", text::ToUtf8(h.race).c_str(), text::ToUtf8(h.gameDate).c_str());
 	ImGui::Spacing();
 	if (BeginKV("hdr")) {
-		KV("File", platform::ToUtf8(_path.filename()));
-		KV("Save number", std::to_string(h.saveNumber));
-		KV("Format", Fmt("save version %u, form version %u, %s", h.version, _save->formVersion,
-						 h.compression == Compression::kLZ4 ? "LZ4" : h.compression == Compression::kZlib ? "zlib" : "uncompressed"));
-		KV("Plugins", Fmt("%zu full + %zu light", _save->plugins.full.size(), _save->plugins.lite.size()));
-		KV("Body size", Fmt("%.1f MB", _save->originalBodySize / 1048576.0));
+		KV("文件", platform::ToUtf8(_path.filename()));
+		KV("存档编号", std::to_string(h.saveNumber));
+		KV("格式", Fmt("存档版本 %u，表单版本 %u，%s", h.version, _save->formVersion,
+						 h.compression == Compression::kLZ4 ? "LZ4" : h.compression == Compression::kZlib ? "zlib" : "未压缩"));
+		KV("插件", Fmt("%zu 个完整 + %zu 个轻型", _save->plugins.full.size(), _save->plugins.lite.size()));
+		KV("主体大小", Fmt("%.1f MB", _save->originalBodySize / 1048576.0));
 		ImGui::EndTable();
 	}
 	ImGui::EndGroup();
@@ -1830,9 +1830,9 @@ void App::drawOverview()
 		return;
 	}
 	const auto& r = *_report;
-	ImGui::SeparatorText("Health");
+	ImGui::SeparatorText("健康状况");
 	if (r.warnings.empty()) {
-		TextColored(theme::Good(), "No problems found.");
+		TextColored(theme::Good(), "未发现问题。");
 	}
 	for (const auto& w : r.warnings) {
 		ImGui::Bullet();
@@ -1842,37 +1842,37 @@ void App::drawOverview()
 	}
 	for (const auto& s : r.loopingScripts) {
 		ImGui::PushID(s.c_str());
-		if (ImGui::Button(("Purge " + s).c_str())) {
+		if (ImGui::Button(("清除 " + s).c_str())) {
 			const std::string name = s;
-			confirm("Purge " + name,
-				"Remove every thread, suspended stack, function message and instance of '" + name +
-					"', plus the spawned objects they sit on?\n\nThis is what fixed the Firefly loop. Write the result with File > Save As.",
+			confirm("清除 " + name,
+				"移除 “" + name +
+					"” 的全部线程、挂起堆栈、函数消息和实例，以及它们所在的生成对象？\n\n这正是修好 Firefly 循环的办法。结果请用“文件 > 另存为”写出。",
 				[this, name] {
 					auto x = ops::PurgeScript(*_save, name, true);
-					markEdited(Fmt("Purged %s: %zu threads, %zu instances, %zu spawned objects", name.c_str(), x.threads, x.instances, x.forms));
+					markEdited(Fmt("已清除 %s：%zu 个线程、%zu 个实例、%zu 个生成对象", name.c_str(), x.threads, x.instances, x.forms));
 				});
 		}
 		ImGui::PopID();
 		ImGui::SameLine();
 	}
 	if (r.mcmJam) {
-		if (ImGui::Button("Fix SkyUI MCM registration jam")) {
+		if (ImGui::Button("修复 SkyUI MCM 注册卡死")) {
 			fixMcmJam();
 		}
 		ImGui::SameLine();
 	}
 	ImGui::NewLine();
-	ImGui::SeparatorText("Counts");
+	ImGui::SeparatorText("统计");
 	if (BeginKV("counts")) {
-		KV("Script instances", Fmt("%zu  (%zu unattached, %zu undefined, %zu on missing spawned objects)", r.instances, r.unattached,
+		KV("脚本实例", Fmt("%zu  （未附加 %zu，未定义 %zu，位于缺失生成对象上 %zu）", r.instances, r.unattached,
 								   r.undefinedInstances, r.createdWithoutForm));
-		KV("Scripts", Fmt("%zu  (%zu undefined)", r.scripts, r.undefinedScripts));
-		KV("Threads", Fmt("%zu  (%zu undefined, %zu terminated)", r.threads, r.undefinedThreads, r.terminatedThreads));
-		KV("Suspended stacks", std::to_string(r.suspended));
-		KV("Function messages", std::to_string(r.functionMessages));
-		KV("Arrays", std::to_string(r.arrays));
-		KV("Change forms", std::to_string(r.changeForms));
-		KV("Strings", std::to_string(r.strings));
+		KV("脚本", Fmt("%zu  （未定义 %zu）", r.scripts, r.undefinedScripts));
+		KV("线程", Fmt("%zu  （未定义 %zu，已终止 %zu）", r.threads, r.undefinedThreads, r.terminatedThreads));
+		KV("挂起堆栈", std::to_string(r.suspended));
+		KV("函数消息", std::to_string(r.functionMessages));
+		KV("数组", std::to_string(r.arrays));
+		KV("变更表单", std::to_string(r.changeForms));
+		KV("字符串", std::to_string(r.strings));
 		ImGui::EndTable();
 	}
 }
@@ -1880,12 +1880,12 @@ void App::drawOverview()
 void App::drawAnalysis()
 {
 	ImGui::SetNextWindowSize(ImVec2(820, 640), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin("Analysis", &_showAnalysis)) {
+	if (!ImGui::Begin("分析", &_showAnalysis)) {
 		ImGui::End();
 		return;
 	}
 	if (_report) {
-		if (ImGui::Button("Copy report to clipboard")) {
+		if (ImGui::Button("复制报告到剪贴板")) {
 			ImGui::SetClipboardText(ops::FormatReport(*_report, 40).c_str());
 		}
 		ImGui::Separator();
@@ -1900,19 +1900,19 @@ void App::drawModals()
 {
 	editPopup();
 	if (_scanPathPopup) {
-		ImGui::OpenPopup("Script sources folder");
+		ImGui::OpenPopup("脚本源码文件夹");
 		_scanPathPopup = false;
 	}
-	if (ImGui::BeginPopupModal("Script sources folder", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-		ImGui::TextUnformatted("Mod Organizer mods folder (or the game's Data folder):");
+	if (ImGui::BeginPopupModal("脚本源码文件夹", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+		ImGui::TextUnformatted("Mod Organizer 的 mods 文件夹（或游戏的 Data 文件夹）：");
 		ImGui::SetNextItemWidth(700);
 		ImGui::InputText("##scanpath", _scanPathBuf, sizeof(_scanPathBuf));
-		if (ImGui::Button("Scan", ImVec2(120, 0))) {
+		if (ImGui::Button("扫描", ImVec2(120, 0))) {
 			ImGui::CloseCurrentPopup();
 			scanSources(platform::FromUtf8(_scanPathBuf));
 		}
 		ImGui::SameLine();
-		if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+		if (ImGui::Button("取消", ImVec2(120, 0))) {
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
@@ -1927,7 +1927,7 @@ void App::drawModals()
 		ImGui::Separator();
 		ImGui::TextWrapped("%s", _confirmText.c_str());
 		ImGui::Spacing();
-		if (ImGui::Button("OK", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+		if (ImGui::Button("确定", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
 			auto act = std::move(_confirmAction);
 			_confirmAction = nullptr;
 			ImGui::CloseCurrentPopup();
@@ -1936,7 +1936,7 @@ void App::drawModals()
 			}
 		}
 		ImGui::SameLine();
-		if (ImGui::Button("Cancel", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+		if (ImGui::Button("取消", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 			_confirmAction = nullptr;
 			ImGui::CloseCurrentPopup();
 		}
@@ -1944,12 +1944,12 @@ void App::drawModals()
 	}
 
 	if (!_error.empty()) {
-		ImGui::OpenPopup("Error##err");
+		ImGui::OpenPopup("错误##err");
 	}
 	ImGui::SetNextWindowSize(ImVec2(560, 0));
-	if (ImGui::BeginPopupModal("Error##err", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+	if (ImGui::BeginPopupModal("错误##err", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 		ImGui::TextWrapped("%s", _error.c_str());
-		if (ImGui::Button("OK", ImVec2(120, 0))) {
+		if (ImGui::Button("确定", ImVec2(120, 0))) {
 			_error.clear();
 			ImGui::CloseCurrentPopup();
 		}
@@ -1964,81 +1964,81 @@ void App::drawModals()
 	}
 
 	if (_purgeOpen) {
-		ImGui::OpenPopup("Purge a script");
+		ImGui::OpenPopup("清除某个脚本");
 		_purgeOpen = false;
 	}
 	ImGui::SetNextWindowSize(ImVec2(520, 0));
-	if (ImGui::BeginPopupModal("Purge a script", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-		ImGui::TextWrapped("Removes every thread, suspended stack, function message and instance of the script. The script itself stays defined.");
-		ImGui::InputTextWithHint("##pname", "script name, e.g. Firefly", _purgeName, sizeof(_purgeName));
-		ImGui::Checkbox("Only stop its running and queued work; keep its instances and their data", &_purgeKeep);
+	if (ImGui::BeginPopupModal("清除某个脚本", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+		ImGui::TextWrapped("移除该脚本的所有线程、挂起堆栈、函数消息和实例。脚本本身仍保持已定义。");
+		ImGui::InputTextWithHint("##pname", "脚本名，例如 Firefly", _purgeName, sizeof(_purgeName));
+		ImGui::Checkbox("只停止它正在运行和排队的工作；保留其实例及其数据", &_purgeKeep);
 		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Use this for a mod you keep installed, e.g. a stuck MCM registration (QuickLootIEMCM).\n"
-							  "Other scripts' properties that point at the script stay valid, and its settings are kept.");
+			ImGui::SetTooltip("适用于你打算继续安装的模组，例如卡住的 MCM 注册（QuickLootIEMCM）。\n"
+							  "其他脚本指向该脚本的属性仍然有效，其设置也会保留。");
 		}
 		ImGui::BeginDisabled(_purgeKeep);
-		ImGui::Checkbox("Also delete the spawned (FF......) objects its instances sit on", &_purgeForms);
+		ImGui::Checkbox("同时删除其实例所在的生成对象（FF......）", &_purgeForms);
 		ImGui::EndDisabled();
-		if (ImGui::Button("Purge", ImVec2(120, 0)) && _purgeName[0]) {
+		if (ImGui::Button("清除", ImVec2(120, 0)) && _purgeName[0]) {
 			auto x = ops::PurgeScript(*_save, _purgeName, _purgeForms && !_purgeKeep, _purgeKeep);
 			ImGui::CloseCurrentPopup();
-			markEdited(Fmt("Purged %s: %zu threads, %zu stacks, %zu messages, %zu instances, %zu spawned objects", _purgeName, x.threads, x.stacks,
+			markEdited(Fmt("已清除 %s：%zu 个线程、%zu 个堆栈、%zu 条消息、%zu 个实例、%zu 个生成对象", _purgeName, x.threads, x.stacks,
 				x.messages, x.instances, x.forms));
 		}
 		ImGui::SameLine();
-		if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+		if (ImGui::Button("取消", ImVec2(120, 0))) {
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
 	}
 
 	if (_openPathPopup) {
-		ImGui::OpenPopup("Open save");
+		ImGui::OpenPopup("打开存档");
 		_openPathPopup = false;
 	}
-	if (ImGui::BeginPopupModal("Open save", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+	if (ImGui::BeginPopupModal("打开存档", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 		ImGui::SetNextItemWidth(700);
 		ImGui::InputText("##path", _pathBuf, sizeof(_pathBuf));
-		if (ImGui::Button("Open", ImVec2(120, 0))) {
+		if (ImGui::Button("打开", ImVec2(120, 0))) {
 			ImGui::CloseCurrentPopup();
 			open(platform::FromUtf8(_pathBuf));
 		}
 		ImGui::SameLine();
-		if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+		if (ImGui::Button("取消", ImVec2(120, 0))) {
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
 	}
 	if (_savePathPopup) {
-		ImGui::OpenPopup("Save as");
+		ImGui::OpenPopup("另存为");
 		_savePathPopup = false;
 	}
-	if (ImGui::BeginPopupModal("Save as", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+	if (ImGui::BeginPopupModal("另存为", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 		ImGui::SetNextItemWidth(700);
 		ImGui::InputText("##spath", _pathBuf, sizeof(_pathBuf));
-		if (ImGui::Button("Save", ImVec2(120, 0))) {
+		if (ImGui::Button("保存", ImVec2(120, 0))) {
 			ImGui::CloseCurrentPopup();
 			doSave(platform::FromUtf8(_pathBuf));
 		}
 		ImGui::SameLine();
-		if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+		if (ImGui::Button("取消", ImVec2(120, 0))) {
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
 	}
 
 	if (_showAbout) {
-		ImGui::OpenPopup("About ReSaver++");
+		ImGui::OpenPopup("关于 ReSaver++");
 		_showAbout = false;
 	}
-	if (ImGui::BeginPopupModal("About ReSaver++", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-		ImGui::TextUnformatted("ReSaver++ version 16  -  Skyrim SE/AE save editor");
+	if (ImGui::BeginPopupModal("关于 ReSaver++", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+		ImGui::TextUnformatted("ReSaver++ 版本 16  -  Skyrim SE/AE 存档编辑器");
 		ImGui::Spacing();
-		ImGui::TextUnformatted("A C++ port of ReSaver (FallrimTools) by Mark Fairchild.");
-		ImGui::TextUnformatted("Licensed under the Apache License 2.0, like the original.");
+		ImGui::TextUnformatted("ReSaver（FallrimTools，作者 Mark Fairchild）的 C++ 移植版。");
+		ImGui::TextUnformatted("与原版一样，按 Apache License 2.0 授权。");
 		ImGui::Spacing();
-		ImGui::TextDisabled("Uses Dear ImGui (MIT), GLFW (zlib), LZ4 (BSD-2), miniz (MIT), ImGuiColorTextEdit (MIT).");
-		if (ImGui::Button("Close", ImVec2(120, 0))) {
+		ImGui::TextDisabled("使用 Dear ImGui（MIT）、GLFW（zlib）、LZ4（BSD-2）、miniz（MIT）、ImGuiColorTextEdit（MIT）。");
+		if (ImGui::Button("关闭", ImVec2(120, 0))) {
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
@@ -2048,18 +2048,26 @@ void App::drawModals()
 void App::drawStatus()
 {
 	ImGui::Separator();
+	const bool  busy = (scanning() && _scanProgress) || (namesLoading() && _dbProgress);
+	const float winW = ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x;
+	// the status text and the progress bar share one line: keep them apart, the Chinese status
+	// lines are long enough to run under the bar otherwise
+	const float progW = busy ? std::min(520.0f, winW * 0.42f) : 0.0f;
+	const float textW = busy ? std::max(140.0f, winW - progW - 24.0f) : winW;
+	const ImVec2 at = ImGui::GetCursorScreenPos();
+	ImGui::PushClipRect(ImVec2(at.x, at.y - 2), ImVec2(at.x + textW, at.y + ImGui::GetTextLineHeight() + 4), true);
 	if (_dirty) {
-		TextColored(theme::Warn(), "UNSAVED EDITS");
+		TextColored(theme::Warn(), "未保存的修改");
 		ImGui::SameLine();
 	}
 	ImGui::TextUnformatted(_status.c_str());
-	if ((scanning() && _scanProgress) || (namesLoading() && _dbProgress)) {
-		const float w = std::min(560.0f, ImGui::GetWindowWidth() * 0.45f);
-		ImGui::SameLine(ImGui::GetWindowWidth() - w - ImGui::GetStyle().WindowPadding.x);
-		drawBackgroundProgress(w);
+	ImGui::PopClipRect();
+	if (busy) {
+		ImGui::SameLine(ImGui::GetWindowWidth() - progW - ImGui::GetStyle().WindowPadding.x);
+		drawBackgroundProgress(progW);
 	} else if (_watch) {
-		ImGui::SameLine(ImGui::GetWindowWidth() - 160);
-		TextColored(theme::Good(), "watching saves");
+		ImGui::SameLine(ImGui::GetWindowWidth() - 170);
+		TextColored(theme::Good(), "正在监视存档");
 	}
 }
 
@@ -2084,11 +2092,11 @@ void App::beginEdit(Variable* a_var)
 void App::editPopup()
 {
 	if (_editOpen) {
-		ImGui::OpenPopup("Edit value");
+		ImGui::OpenPopup("编辑值");
 		_editOpen = false;
 	}
 	ImGui::SetNextWindowSize(ImVec2(520, 0));
-	if (!ImGui::BeginPopupModal("Edit value", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+	if (!ImGui::BeginPopupModal("编辑值", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 		return;
 	}
 	if (!_editVar || !_save) {
@@ -2101,22 +2109,22 @@ void App::editPopup()
 	if (v->type == VType::kVariant && v->inner) {
 		v = v->inner.get();
 	}
-	ImGui::Text("Type: %s", VTypeName(v->type));
-	ImGui::TextWrapped("Current: %s", describeVar(*_editVar).c_str());
+	ImGui::Text("类型：%s", VTypeName(v->type));
+	ImGui::TextWrapped("当前值：%s", describeVar(*_editVar).c_str());
 	ImGui::Separator();
 
 	bool apply = false;
 	switch (v->type) {
 	case VType::kInt:
 		ImGui::InputInt("##int", &_editInt);
-		apply = ImGui::Button("Apply", ImVec2(120, 0));
+		apply = ImGui::Button("应用", ImVec2(120, 0));
 		if (apply) {
 			v->value = static_cast<std::uint32_t>(_editInt);
 		}
 		break;
 	case VType::kFloat:
 		ImGui::InputFloat("##flt", &_editFloat, 0, 0, "%.6g");
-		apply = ImGui::Button("Apply", ImVec2(120, 0));
+		apply = ImGui::Button("应用", ImVec2(120, 0));
 		if (apply) {
 			std::uint32_t bits;
 			std::memcpy(&bits, &_editFloat, 4);
@@ -2125,7 +2133,7 @@ void App::editPopup()
 		break;
 	case VType::kBool:
 		ImGui::Checkbox("True", &_editBool);
-		apply = ImGui::Button("Apply", ImVec2(120, 0));
+		apply = ImGui::Button("应用", ImVec2(120, 0));
 		if (apply) {
 			v->value = _editBool ? 1 : 0;
 		}
@@ -2133,29 +2141,29 @@ void App::editPopup()
 	case VType::kString:
 		ImGui::SetNextItemWidth(480);
 		ImGui::InputText("##str", _editStr, sizeof(_editStr));
-		apply = ImGui::Button("Apply", ImVec2(120, 0));
+		apply = ImGui::Button("应用", ImVec2(120, 0));
 		if (apply) {
 			v->value = p.internString(text::FromUtf8(_editStr, p.str(static_cast<TStr>(v->value))));
 		}
 		break;
 	case VType::kNull:
-		ImGui::TextDisabled("This variable holds nothing; there is no value to edit.");
+		ImGui::TextDisabled("此变量为空，没有可编辑的值。");
 		break;
 	default:
-		ImGui::TextWrapped("Object, array and struct links can only be cleared. Clearing makes the script see None here.");
-		apply = v->value != 0 && ImGui::Button("Set to None", ImVec2(160, 0));
+		ImGui::TextWrapped("对象、数组和结构体链接只能清除。清除后脚本在这里看到的是 None。");
+		apply = v->value != 0 && ImGui::Button("设为无", ImVec2(160, 0));
 		if (apply) {
 			v->value = 0;
 		}
 		break;
 	}
 	if (apply) {
-		markChanged("Edited a variable");
+		markChanged("已编辑一个变量");
 		_editVar = nullptr;
 		ImGui::CloseCurrentPopup();
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Cancel", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+	if (ImGui::Button("取消", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 		_editVar = nullptr;
 		ImGui::CloseCurrentPopup();
 	}
@@ -2325,7 +2333,7 @@ void App::scanSources(const std::filesystem::path& a_root)
 		}
 		_scanDone = true;
 	});
-	_status = "Scanning your mods for scripts...";
+	_status = "正在扫描模组中的脚本…";
 }
 
 void App::pollScan()
@@ -2339,7 +2347,7 @@ void App::pollScan()
 	}
 	const auto a_root = _scanRoot;
 	if (_scanResult->modsScanned == 0 && !_scanResult->errors.empty()) {
-		_error = "Could not scan " + platform::ToUtf8(a_root) + ":\n\n" + _scanResult->errors.front();
+		_error = "无法扫描 " + platform::ToUtf8(a_root) + "：\n\n" + _scanResult->errors.front();
 		return;
 	}
 	_sources = std::move(*_scanResult);
@@ -2350,9 +2358,9 @@ void App::pollScan()
 	if (_save && _autoNames) {
 		startNames(true);
 	}
-	_status = Fmt("Scanned %zu mods%s: %zu scripts found (%zu BSAs read%s)", _sources.modsScanned,
-		_sources.vortex ? " deployed by Vortex" : _sources.ranked ? (" in MO2 profile '" + _profile + "' order").c_str() : "", _sources.pexFound, _sources.bsasRead,
-		_sources.errors.empty() ? "" : Fmt(", %zu unreadable", _sources.errors.size()).c_str());
+	_status = Fmt("已扫描 %zu 个模组%s：找到 %zu 个脚本（读取了 %zu 个 BSA%s）", _sources.modsScanned,
+		_sources.vortex ? "（由 Vortex 部署）" : _sources.ranked ? ("（按 MO2 配置 “" + _profile + "” 的顺序）").c_str() : "", _sources.pexFound, _sources.bsasRead,
+		_sources.errors.empty() ? "" : Fmt("，%zu 个无法读取", _sources.errors.size()).c_str());
 	checkMissingPlugins();  // the load order and the installed mods are known now
 	if (_pendingView) {
 		const auto v = *_pendingView;
@@ -2390,12 +2398,12 @@ namespace
 	const char* KindLabel(mods::Kind k)
 	{
 		switch (k) {
-		case mods::Kind::kPlugin: return "plugin";
-		case mods::Kind::kLight: return "light plugin (ESL)";
-		case mods::Kind::kCreated: return "objects spawned during play (FF......)";
-		case mods::Kind::kUnattached: return "instances attached to nothing";
-		case mods::Kind::kGlobal: return "threads with no object and no known mod";
-		case mods::Kind::kFolder: return "mod folder without a plugin (scripts only)";
+		case mods::Kind::kPlugin: return "插件";
+		case mods::Kind::kLight: return "轻型插件（ESL）";
+		case mods::Kind::kCreated: return "游戏过程中生成的对象（FF......）";
+		case mods::Kind::kUnattached: return "未附加到任何对象的实例";
+		case mods::Kind::kGlobal: return "没有对象、也没有已知模组的线程";
+		case mods::Kind::kFolder: return "没有插件的模组文件夹（仅脚本）";
 		}
 		return "";
 	}
@@ -2410,16 +2418,16 @@ void App::drawModsList()
 		drawBackgroundProgress(0);  // the lists fill in when the scan is done
 	}
 	ImGui::SetNextItemWidth(-260);
-	bool changed = ImGui::InputTextWithHint("##modfilter", "filter mods", _filter, sizeof(_filter));
+	bool changed = ImGui::InputTextWithHint("##modfilter", "过滤模组", _filter, sizeof(_filter));
 	ImGui::SameLine();
-	changed |= ImGui::Checkbox("only mods with scripts or enchanted items", &_modsOnlyScripts);
+	changed |= ImGui::Checkbox("只显示带脚本或附魔物品的模组", &_modsOnlyScripts);
 	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("Hide plugins that have no scripts (none in this save, and once your mods are scanned none shipped)\nand no enchanted or charged items in any inventory. Untick to list every plugin in the save.");
+		ImGui::SetTooltip("隐藏既没有脚本（本存档中没有，且扫描模组后也没有随附）\n也没有任何物品栏中的附魔或充能物品的插件。取消勾选可列出存档中的所有插件。");
 	}
 
-	if (ImGui::Button(_sources.empty() ? "Find script sources (.pex)..." : "Rescan script sources...")) {
+	if (ImGui::Button(_sources.empty() ? "查找脚本源码（.pex）…" : "重新扫描脚本源码…")) {
 		if (platform::HasNativeDialogs()) {
-			if (auto p = platform::PickFolderDialog("Pick your Mod Organizer \"mods\" folder (or the game's Data folder)")) {
+			if (auto p = platform::PickFolderDialog("选择你的 Mod Organizer “mods” 文件夹（或游戏的 Data 文件夹）")) {
 				scanSources(*p);
 			}
 		} else {
@@ -2429,16 +2437,16 @@ void App::drawModsList()
 	}
 	ImGui::SameLine();
 	if (_sources.empty()) {
-		ImGui::TextDisabled("not scanned: scripts are credited to the mod whose object runs them");
+		ImGui::TextDisabled("尚未扫描：脚本会归到运行它的对象所属的模组");
 	} else {
-		ImGui::TextDisabled("%s  (%zu mods, %zu scripts)", _sourcesPath.c_str(), _sources.modsScanned, _sources.pexFound);
+		ImGui::TextDisabled("%s  （%zu 个模组，%zu 个脚本）", _sourcesPath.c_str(), _sources.modsScanned, _sources.pexFound);
 		if (_mo2 && !_mo2->profiles.empty()) {
-			ImGui::TextDisabled("MO2 profile:");
+			ImGui::TextDisabled("MO2 配置：");
 			ImGui::SameLine();
 			ImGui::SetNextItemWidth(260);
 			if (ImGui::BeginCombo("##profile", _profile.c_str())) {
 				for (const auto& pr : _mo2->profiles) {
-					const std::string label = pr + (pr == _mo2->selectedProfile ? "  (active in MO2)" : "");
+					const std::string label = pr + (pr == _mo2->selectedProfile ? "  （MO2 中启用）" : "");
 					if (ImGui::Selectable(label.c_str(), pr == _profile) && pr != _profile) {
 						_profile = pr;
 						scanSources(platform::FromUtf8(_sourcesPath));
@@ -2448,9 +2456,9 @@ void App::drawModsList()
 			}
 		} else if (!_sources.ranked) {
 			if (_sources.vortex && _vortex) {
-				ImGui::TextDisabled("Vortex: %zu deployed mods; each script is credited to the mod Vortex deployed it from", _vortex->mods.size());
+				ImGui::TextDisabled("Vortex：已部署 %zu 个模组；每个脚本会归到 Vortex 部署它的那个模组", _vortex->mods.size());
 			} else {
-				ImGui::TextDisabled("no MO2 mod order found: when several mods ship the same script, the credit may go to the wrong one");
+				ImGui::TextDisabled("未找到 MO2 模组顺序：当多个模组包含同一脚本时，可能归错模组");
 			}
 		}
 	}
@@ -2486,21 +2494,18 @@ void App::drawModsList()
 		}
 	}
 
-	const int cols = _mods->hasSources ? 6 : 5;
+	const int cols = 5;  // the provider column is in the details pane, the list stays readable in Chinese
 	if (!ImGui::BeginTable("mods", cols,
 			ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable |
-				ImGuiTableFlags_SizingFixedFit)) {
+				ImGuiTableFlags_SizingStretchProp)) {
 		return;
 	}
 	ImGui::TableSetupScrollFreeze(0, 1);
-	ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_DefaultSort, 60);
-	ImGui::TableSetupColumn("Mod", ImGuiTableColumnFlags_WidthStretch);
-	ImGui::TableSetupColumn("Scripts", ImGuiTableColumnFlags_PreferSortDescending, 70);
-	ImGui::TableSetupColumn("Instances", ImGuiTableColumnFlags_PreferSortDescending, 80);
-	ImGui::TableSetupColumn("Running", ImGuiTableColumnFlags_PreferSortDescending, 70);
-	if (_mods->hasSources) {
-		ImGui::TableSetupColumn("Provides", ImGuiTableColumnFlags_PreferSortDescending, 75);
-	}
+	ImGui::TableSetupColumn("加载", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch, 0.62f);
+	ImGui::TableSetupColumn("模组", ImGuiTableColumnFlags_WidthStretch, 2.48f);
+	ImGui::TableSetupColumn("脚本", ImGuiTableColumnFlags_PreferSortDescending | ImGuiTableColumnFlags_WidthStretch, 1.0f);
+	ImGui::TableSetupColumn("实例", ImGuiTableColumnFlags_PreferSortDescending | ImGuiTableColumnFlags_WidthStretch, 1.0f);
+	ImGui::TableSetupColumn("运行", ImGuiTableColumnFlags_PreferSortDescending | ImGuiTableColumnFlags_WidthStretch, 0.95f);
 	ImGui::TableHeadersRow();
 
 	if (ImGuiTableSortSpecs* specs = ImGui::TableGetSortSpecs(); specs && (specs->SpecsDirty || changed)) {
@@ -2559,19 +2564,6 @@ void App::drawModsList()
 			} else {
 				ImGui::Text("%zu", r.threadCount);
 			}
-			if (_mods->hasSources) {
-				ImGui::TableSetColumnIndex(5);
-				if (r.shipped.size() > r.providedInSave) {
-					ImGui::Text("%zu", r.providedInSave);
-					ImGui::SameLine(0, 2);
-					ImGui::TextDisabled("of %zu", r.shipped.size());
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("%zu of the %zu scripts this mod ships are in this save.", r.providedInSave, r.shipped.size());
-					}
-				} else {
-					ImGui::Text("%zu", r.providedInSave);
-				}
-			}
 			ImGui::PopID();
 		}
 	}
@@ -2581,23 +2573,23 @@ void App::drawModsList()
 void App::killThreads(const std::set<ThreadID>& a_threads, const std::set<EID>& a_instances, const std::string& a_what, bool a_terminateOnly)
 {
 	if (a_terminateOnly) {
-		confirm("Terminate " + a_what,
-			Fmt("Terminate %zu running thread(s) of %s?\n\nTheir code is replaced with no-ops, so each one ends the moment the game resumes it. "
-				"The scripts stay attached and can start again on their next event.",
+		confirm("终止 " + a_what,
+			Fmt("终止 %zu 个正在运行的线程（%s）？\n\n它们的代码会被替换为空操作，游戏一恢复它们就会结束。"
+				"脚本仍保持附加状态，可在下一次事件时再次启动。",
 				a_threads.size(), a_what.c_str()),
-			[this, a_threads, a_what] { markChanged(Fmt("Terminated %zu threads of %s", ops::TerminateThreads(*_save->papyrus(), a_threads), a_what.c_str())); });
+			[this, a_threads, a_what] { markChanged(Fmt("已终止 %zu 个线程（%s）", ops::TerminateThreads(*_save->papyrus(), a_threads), a_what.c_str())); });
 		return;
 	}
 	if (a_instances.empty()) {
-		confirm("Stop " + a_what,
-			Fmt("Stop %s?\n\n- delete %zu running thread(s) with their suspended stacks and queued calls\n\n"
-				"The script instances and their data (settings, properties other scripts point at) are kept, so this is the safe "
-				"choice for a mod you keep installed, e.g. a stuck MCM registration. The script can run again on its next event.\n"
-				"Write the result with File > Save As.",
+		confirm("停止 " + a_what,
+			Fmt("停止 %s？\n\n- 删除 %zu 个运行中的线程及其挂起堆栈和排队调用\n\n"
+				"脚本实例及其数据（设置、其他脚本指向的属性）都会保留，所以对于你继续安装的模组"
+				"（例如卡住的 MCM 注册）这是安全的选择。脚本可在下次事件时再次运行。\n"
+				"结果请用“文件 > 另存为”写出。",
 				a_what.c_str(), a_threads.size()),
 			[this, a_threads, a_what] {
 				const auto t = ops::DeleteThreadsFully(*_save->papyrus(), a_threads);
-				markChanged(Fmt("Stopped %s: %zu threads deleted", a_what.c_str(), t));
+				markChanged(Fmt("已停止 %s：删除了 %zu 个线程", a_what.c_str(), t));
 				_report = std::make_unique<ops::Report>(ops::Analyze(*_save));
 			});
 		return;
@@ -2609,18 +2601,18 @@ void App::killThreads(const std::set<ThreadID>& a_threads, const std::set<EID>& 
 			forms.insert(i->refID.data);
 		}
 	}
-	confirm("Kill " + a_what,
-		Fmt("Kill %s?\n\n- delete %zu running thread(s) with their suspended stacks and queued calls\n- delete %zu script instance(s)%s\n\n"
-			"Objects that come from a plugin get a fresh copy of their script (default property values) the next time the game loads "
-			"the save. Write the result with File > Save As.",
+	confirm("强制结束 " + a_what,
+		Fmt("强制结束 %s？\n\n- 删除 %zu 个运行中的线程及其挂起堆栈和排队调用\n- 删除 %zu 个脚本实例%s\n\n"
+			"来自插件的对象会在游戏下次读取此存档时重新获得一份脚本副本（属性为默认值）。结果请用"
+			"“文件 > 另存为”写出。",
 			a_what.c_str(), a_threads.size(), a_instances.size(),
-			forms.empty() ? "" : Fmt("\n- delete %zu spawned object(s) they sit on", forms.size()).c_str()),
+			forms.empty() ? "" : Fmt("\n- 删除它们所在的 %zu 个生成对象", forms.size()).c_str()),
 		[this, a_threads, a_instances, forms, a_what] {
 			auto&      p = *_save->papyrus();
 			const auto t = ops::DeleteThreadsFully(p, a_threads);
 			const auto i = ops::DeleteInstances(p, a_instances);
 			const auto f = ops::DeleteChangeForms(*_save, forms);
-			markChanged(Fmt("Killed %s: %zu threads, %zu instances, %zu spawned objects", a_what.c_str(), t, i, f));
+			markChanged(Fmt("已强制结束 %s：%zu 个线程、%zu 个实例、%zu 个生成对象", a_what.c_str(), t, i, f));
 			_report = std::make_unique<ops::Report>(ops::Analyze(*_save));
 		});
 }
@@ -2634,14 +2626,14 @@ void App::detailMod(std::uint64_t k)
 	const auto& r = _mods->rows[k];
 	ImGui::TextUnformatted(r.name.c_str());
 	ImGui::TextDisabled("%s%s", KindLabel(r.kind),
-		r.kind == mods::Kind::kPlugin ? Fmt(", load index %02X", r.index).c_str() : r.kind == mods::Kind::kLight ? Fmt(", FE:%03X", r.index).c_str() : "");
+		r.kind == mods::Kind::kPlugin ? Fmt("，加载索引 %02X", r.index).c_str() : r.kind == mods::Kind::kLight ? Fmt("，FE:%03X", r.index).c_str() : "");
 	if (!_sources.empty() && (r.kind == mods::Kind::kPlugin || r.kind == mods::Kind::kLight)) {
 		auto it = _sources.pluginFolder.find(Lower(r.name));
 		if (it != _sources.pluginFolder.end()) {
-			ImGui::TextDisabled("installed in mod folder: %s", it->second.c_str());
+			ImGui::TextDisabled("安装在模组文件夹：%s", it->second.c_str());
 		}
 	}
-	ImGui::Text("%zu scripts on its objects  |  %zu instances  |  %zu running threads", r.scriptCount, r.instanceCount, r.threadCount);
+	ImGui::Text("%zu 个脚本在其对象上  |  %zu 个实例  |  %zu 个运行中的线程", r.scriptCount, r.instanceCount, r.threadCount);
 
 	std::set<ThreadID> allThreads;
 	std::set<EID>      allInst, everyInst;
@@ -2652,73 +2644,95 @@ void App::detailMod(std::uint64_t k)
 			allInst.insert(s.instances.begin(), s.instances.end());
 		}
 	}
+	// The Chinese labels are wider than the English ones were: lay the buttons out by their real
+	// width and start a new line when a button would not fit (the pane is resizable).
+	const std::string btnTerminate = Fmt("终止全部线程（%zu）", allThreads.size());
+	const std::string btnStop = Fmt("停止全部（%zu）", allThreads.size());
+	const std::string btnKillScripts = Fmt("强制结束全部脚本（%zu）", allInst.size());
+	const std::string btnKillAll = Fmt("强制结束所有实例（%zu）", everyInst.size());
+	const std::string btnReport = "报告…";
+	const std::string btnRemove = "从存档移除模组…";
+	const float       rowEnd = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+	bool              firstOnRow = true;
+	auto              place = [&](const std::string& a_label) {
+        const float w = ImGui::CalcTextSize(a_label.c_str()).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        if (!firstOnRow && ImGui::GetCursorPosX() + w > rowEnd) {
+            ImGui::NewLine();
+        } else if (!firstOnRow) {
+            ImGui::SameLine();
+        }
+        firstOnRow = false;
+	};
 	ImGui::BeginDisabled(allThreads.empty());
-	if (ImGui::Button(Fmt("Terminate all its running scripts (%zu)", allThreads.size()).c_str())) {
-		killThreads(allThreads, {}, "all scripts of " + r.name, true);
+	place(btnTerminate);
+	if (ImGui::Button(btnTerminate.c_str())) {
+		killThreads(allThreads, {}, r.name + " 的所有脚本", true);
 	}
 	ImGui::EndDisabled();
-	ImGui::SameLine();
 	ImGui::BeginDisabled(allThreads.empty());
-	if (ImGui::Button(Fmt("Stop all (%zu)", allThreads.size()).c_str())) {
-		killThreads(allThreads, {}, "all running scripts of " + r.name, false);
+	place(btnStop);
+	if (ImGui::Button(btnStop.c_str())) {
+		killThreads(allThreads, {}, r.name + " 的所有运行中的脚本", false);
 	}
 	ImGui::EndDisabled();
-	ImGui::SameLine();
 	ImGui::BeginDisabled(allThreads.empty() && allInst.empty());
-	if (ImGui::Button(Fmt("Kill all its scripts (%zu)", allInst.size()).c_str())) {
-		killThreads(allThreads, allInst, "all scripts of " + r.name, false);
+	place(btnKillScripts);
+	if (ImGui::Button(btnKillScripts.c_str())) {
+		killThreads(allThreads, allInst, r.name + " 的所有脚本", false);
 	}
 	ImGui::EndDisabled();
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-		ImGui::SetTooltip("Deletes its running threads and the instances of its own scripts.\nThe game's engine bindings (Form, Quest, ReferenceAlias, ...) are left alone.");
+		ImGui::SetTooltip("删除它运行中的线程及其自有脚本的实例。\n游戏的引擎绑定（Form、Quest、ReferenceAlias 等）不受影响。");
 	}
 	ImGui::BeginDisabled(allThreads.empty() && everyInst.empty());
-	if (ImGui::Button(Fmt("Kill all instances (%zu)", everyInst.size()).c_str())) {
-		killThreads(allThreads, everyInst, "every script instance on " + r.name + "'s objects (engine bindings included)", false);
+	place(btnKillAll);
+	if (ImGui::Button(btnKillAll.c_str())) {
+		killThreads(allThreads, everyInst, r.name + " 的对象上的所有脚本实例（含引擎绑定）", false);
 	}
 	ImGui::EndDisabled();
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-		ImGui::SetTooltip("Deletes its running threads and EVERY script instance on its objects, including the game's\n"
-						  "engine bindings (Form, Quest, ReferenceAlias, ...). The game recreates the bindings of plugin\n"
-						  "objects on the next load with default values; spawned objects they sit on are deleted.");
+		ImGui::SetTooltip("删除它运行中的线程，以及其对象上的每一个脚本实例，包括游戏的\n"
+						  "引擎绑定（Form、Quest、ReferenceAlias 等）。游戏会在下次读档时用默认值为插件\n"
+						  "对象重建这些绑定；它们所在的生成对象会被删除。");
 	}
-	ImGui::SameLine();
-	if (ImGui::Button("Report...")) {
+	place(btnReport);
+	if (ImGui::Button(btnReport.c_str())) {
 		_reportOpen = true;
 	}
 	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("Write a report: every mod with its scripts and instances, and the anomalies found (text or PDF).");
+		ImGui::SetTooltip("生成报告：每个模组及其脚本和实例，以及发现的异常（文本或 PDF）。");
 	}
 	if (r.kind == mods::Kind::kPlugin || r.kind == mods::Kind::kLight || r.kind == mods::Kind::kFolder) {
-		ImGui::SameLine();
+		place(btnRemove);
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.18f, 0.18f, 1.0f));
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.70f, 0.24f, 0.24f, 1.0f));
-		if (ImGui::Button("Remove mod from save...")) {
+		if (ImGui::Button(btnRemove.c_str())) {
 			_removeMod = r.name;
 			_removeOpen = true;
 			_removePlan = std::make_unique<modremove::Plan>(modremove::MakePlan(*_save, _removeMod, _sources.empty() ? nullptr : &_sources, _removeOpt));
 		}
 		ImGui::PopStyleColor(2);
 		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Safety check first, then removes its scripts, threads, queued calls and the saved state of its forms,\n"
-							  "and writes the result to a NEW save file. Your current save is not overwritten.");
+			ImGui::SetTooltip("先做安全检查，然后移除它的脚本、线程、排队调用及其表单的已保存状态，\n"
+							  "并把结果写入一个新的存档文件。当前存档不会被覆盖。");
 		}
 	}
 
-	ImGui::SeparatorText("Scripts running on this mod's objects");
+	ImGui::SeparatorText("运行在此模组对象上的脚本");
 	if (r.scripts.empty()) {
-		ImGui::TextDisabled("(none)");
+		ImGui::TextDisabled("（无）");
 	} else if (ImGui::BeginTable("modscripts", _mods->hasSources ? 5 : 4,
 				   ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
-					   ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingFixedFit)) {
+					   ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp)) {
 		// click a header to sort; click again to reverse
-		ImGui::TableSetupColumn("Script", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_PreferSortAscending, 1.0f, 0);
-		ImGui::TableSetupColumn("Instances", ImGuiTableColumnFlags_PreferSortDescending, 75, 1);
-		ImGui::TableSetupColumn("Running", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending, 65, 2);
+		ImGui::TableSetupColumn("脚本", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_PreferSortAscending, 1.3f, 0);
+		ImGui::TableSetupColumn("实例", ImGuiTableColumnFlags_PreferSortDescending | ImGuiTableColumnFlags_WidthStretch, 0.42f, 1);
+		ImGui::TableSetupColumn("运行", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending | ImGuiTableColumnFlags_WidthStretch,
+			0.38f, 2);
 		if (_mods->hasSources) {
-			ImGui::TableSetupColumn(".pex from", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_PreferSortAscending, 0.6f, 3);
+			ImGui::TableSetupColumn("来源", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_PreferSortAscending, 0.6f, 3);
 		}
-		ImGui::TableSetupColumn("", ImGuiTableColumnFlags_NoSort, 280, 4);
+		ImGui::TableSetupColumn("", ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_WidthStretch, 1.9f, 4);
 		ImGui::TableHeadersRow();
 
 		std::vector<const mods::ScriptRow*> list;
@@ -2772,9 +2786,9 @@ void App::detailMod(std::uint64_t k)
 			ImGui::PushID(s);
 			ImGui::TableSetColumnIndex(0);
 			if (s->engineType) {
-				TextColored(theme::Dim(), s->script + "  (engine type)");
+				TextColored(theme::Dim(), s->script + "  （引擎类型）");
 				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Not a mod script: this is the game's own link between a %s and Papyrus.\nIt is left alone by Kill.", s->script.c_str());
+					ImGui::SetTooltip("不是模组脚本：这是游戏自身在 %s 与 Papyrus 之间的绑定。\n“强制结束”不会动它。", s->script.c_str());
 				}
 			} else {
 				ImGui::TextUnformatted(s->script.c_str());
@@ -2794,31 +2808,47 @@ void App::detailMod(std::uint64_t k)
 				ImGui::TextUnformatted(s->provider.empty() ? "?" : s->provider.c_str());
 			}
 			ImGui::TableSetColumnIndex(col);
+			// tighter spacing: four two-character Chinese buttons have to fit the action column
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 4));
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 3));
+			bool firstBtn = true;
+			auto placeBtn = [&](const char*) {
+				if (!firstBtn) {
+					ImGui::SameLine();
+				}
+				firstBtn = false;
+			};
+			placeBtn("终止");
 			ImGui::BeginDisabled(s->threads.empty());
-			if (ImGui::SmallButton("Terminate")) {
-				killThreads(s->threads, {}, s->script + " on " + r.name, true);
+			if (ImGui::SmallButton("终止")) {
+				killThreads(s->threads, {}, s->script + " 于 " + r.name, true);
 			}
 			ImGui::EndDisabled();
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-				ImGui::SetTooltip("Terminate: its running threads end the moment the game resumes them.");
+				ImGui::SetTooltip("终止：线程在游戏恢复它们时结束（线程保留，代码被替换为空操作）。");
 			}
-			ImGui::SameLine();
+			placeBtn("停止");
 			ImGui::BeginDisabled(s->threads.empty());
-			if (ImGui::SmallButton("Stop")) {
-				killThreads(s->threads, {}, s->script + " on " + r.name, false);
+			if (ImGui::SmallButton("停止")) {
+				killThreads(s->threads, {}, s->script + " 于 " + r.name, false);
 			}
 			ImGui::EndDisabled();
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-				ImGui::SetTooltip("Stop: delete its running threads and their queued calls; keep the script and its data.\nSafe for a mod you keep (e.g. a stuck MCM).");
+				ImGui::SetTooltip("停止：删除线程与排队调用，但保留脚本实例及其数据。\n对打算继续安装的模组安全（例如卡住的 MCM）。");
 			}
-			ImGui::SameLine();
+			placeBtn("结束");
 			ImGui::BeginDisabled(s->engineType && s->threads.empty());
-			if (ImGui::SmallButton("Kill")) {
-				killThreads(s->threads, s->engineType ? std::set<EID>{} : s->instances, s->script + " on " + r.name, false);
+			if (ImGui::SmallButton("结束")) {
+				killThreads(s->threads, s->engineType ? std::set<EID>{} : s->instances, s->script + " 于 " + r.name, false);
 			}
 			ImGui::EndDisabled();
-			ImGui::SameLine();
-			if (ImGui::SmallButton("Show")) {
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+				ImGui::SetTooltip("结束：线程与实例一起删除（引擎绑定除外）。");
+			}
+			placeBtn("查看");
+			const bool view = ImGui::SmallButton("查看");
+			ImGui::PopStyleVar(2);
+			if (view) {
 				_cat = s->threads.empty() ? Cat::kInstances : Cat::kThreads;
 				std::snprintf(_filter, sizeof(_filter), "%s", s->script.c_str());
 				_rowsDirty = true;
@@ -2834,13 +2864,13 @@ void App::detailMod(std::uint64_t k)
 	}
 
 	if (_mods->hasSources) {
-		ImGui::SeparatorText(Fmt("Scripts this mod provides (.pex) that are in the save (%zu)", r.provided.size()).c_str());
+		ImGui::SeparatorText(Fmt("此模组提供且在存档中的脚本（.pex），共 %zu 个", r.provided.size()).c_str());
 		if (r.provided.empty()) {
-			ImGui::TextDisabled("(none)");
+			ImGui::TextDisabled("（无）");
 		} else if (ImGui::BeginTable("provided", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit)) {
-			ImGui::TableSetupColumn("Script", ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableSetupColumn("Instances (all mods)", 0, 140);
-			ImGui::TableSetupColumn("Running (all mods)", 0, 130);
+			ImGui::TableSetupColumn("脚本", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn("实例（全部模组）", 0, 140);
+			ImGui::TableSetupColumn("运行（全部模组）", 0, 130);
 			ImGui::TableSetupColumn("", 0, 140);
 			ImGui::TableHeadersRow();
 			for (const auto& name : r.provided) {
@@ -2858,7 +2888,7 @@ void App::detailMod(std::uint64_t k)
 					for (const auto& x : *prov) {
 						others += (others.empty() ? "" : ", ") + x.mod;
 					}
-					TextColored(theme::Dim(), "(also in: " + others + ")");
+					TextColored(theme::Dim(), "（也在：" + others + "）");
 				}
 				ImGui::TableSetColumnIndex(1);
 				ImGui::Text("%zu", inst);
@@ -2866,13 +2896,13 @@ void App::detailMod(std::uint64_t k)
 				ImGui::Text("%zu", thr);
 				ImGui::TableSetColumnIndex(3);
 				ImGui::BeginDisabled(inst == 0 && thr == 0);
-				if (ImGui::SmallButton("Kill everywhere")) {
+				if (ImGui::SmallButton("全局强制结束")) {
 					const std::string n = name;
-					confirm("Kill " + n + " everywhere",
-						"Remove every thread, suspended stack, queued call and instance of '" + n + "' in the whole save, plus the spawned objects they sit on?",
+					confirm("全局强制结束 " + n,
+						"移除整个存档中 “" + n + "” 的所有线程、挂起堆栈、排队调用和实例，以及它们所在的生成对象？",
 						[this, n] {
 							auto x = ops::PurgeScript(*_save, n, true);
-							markChanged(Fmt("Killed %s everywhere: %zu threads, %zu instances, %zu spawned objects", n.c_str(), x.threads, x.instances, x.forms));
+							markChanged(Fmt("已全局强制结束 %s：%zu 个线程、%zu 个实例、%zu 个生成对象", n.c_str(), x.threads, x.instances, x.forms));
 							_report = std::make_unique<ops::Report>(ops::Analyze(*_save));
 						});
 				}
@@ -2894,12 +2924,12 @@ void App::detailMod(std::uint64_t k)
 				}
 			}
 		}
-		ImGui::SeparatorText(Fmt("Other scripts this mod ships, not in this save (%zu)", idle.size()).c_str());
+		ImGui::SeparatorText(Fmt("此模组随附但不在本存档中的其他脚本（%zu）", idle.size()).c_str());
 		if (idle.empty()) {
-			ImGui::TextDisabled("(none)");
+			ImGui::TextDisabled("（无）");
 		} else {
-			ImGui::TextDisabled("Not running and with no saved data, e.g. magic effect scripts that only exist while the effect is active.\n"
-								"Double-click one to view it.");
+			ImGui::TextDisabled("未运行且没有已保存的数据，例如仅在效果激活期间存在的魔法效果脚本。\n"
+								"双击可查看。");
 			for (const auto& n : idle) {
 				ImGui::BulletText("%s", n.c_str());
 				scriptItem(n);
@@ -2918,11 +2948,11 @@ void App::detailMod(std::uint64_t k)
 void App::drawRemoveModModal()
 {
 	if (_removeOpen) {
-		ImGui::OpenPopup("Remove mod from save");
+		ImGui::OpenPopup("从存档移除模组");
 		_removeOpen = false;
 	}
 	ImGui::SetNextWindowSize(ImVec2(820, 620), ImGuiCond_Appearing);
-	if (!ImGui::BeginPopupModal("Remove mod from save")) {
+	if (!ImGui::BeginPopupModal("从存档移除模组")) {
 		return;
 	}
 	if (!_removePlan || !_save) {
@@ -2932,22 +2962,22 @@ void App::drawRemoveModModal()
 	}
 	const auto& plan = *_removePlan;
 	bool        replan = false;
-	replan |= ImGui::Checkbox("Also remove its scripts from other mods' objects (scripts only this mod provides)", &_removeOpt.otherObjects);
-	replan |= ImGui::Checkbox("Delete spawned objects that only carried its scripts", &_removeOpt.spawnedObjects);
+	replan |= ImGui::Checkbox("同时从其他模组的对象上移除它的脚本（仅此模组提供的脚本）", &_removeOpt.otherObjects);
+	replan |= ImGui::Checkbox("删除仅承载其脚本的生成对象", &_removeOpt.spawnedObjects);
 	if (replan) {
 		_removePlan = std::make_unique<modremove::Plan>(modremove::MakePlan(*_save, _removeMod, _sources.empty() ? nullptr : &_sources, _removeOpt));
 		ImGui::EndPopup();
 		return;
 	}
 	if (_sources.empty()) {
-		TextColored(theme::Warn(), "Tip: use \"Find script sources (.pex)...\" first, so masters, DLLs and its scripts on other objects are checked.");
+		TextColored(theme::Warn(), "提示：先使用“查找脚本源码（.pex）…”，这样才能检查主文件、DLL 以及它在其他对象上的脚本。");
 	}
 	ImGui::Separator();
 	ImGui::BeginChild("plan", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 2.2f), ImGuiChildFlags_None);
 	if (!plan.blockers.empty()) {
 		for (const auto& b : plan.blockers) {
 			ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(theme::Bad()));
-			ImGui::TextWrapped("CANNOT REMOVE: %s", b.c_str());
+			ImGui::TextWrapped("无法移除：%s", b.c_str());
 			ImGui::PopStyleColor();
 		}
 		ImGui::Spacing();
@@ -2971,24 +3001,24 @@ void App::drawRemoveModModal()
 			target.replace_filename(base + u8"_" + std::u8string(reinterpret_cast<const char8_t*>(std::to_string(n).c_str())) + u8".ess");
 		}
 	}
-	ImGui::TextDisabled("New file: %s", platform::ToUtf8(target.filename()).c_str());
+	ImGui::TextDisabled("新文件：%s", platform::ToUtf8(target.filename()).c_str());
 	ImGui::BeginDisabled(!plan.canApply());
-	if (ImGui::Button("Remove and write new save", ImVec2(240, 0))) {
+	if (ImGui::Button("移除并写出新存档", ImVec2(240, 0))) {
 		const auto res = modremove::Apply(*_save, plan);
 		const auto what = _removeMod;
 		_removePlan.reset();
 		ImGui::CloseCurrentPopup();
-		markEdited("Removed " + what);
+		markEdited("已移除 " + what);
 		_modsDirty = true;
 		doSave(target);
 		_report = std::make_unique<ops::Report>(ops::Analyze(*_save));
 		if (_error.empty()) {
-			_status = "Removed " + what + " (" + res.text() + ") and wrote " + platform::ToUtf8(target.filename());
+			_status = "已移除 " + what + "（" + res.text() + "），并写出 " + platform::ToUtf8(target.filename());
 		}
 	}
 	ImGui::EndDisabled();
 	ImGui::SameLine();
-	if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+	if (ImGui::Button("取消", ImVec2(120, 0))) {
 		_removePlan.reset();
 		ImGui::CloseCurrentPopup();
 	}
@@ -3002,22 +3032,22 @@ void App::fixMcmJam()
 	}
 	const auto dry = ops::FixMcmJam(*_save->papyrus(), true);
 	if (!dry.threads && !dry.stacks && !dry.messages && !dry.stateReset) {
-		_status = "No SkyUI MCM registration work is in progress in this save; nothing to fix.";
+		_status = "本存档中没有正在进行的 SkyUI MCM 注册工作，无需修复。";
 		return;
 	}
-	confirm("Fix SkyUI MCM registration jam",
-		Fmt("The save was made while SkyUI was registering MCM menus. This removes the stuck registration work:\n\n"
-			"- %zu thread(s) registering a menu or running inside SKI_ConfigManager\n"
-			"- %zu suspended RegisterMod call(s) and %zu queued call(s)\n"
+	confirm("修复 SkyUI MCM 注册卡死",
+		Fmt("存档创建时 SkyUI 正在注册 MCM 菜单。此操作会移除卡住的注册工作：\n\n"
+			"- %zu 个正在注册菜单或运行于 SKI_ConfigManager 内的线程\n"
+			"- %zu 个挂起的 RegisterMod 调用和 %zu 个排队调用\n"
 			"%s"
-			"\nThe %zu menus that are already registered stay registered. Every MCM keeps its settings. On the next load SkyUI "
-			"announces itself again and the remaining menus register normally (give it a minute in game, unpaused, before "
-			"opening the MCM or saving).\n\nWrite the result with File > Save As.",
+			"\n已注册的 %zu 个菜单保持注册状态。所有 MCM 都保留其设置。下次读档时 SkyUI "
+			"会重新宣告自身，其余菜单会正常注册（请在游戏内不暂停等待约一分钟，再"
+			"打开 MCM 或存档）。\n\n结果请用“文件 > 另存为”写出。",
 			dry.threads, dry.stacks, dry.messages,
-			dry.stateReset ? "- SKI_ConfigManager was saved in its BUSY state; it is set back to normal\n" : "", dry.registered),
+			dry.stateReset ? "- SKI_ConfigManager 被保存为 BUSY 状态；现已恢复为正常状态\n" : "", dry.registered),
 		[this] {
 			const auto r = ops::FixMcmJam(*_save->papyrus());
-			markEdited("Fixed MCM jam: " + r.text());
+			markEdited("已修复 MCM 卡死：" + r.text());
 		});
 }
 
@@ -3029,7 +3059,7 @@ bool App::drawBackgroundProgress(float a_width)
 		done = _scanProgress->done.load();
 		total = _scanProgress->total.load();
 		cur = _scanProgress->current();
-		what = "Scanning your mods";
+		what = "正在扫描模组";
 	} else if (namesLoading() && _dbProgress) {
 		done = _dbProgress->done.load();
 		total = _dbProgress->total.load();
@@ -3037,14 +3067,14 @@ bool App::drawBackgroundProgress(float a_width)
 			std::lock_guard l(_dbProgress->m);
 			cur = _dbProgress->current;
 		}
-		what = "Reading plugin names";
+		what = "正在读取插件名称";
 	} else {
 		return false;
 	}
 	const float       f = total ? std::min(1.0f, static_cast<float>(done) / static_cast<float>(total)) : 0.0f;
-	const std::string label = total ? Fmt("%s: %zu of %zu (%d%%)%s%s", what.c_str(), done, total, static_cast<int>(f * 100.0f + 0.5f), cur.empty() ? "" : "  -  ",
+	const std::string label = total ? Fmt("%s：%zu / %zu（%d%%）%s%s", what.c_str(), done, total, static_cast<int>(f * 100.0f + 0.5f), cur.empty() ? "" : "  -  ",
 										  cur.c_str())
-									: what + "...";
+									: what + "…";
 	ImGui::ProgressBar(total ? f : -1.0f * static_cast<float>(ImGui::GetTime()), ImVec2(a_width > 0 ? a_width : -1.0f, 0), "");
 	// the text inside the bar, from its left edge (cut at the right end when it does not fit)
 	const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();

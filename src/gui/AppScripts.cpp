@@ -225,7 +225,7 @@ namespace
 	std::string PexWhere(const ScriptSources::PexFile& p)
 	{
 		const auto file = platform::ToUtf8(p.file.filename());
-		return p.bsaEntry.empty() ? p.mod + "  (" + file + ")" : p.mod + "  (inside " + file + ")";
+		return p.bsaEntry.empty() ? p.mod + "  （" + file + "）" : p.mod + "  （位于 " + file + " 内）";
 	}
 }
 
@@ -254,7 +254,7 @@ void App::scriptItem(const std::string& a_script, const std::string& a_function,
 		return;
 	}
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_NoSharedDelay)) {
-		ImGui::SetTooltip("Double-click to view %s%s", a_script.c_str(), a_function.empty() ? "" : " at this point");
+		ImGui::SetTooltip("双击查看 %s%s", a_script.c_str(), a_function.empty() ? "" : " 在此处的位置");
 	}
 	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
 		viewScript(a_script, a_function, a_state, a_instruction);
@@ -266,7 +266,7 @@ void App::viewScript(const std::string& a_script, const std::string& a_function,
 	if (!ensureSourcesScanned()) {
 		// opened as soon as the scan of the mods is done
 		_pendingView = PendingView{ a_script, a_function, a_state, a_instruction };
-		_status = "Scanning your mods first: " + a_script + " opens when it is done...";
+		_status = "先扫描你的模组：" + a_script + " 会在扫描完成后打开…";
 		return;
 	}
 	const auto key = Lower(a_script);
@@ -296,13 +296,13 @@ void App::viewScript(const std::string& a_script, const std::string& a_function,
 		return;
 	}
 	if (!_sources.scanned()) {
-		_error = "ReSaver++ does not know where your mods are yet.\n\nGo to Options > Settings, click \"Choose mods folder...\" and pick your Mod Organizer "
-				 "\"mods\" folder (or the game's Data folder), then double-click the script again.";
+		_error = "ReSaver++ 还不知道你的模组在哪里。\n\n请打开“选项 > 设置”，点击“选择模组文件夹…”，选中你的 Mod Organizer "
+				 "“mods”文件夹（或游戏的 Data 文件夹），然后再次双击该脚本。";
 		_showSettings = true;
 	} else {
-		_error = "Neither " + a_script + ".psc nor " + a_script +
-				 ".pex was found in the scanned mods or the game's Data folder.\n\nThe script is probably no longer installed "
-				 "(it shows as UNDEFINED in the save), so there is nothing to show.";
+		_error = "已扫描的模组和游戏的 Data 文件夹中都没有 " + a_script + ".psc，也没有 " + a_script +
+				 ".pex。\n\n该脚本可能已被卸载"
+				 "（在存档中显示为 UNDEFINED），因此没有可显示的内容。";
 	}
 }
 
@@ -347,7 +347,7 @@ void App::openDoc(const std::string& a_script, const std::filesystem::path& a_ps
 		} else {
 			if (a_pexFile.empty()) {
 				if (!d->pex) {
-					throw std::runtime_error("the compiled script was not found");
+					throw std::runtime_error("找不到该编译脚本");
 				}
 				d->pexBytes = ScriptSources::readPex(*d->pex);
 			} else {
@@ -367,12 +367,12 @@ void App::openDoc(const std::string& a_script, const std::filesystem::path& a_ps
 			d->decompiled = true;
 		}
 	} catch (const std::exception& e) {
-		_error = "Could not open " + a_script + ":\n\n" + e.what();
+		_error = "无法打开 " + a_script + "：\n\n" + e.what();
 		return;
 	}
 	if (!a_decompile && d->pex && !d->sourceMod.empty() && Lower(d->pex->mod) != Lower(d->sourceMod)) {
-		d->note = "This source comes from " + d->sourceMod + ", but the game loads the compiled script from " + d->pex->mod +
-				  ". The two may not match.";
+		d->note = "此源码来自 " + d->sourceMod + "，但游戏加载的编译脚本来自 " + d->pex->mod +
+				  "。两者可能并不一致。";
 	}
 
 	// colours: installed script names are classes
@@ -416,7 +416,7 @@ void App::openDoc(const std::string& a_script, const std::filesystem::path& a_ps
 	_docs.push_back(d);
 	_docSelect = static_cast<int>(_docs.size()) - 1;
 	_showViewer = true;
-	_status = "Opened " + d->name + (d->decompiled ? " (decompiled)" : "");
+	_status = "已打开 " + d->name + (d->decompiled ? "（已反编译）" : "");
 	placeCursor(*d, a_function, a_state, a_instruction);
 }
 
@@ -453,8 +453,8 @@ void App::placeCursor(ScriptDoc& d, const std::string& a_function, const std::st
 								if ((in.op == 23 || in.op == 24 || in.op == 25) && in.args.size() > static_cast<std::size_t>(ni)) {
 									const auto called = Lower(f.str(in.args[static_cast<std::size_t>(ni)].s));
 									if (Lower(d.editor.LineText(line)).find(called) == std::string::npos) {
-										d.note = "This source does not match the compiled script the game loads (different version?): the thread's exact "
-												 "line cannot be shown, so its function is.";
+										d.note = "此源码与游戏加载的编译脚本不一致（版本不同？）：无法显示线程的准确"
+												 "行号，因此显示的是它所在的函数。";
 										line = -1;
 									}
 								}
@@ -473,17 +473,17 @@ void App::placeCursor(ScriptDoc& d, const std::string& a_function, const std::st
 		line = fnLine;
 	}
 	if (line < 0) {
-		_status = a_function + " was not found in " + d.name;
+		_status = a_function + " 在 " + d.name + " 中未找到";
 		return;
 	}
 	d.editor.ScrollToLine(line);
 	if (a_instruction >= 0) {
 		d.threadLine = line;
 		d.editor.SetBreakpoints({ line + 1 });
-		_status = exact ? "The thread is stopped at line " + std::to_string(line + 1) + " of " + d.name
-						: "The thread is in " + a_function + " of " + d.name +
-							  (d.decompiled ? " (decompiled code has no line numbers: the function is shown)"
-											: " (the exact line needs the compiled script's debug info: the function is shown)");
+		_status = exact ? "线程停止于第 " + std::to_string(line + 1) + " 行，文件 " + d.name
+						: "线程位于 " + a_function + " 中，文件 " + d.name +
+							  (d.decompiled ? "（反编译代码没有行号：显示的是该函数）"
+											: "（准确行号需要编译脚本的调试信息：显示的是该函数）");
 	}
 }
 
@@ -496,14 +496,14 @@ void App::drawScriptViewer()
 	const ImGuiViewport* vp = ImGui::GetMainViewport();
 	ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.04f, vp->WorkPos.y + vp->WorkSize.y * 0.04f), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSize(ImVec2(vp->WorkSize.x * 0.92f, vp->WorkSize.y * 0.9f), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin("Script viewer###scriptviewer", &_showViewer)) {
+	if (!ImGui::Begin("脚本查看器###scriptviewer", &_showViewer)) {
 		_viewerFocused = false;
 		ImGui::End();
 		return;
 	}
 	_viewerFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 	if (_docs.empty()) {
-		ImGui::TextDisabled("Double-click a script anywhere (Scripts, Script Instances, threads, a mod's script list) to see it here.");
+		ImGui::TextDisabled("在任意位置双击脚本（脚本、脚本实例、线程、模组的脚本列表）即可在此查看。");
 		ImGui::End();
 		return;
 	}
@@ -516,7 +516,7 @@ void App::drawScriptViewer()
 			if (static_cast<int>(i) == _docSelect) {
 				fl |= ImGuiTabItemFlags_SetSelected;
 			}
-			const std::string label = d.name + (d.decompiled ? " (decompiled)" : "") + "###doc" + std::to_string(reinterpret_cast<std::uintptr_t>(&d));
+			const std::string label = d.name + (d.decompiled ? "（已反编译）" : "") + "###doc" + std::to_string(reinterpret_cast<std::uintptr_t>(&d));
 			if (ImGui::BeginTabItem(label.c_str(), &open, fl)) {
 				drawDoc(d);
 				ImGui::EndTabItem();
@@ -537,7 +537,7 @@ void App::drawScriptViewer()
 			}
 		};
 		if (doc->textModified) {
-			confirm("Close " + doc->name, "Close " + doc->name + " without saving your changes?", close);
+			confirm("关闭 " + doc->name, "不保存更改就关闭 " + doc->name + "？", close);
 		} else {
 			close();
 		}
@@ -584,15 +584,15 @@ void App::drawDoc(ScriptDoc& d)
 			}
 			line = back ? (line + n - 1) % n : (line + 1) % n;
 		}
-		_status = "\"" + std::string(_findBuf) + "\" was not found in " + d.name;
+		_status = "\"" + std::string(_findBuf) + "\" 在 " + d.name + " 中未找到";
 	};
 
 	// ---- toolbar
-	if (ImGui::Button("Save") || (keys && io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S, false))) {
+	if (ImGui::Button("保存") || (keys && io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S, false))) {
 		saveDoc(d, false);
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Save as...") || (keys && io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S, false))) {
+	if (ImGui::Button("另存为…") || (keys && io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S, false))) {
 		saveDoc(d, true);
 	}
 	ImGui::SameLine();
@@ -600,15 +600,15 @@ void App::drawDoc(ScriptDoc& d)
 	ImGui::SameLine();
 	const bool busy = _compileJob != nullptr;
 	ImGui::BeginDisabled(busy);
-	if (ImGui::Button(busy ? "Compiling..." : "Compile (F7)") || (!busy && keys && ImGui::IsKeyPressed(ImGuiKey_F7, false))) {
+	if (ImGui::Button(busy ? "正在编译…" : "编译（F7）") || (!busy && keys && ImGui::IsKeyPressed(ImGuiKey_F7, false))) {
 		startCompile(d);
 	}
 	ImGui::EndDisabled();
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-		ImGui::SetTooltip("Compile with the game's Papyrus compiler.\nOutput: %s", platform::ToUtf8(compileOutputFolder(d)).c_str());
+		ImGui::SetTooltip("使用游戏的 Papyrus 编译器编译。\n输出：%s", platform::ToUtf8(compileOutputFolder(d)).c_str());
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Compile settings...")) {
+	if (ImGui::Button("编译设置…")) {
 		_showCompileSettings = true;
 	}
 	ImGui::SameLine();
@@ -619,7 +619,7 @@ void App::drawDoc(ScriptDoc& d)
 		ImGui::SetKeyboardFocusHere();
 		_findFocus = false;
 	}
-	if (ImGui::InputTextWithHint("##find", "Find (Ctrl+F)", _findBuf, sizeof(_findBuf), ImGuiInputTextFlags_EnterReturnsTrue)) {
+	if (ImGui::InputTextWithHint("##find", "查找（Ctrl+F）", _findBuf, sizeof(_findBuf), ImGuiInputTextFlags_EnterReturnsTrue)) {
 		findNext(io.KeyShift);
 		ImGui::SetKeyboardFocusHere(-1);
 	}
@@ -632,7 +632,7 @@ void App::drawDoc(ScriptDoc& d)
 		findNext(false);
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Go to line") || (keys && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_G, false))) {
+	if (ImGui::Button("跳转到行") || (keys && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_G, false))) {
 		_gotoLine = ed.GetCursorPosition().mLine + 1;
 		_gotoOpen = true;
 		ImGui::OpenPopup("gotoline");
@@ -643,49 +643,49 @@ void App::drawDoc(ScriptDoc& d)
 			ImGui::SetKeyboardFocusHere();
 			_gotoOpen = false;
 		}
-		if (ImGui::InputInt("Line", &_gotoLine, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
+		if (ImGui::InputInt("行", &_gotoLine, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
 			ed.ScrollToLine(std::clamp(_gotoLine, 1, ed.GetTotalLines()) - 1);
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Fold all")) {
+	if (ImGui::Button("全部折叠")) {
 		ed.FoldAll();
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Unfold all")) {
+	if (ImGui::Button("全部展开")) {
 		ed.UnfoldAll();
 	}
 	ImGui::SameLine();
-	ImGui::Checkbox("Outline", &d.showOutline);
+	ImGui::Checkbox("大纲", &d.showOutline);
 
 	// ---- where it came from
 	if (d.decompiled) {
 		const std::string from = !d.pexFile.empty() ? platform::ToUtf8(d.pexFile) : d.pex ? PexWhere(*d.pex) : std::string("?");
-		ImGui::TextDisabled("Decompiled from %s. Comments and the original layout are not stored in a .pex.%s", from.c_str(),
-			d.psc.empty() ? " Save it as a .psc to keep it." : "");
+		ImGui::TextDisabled("反编译自 %s。注释和原始排版不会保存在 .pex 中。%s", from.c_str(),
+			d.psc.empty() ? " 另存为 .psc 即可保留它们。" : "");
 		if (!d.decompileWarnings.empty()) {
-			TextColored(theme::Warn(), Fmt("%zu part(s) could not be rebuilt cleanly (marked ; in the code).", d.decompileWarnings.size()));
+			TextColored(theme::Warn(), Fmt("%zu 处无法干净地重建（在代码中标记为 ;）。", d.decompileWarnings.size()));
 		}
 	} else {
-		ImGui::TextDisabled("%s%s", platform::ToUtf8(d.psc).c_str(), d.sourceMod.empty() ? "" : ("   (" + d.sourceMod + ")").c_str());
+		ImGui::TextDisabled("%s%s", platform::ToUtf8(d.psc).c_str(), d.sourceMod.empty() ? "" : ("   （" + d.sourceMod + "）").c_str());
 		if (d.pex) {
 			ImGui::SameLine();
-			ImGui::TextDisabled("   compiled: %s", PexWhere(*d.pex).c_str());
+			ImGui::TextDisabled("   已编译：%s", PexWhere(*d.pex).c_str());
 		}
 	}
 	if (!d.note.empty()) {
 		TextColored(theme::Warn(), d.note);
 	}
 	if (!d.analysis.problems.empty()) {
-		TextColored(theme::Warn(), "Blocks: " + d.analysis.problems.front() + (d.analysis.problems.size() > 1 ? Fmt("  (+%zu more)", d.analysis.problems.size() - 1) : ""));
+		TextColored(theme::Warn(), "代码块：" + d.analysis.problems.front() + (d.analysis.problems.size() > 1 ? Fmt("  （另有 %zu 处）", d.analysis.problems.size() - 1) : ""));
 	}
 
 	if (!ImGui::BeginTabBar("views")) {
 		return;
 	}
-	if (ImGui::BeginTabItem("Source")) {
+	if (ImGui::BeginTabItem("源码")) {
 		const float bottom = d.compiled ? 150.0f : 0.0f;
 		const float statusH = ImGui::GetTextLineHeightWithSpacing();
 		const float h = ImGui::GetContentRegionAvail().y - bottom - statusH - (d.compiled ? ImGui::GetStyle().ItemSpacing.y : 0);
@@ -802,13 +802,13 @@ void App::drawDoc(ScriptDoc& d)
 				} else if (const int fl = psc::FindFunction(d.analysis, word); fl >= 0) {
 					ed.ScrollToLine(fl);  // a function of this script
 				} else {
-					_status = word + " is not a known script or a function of " + d.name;
+					_status = word + " 不是已知的脚本，也不是 " + d.name + " 的函数";
 				}
 			}
 		}
 		const auto pos = ed.GetCursorPosition();
-		ImGui::TextDisabled("Ln %d, Col %d   |   %d lines   |   %s%s   |   Ctrl+double-click a script name to open it, Ctrl+wheel to zoom", pos.mLine + 1, pos.mColumn + 1,
-			ed.GetTotalLines(), d.textModified ? "modified" : d.psc.empty() ? "not saved yet" : "saved", d.compiling ? "   |   compiling..." : "");
+		ImGui::TextDisabled("第 %d 行，第 %d 列   |   %d 行   |   %s%s   |   Ctrl+双击脚本名可打开，Ctrl+滚轮缩放", pos.mLine + 1, pos.mColumn + 1,
+			ed.GetTotalLines(), d.textModified ? "已修改" : d.psc.empty() ? "尚未保存" : "已保存", d.compiling ? "   |   正在编译…" : "");
 		ImGui::EndGroup();
 
 		// compiler messages
@@ -820,7 +820,7 @@ void App::drawDoc(ScriptDoc& d)
 				const auto  stem = platform::ToUtf8(platform::FromUtf8(m.file).stem());
 				const bool  here = Lower(stem) == Lower(d.name);
 				ImGui::PushID(static_cast<int>(i));
-				const std::string label = (here ? std::string() : stem + ".psc ") + Fmt("line %d, col %d:  ", m.line, m.column) + m.text;
+				const std::string label = (here ? std::string() : stem + ".psc ") + Fmt("第 %d 行，第 %d 列：  ", m.line, m.column) + m.text;
 				if (ImGui::Selectable(label.c_str())) {
 					if (here) {
 						ed.ScrollToLine(m.line - 1);
@@ -841,7 +841,7 @@ void App::drawDoc(ScriptDoc& d)
 					ImGui::TextUnformatted(l.c_str());
 				}
 			}
-			if (ImGui::TreeNode("Compiler output")) {
+			if (ImGui::TreeNode("编译器输出")) {
 				ImGui::TextWrapped("%s", d.commandLine.c_str());
 				for (const auto& l : d.output) {
 					ImGui::TextUnformatted(l.c_str());
@@ -872,7 +872,7 @@ void App::drawDoc(ScriptDoc& d)
 	}
 
 	const bool canDisasm = d.pex.has_value() || !d.pexFile.empty();
-	if (canDisasm && ImGui::BeginTabItem("Disassembly")) {
+	if (canDisasm && ImGui::BeginTabItem("反汇编")) {
 		if (d.disasm.empty() && d.disasmError.empty()) {
 			try {
 				if (!d.pexLoaded) {
@@ -892,7 +892,7 @@ void App::drawDoc(ScriptDoc& d)
 		if (!d.disasmError.empty()) {
 			TextColored(theme::Bad(), d.disasmError);
 		} else {
-			if (ImGui::Button("Copy")) {
+			if (ImGui::Button("复制")) {
 				std::string all;
 				for (const auto& l : d.disasm) {
 					all += l + "\n";
@@ -900,7 +900,7 @@ void App::drawDoc(ScriptDoc& d)
 				ImGui::SetClipboardText(all.c_str());
 			}
 			ImGui::SameLine();
-			ImGui::TextDisabled("The compiled script the game loads, instruction by instruction.");
+			ImGui::TextDisabled("游戏加载的编译脚本，逐条指令列出。");
 			if (monoFont) {
 				ImGui::PushFont(monoFont);
 			}
@@ -948,7 +948,7 @@ bool App::saveDoc(ScriptDoc& d, bool a_saveAs)
 			suggested = platform::SettingsFile().parent_path() / (d.name + ".psc");
 		}
 		if (platform::HasNativeDialogs()) {
-			auto p = platform::SaveFileDialog(suggested, "psc", "Save Papyrus source");
+			auto p = platform::SaveFileDialog(suggested, "psc", "保存 Papyrus 源码");
 			if (!p) {
 				return false;
 			}
@@ -984,14 +984,14 @@ bool App::saveDoc(ScriptDoc& d, bool a_saveAs)
 	std::ofstream out(target, std::ios::binary | std::ios::trunc);
 	out << text;
 	if (!out) {
-		_error = "Could not write " + platform::ToUtf8(target);
+		_error = "无法写入 " + platform::ToUtf8(target);
 		return false;
 	}
 	d.psc = target;
 	d.savedText = d.editor.GetText();
 	d.textModified = false;
 	d.decompiled = false;  // it is a source file now
-	_status = "Saved " + platform::ToUtf8(target);
+	_status = "已保存 " + platform::ToUtf8(target);
 	return true;
 }
 
@@ -1069,8 +1069,8 @@ void App::startCompile(ScriptDoc& d)
 	const auto compiler = compilerPath();
 	std::error_code ec;
 	if (compiler.empty() || !std::filesystem::exists(compiler, ec)) {
-		d.summary = "PapyrusCompiler.exe was not found. It comes with the Creation Kit (in the game folder, under \"Papyrus Compiler\"). "
-					"Set its location in Compile settings.";
+		d.summary = "找不到 PapyrusCompiler.exe。它随 Creation Kit 提供（位于游戏文件夹的 \"Papyrus Compiler\" 目录下）。"
+					"请在编译设置中指定它的位置。";
 		_showCompileSettings = true;
 		return;
 	}
@@ -1092,7 +1092,7 @@ void App::startCompile(ScriptDoc& d)
 			out << l << "\r\n";
 		}
 		if (!out) {
-			d.summary = "Could not write " + platform::ToUtf8(tmp);
+			d.summary = "无法写入 " + platform::ToUtf8(tmp);
 			return;
 		}
 	}
@@ -1148,8 +1148,8 @@ void App::startCompile(ScriptDoc& d)
 		flagsFound = flagsFound || std::filesystem::exists(dir / req.flags, ec);
 	}
 	if (!flagsFound) {
-		d.summary = req.flags + " was not found in any import folder. It is in the game's Data\\Source\\Scripts folder once the Creation Kit's "
-							   "Scripts.zip is unpacked there (that also gives the compiler the vanilla sources it needs).";
+		d.summary = req.flags + " 在任何导入文件夹中都没有找到。把 Creation Kit 的 "
+							   "Scripts.zip 解压到游戏的 Data\\Source\\Scripts 文件夹后它就在那里（这也顺带给编译器提供了所需的各种原版源码）。";
 		return;
 	}
 	if (_compileBackup) {
@@ -1176,7 +1176,7 @@ void App::startCompile(ScriptDoc& d)
 	});
 	_compileJob = job;
 	d.compiling = true;
-	d.summary = "Compiling " + script + "...";
+	d.summary = "正在编译 " + script + "…";
 	_status = d.summary;
 }
 
@@ -1200,19 +1200,19 @@ void App::pollCompile()
 	d.output = r.output;
 	d.commandLine = r.commandLine;
 	if (!r.ran) {
-		d.summary = "The compiler could not be run: " + r.error;
+		d.summary = "无法运行编译器：" + r.error;
 	} else if (r.ok) {
-		d.summary = "Compiled " + job->script + ".pex into " + platform::ToUtf8(job->output) + ". The game uses it the next time it starts.";
+		d.summary = "已将 " + job->script + ".pex 编译到 " + platform::ToUtf8(job->output) + "。游戏下次启动时会使用它。";
 		if (r.importsDropped) {
-			d.summary += Fmt(" (%zu import folders were left out: the command line was too long)", r.importsDropped);
+			d.summary += Fmt("（%zu 个导入文件夹被省略：命令行过长）", r.importsDropped);
 		}
 		if (!r.error.empty()) {
 			d.summary += "  " + r.error;
 		}
 	} else if (!r.messages.empty()) {
-		d.summary = Fmt("%zu error(s): click one to go to it.", r.messages.size());
+		d.summary = Fmt("%zu 个错误：点击某一条可跳转到对应位置。", r.messages.size());
 	} else {
-		d.summary = "The compiler did not write " + job->script + ".pex (see the compiler output below).";
+		d.summary = "编译器没有写出 " + job->script + ".pex（见下方的编译器输出）。";
 	}
 	_status = d.summary;
 }
@@ -1228,7 +1228,7 @@ void App::stopScriptJobs()
 void App::drawCompileSettings()
 {
 	ImGui::SetNextWindowSize(ImVec2(760, 0), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin("Compile settings", &_showCompileSettings, ImGuiWindowFlags_AlwaysAutoResize)) {
+	if (!ImGui::Begin("编译设置", &_showCompileSettings, ImGuiWindowFlags_AlwaysAutoResize)) {
 		ImGui::End();
 		return;
 	}
@@ -1242,11 +1242,11 @@ void App::drawCompileSettings()
 			changed = true;
 		}
 	};
-	ImGui::SeparatorText("Papyrus compiler");
+	ImGui::SeparatorText("Papyrus 编译器");
 	const auto detected = papc::FindCompiler(gameFolder());
-	pathInput("##compiler", _compilerSetting, detected ? platform::ToUtf8(*detected).c_str() : "path to PapyrusCompiler.exe");
+	pathInput("##compiler", _compilerSetting, detected ? platform::ToUtf8(*detected).c_str() : "PapyrusCompiler.exe 的路径");
 	ImGui::SameLine();
-	if (ImGui::Button("Browse...##c") && platform::HasNativeDialogs()) {
+	if (ImGui::Button("浏览…##c") && platform::HasNativeDialogs()) {
 		if (auto p = platform::OpenFileDialog(gameFolder(), "exe", "PapyrusCompiler.exe")) {
 			_compilerSetting = platform::ToUtf8(*p);
 			changed = true;
@@ -1254,39 +1254,39 @@ void App::drawCompileSettings()
 	}
 	if (_compilerSetting.empty()) {
 		if (detected) {
-			ImGui::TextDisabled("Using the one found in the game folder.");
+			ImGui::TextDisabled("使用在游戏文件夹中找到的版本。");
 		} else {
-			TextColored(theme::Warn(), "Not found in the game folder. Install the Creation Kit (Steam), or browse to PapyrusCompiler.exe.");
+			TextColored(theme::Warn(), "未在游戏文件夹中找到。请安装 Creation Kit（Steam），或浏览指定 PapyrusCompiler.exe。");
 		}
 	}
 	char flags[128];
 	std::snprintf(flags, sizeof(flags), "%s", _compileFlags.c_str());
 	ImGui::SetNextItemWidth(260);
-	if (ImGui::InputText("Flags file", flags, sizeof(flags))) {
+	if (ImGui::InputText("标志文件", flags, sizeof(flags))) {
 		_compileFlags = flags;
 		changed = true;
 	}
-	changed |= ImGui::Checkbox("Optimize (-op)", &_compileOptimize);
+	changed |= ImGui::Checkbox("优化（-op）", &_compileOptimize);
 	ImGui::SameLine();
-	changed |= ImGui::Checkbox("Anonymize the .pex (blank the source path, user and machine names it stores)", &_compileAnonymize);
+	changed |= ImGui::Checkbox("匿名化 .pex（清空其中保存的源码路径、用户名和机器名）", &_compileAnonymize);
 
-	ImGui::SeparatorText("Where the compiled .pex goes");
-	changed |= ImGui::RadioButton("The script's own mod (<mod>\\Scripts)", &_compileOutMode, 0);
-	changed |= ImGui::RadioButton("Mod Organizer's Overwrite folder (Overwrite\\Scripts)", &_compileOutMode, 1);
-	changed |= ImGui::RadioButton("This folder:", &_compileOutMode, 2);
+	ImGui::SeparatorText("编译后 .pex 的输出位置");
+	changed |= ImGui::RadioButton("脚本所属的模组（<mod>\\Scripts）", &_compileOutMode, 0);
+	changed |= ImGui::RadioButton("Mod Organizer 的 Overwrite 文件夹（Overwrite\\Scripts）", &_compileOutMode, 1);
+	changed |= ImGui::RadioButton("指定文件夹：", &_compileOutMode, 2);
 	ImGui::SameLine();
-	pathInput("##outdir", _compileOutDir, "folder");
+	pathInput("##outdir", _compileOutDir, "文件夹");
 	ImGui::SameLine();
-	if (ImGui::Button("Browse...##o") && platform::HasNativeDialogs()) {
-		if (auto p = platform::PickFolderDialog("Folder for compiled scripts")) {
+	if (ImGui::Button("浏览…##o") && platform::HasNativeDialogs()) {
+		if (auto p = platform::PickFolderDialog("编译后脚本的文件夹")) {
 			_compileOutDir = platform::ToUtf8(*p);
 			_compileOutMode = 2;
 			changed = true;
 		}
 	}
-	changed |= ImGui::Checkbox("Keep a .pex.bak of a compiled script before replacing it (once)", &_compileBackup);
+	changed |= ImGui::Checkbox("替换编译脚本前保留 .pex.bak 备份（仅一次）", &_compileBackup);
 
-	ImGui::SeparatorText("Extra import folders (searched first; one per line)");
+	ImGui::SeparatorText("额外的导入文件夹（优先搜索；每行一个）");
 	char imports[4096];
 	std::snprintf(imports, sizeof(imports), "%s", _compileImports.c_str());
 	if (ImGui::InputTextMultiline("##imports", imports, sizeof(imports), ImVec2(700, 70))) {
@@ -1297,8 +1297,8 @@ void App::drawCompileSettings()
 	for (const auto& [dir, on] : _sources.sourceDirs) {
 		enabled += on ? 1 : 0;
 	}
-	ImGui::TextDisabled("Also searched: the script's folder, the source folders of your %zu active mods (in load priority), the game's\n"
-						"Data\\Source\\Scripts, then inactive mods.",
+	ImGui::TextDisabled("还会搜索：脚本所在文件夹、已启用的 %zu 个模组的源码文件夹（按加载优先级）、游戏的\n"
+						"Data\\Source\\Scripts，最后是未启用的模组。",
 		enabled);
 	if (changed) {
 		saveSettings();
@@ -1309,29 +1309,29 @@ void App::drawCompileSettings()
 void App::drawDecompilePrompt()
 {
 	if (_decompileAsk) {
-		ImGui::OpenPopup("Decompile script?");
+		ImGui::OpenPopup("反编译脚本？");
 		_decompileAsk = false;
 	}
 	ImGui::SetNextWindowSize(ImVec2(620, 0));
-	if (!ImGui::BeginPopupModal("Decompile script?", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize)) {
+	if (!ImGui::BeginPopupModal("反编译脚本？", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize)) {
 		return;
 	}
-	ImGui::TextWrapped("There is no source (.psc) for %s in your mods or the game's Data folder.", _decompileScript.c_str());
-	ImGui::TextWrapped("The compiled script is in %s.", _decompileWhere.c_str());
+	ImGui::TextWrapped("你的模组和游戏的 Data 文件夹中都没有 %s 的源码（.psc）。", _decompileScript.c_str());
+	ImGui::TextWrapped("编译后的脚本位于 %s。", _decompileWhere.c_str());
 	ImGui::Spacing();
-	ImGui::TextWrapped("ReSaver++ can decompile it with its built-in decompiler. The code does what the original does, but comments and the "
-					   "original layout are not stored in a .pex.");
+	ImGui::TextWrapped("ReSaver++ 可以用内置的反编译器把它还原出来。代码行为与原版一致，但注释和 "
+					   "原始排版不会保存在 .pex 中。");
 	ImGui::Spacing();
-	if (ImGui::Checkbox("Always decompile without asking", &_decompileAlways)) {
+	if (ImGui::Checkbox("总是反编译，不再询问", &_decompileAlways)) {
 		saveSettings();
 	}
 	ImGui::Spacing();
-	if (ImGui::Button("Decompile", ImVec2(140, 0))) {
+	if (ImGui::Button("反编译", ImVec2(140, 0))) {
 		ImGui::CloseCurrentPopup();
 		openDoc(_decompileScript, {}, true, _decompileFn, _decompileState, _decompileInstr);
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Cancel", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+	if (ImGui::Button("取消", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 		ImGui::CloseCurrentPopup();
 	}
 	ImGui::EndPopup();
@@ -1404,7 +1404,7 @@ void App::autoDetectPaths(bool a_force)
 			}
 			// an older version saved the game's Data folder: Vortex users get its staging folder from now on
 			if (_vortex && platform::ToUtf8(_vortex->stagingPath) != _sourcesPath) {
-				_detectNote = "Found Vortex: the mods folder is now its staging folder (was " + _sourcesPath + ")";
+				_detectNote = "发现 Vortex：模组文件夹已改为它的暂存（staging）文件夹（原为 " + _sourcesPath + "）";
 				_sourcesPath = platform::ToUtf8(_vortex->stagingPath);
 				saveSettings();
 			}
@@ -1448,8 +1448,8 @@ void App::autoDetectPaths(bool a_force)
 		_profile = m.selectedProfile;
 		_mo2 = m;
 		_gamePath = platform::ToUtf8(!m.gamePath.empty() ? m.gamePath : games.empty() ? std::filesystem::path() : games.front());
-		_detectNote = "Found Mod Organizer (" + platform::ToUtf8(m.ini.parent_path()) + "), profile \"" + m.selectedProfile + "\"" +
-					  (skyrim.size() > 1 ? Fmt(" (%zu Mod Organizer setups for %s found: the most recently used one was picked)", skyrim.size(), gameName()) : "");
+		_detectNote = "发现 Mod Organizer（" + platform::ToUtf8(m.ini.parent_path()) + "），配置 \"" + m.selectedProfile + "\"" +
+					  (skyrim.size() > 1 ? Fmt("（找到 %zu 套 %s 的 Mod Organizer 环境：已选择最近使用的那个）", skyrim.size(), gameName()) : "");
 	} else if (const auto vx = [&]() -> std::optional<VortexDeployment> {
 				   // Vortex: its deployment manifest in a game's Data folder, or in its default staging folder
 				   for (const auto& g : games) {
@@ -1465,19 +1465,19 @@ void App::autoDetectPaths(bool a_force)
 		_vortex = vx;
 		_gamePath = platform::ToUtf8(vx->dataPath.parent_path());
 		_sourcesPath = platform::ToUtf8(vx->stagingPath);
-		_detectNote = "Found Vortex: staging folder " + _sourcesPath + Fmt(", %zu mods deployed", vx->mods.size());
+		_detectNote = "发现 Vortex：暂存文件夹 " + _sourcesPath + Fmt("，已部署 %zu 个模组", vx->mods.size());
 	} else if (!games.empty()) {
 		_gamePath = platform::ToUtf8(games.front());
 		_sourcesPath = platform::ToUtf8(games.front() / "Data");
-		_detectNote = "No Mod Organizer or Vortex found: using the game's Data folder";
+		_detectNote = "没有找到 Mod Organizer 或 Vortex：使用游戏的 Data 文件夹";
 	} else {
-		_detectNote = "Neither Mod Organizer nor the game was found: set the folders below.";
+		_detectNote = "既没有找到 Mod Organizer，也没有找到游戏：请在下方设置文件夹。";
 		return;
 	}
 	_sources = ScriptSources{};
 	_modsDirty = true;
 	saveSettings();
-	_status = _detectNote + ".";
+	_status = _detectNote + "。";
 }
 
 std::filesystem::path App::savesFolder() const
@@ -1538,5 +1538,5 @@ void App::setGame(bool a_vr)
 	_detectNote.clear();
 	autoDetectPaths(false);  // this game's setup, found by itself the first time
 	saveSettings();
-	_status = std::string("Using the ") + gameName() + " setup";
+	_status = std::string("使用 ") + gameName() + " 的设置";
 }

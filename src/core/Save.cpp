@@ -30,7 +30,7 @@ namespace ess
 		const int n = LZ4_decompress_safe(reinterpret_cast<const char*>(a_src), reinterpret_cast<char*>(out.data()),
 			static_cast<int>(a_srcLen), static_cast<int>(a_dstLen));
 		if (n < 0 || static_cast<std::size_t>(n) != a_dstLen) {
-			throw std::runtime_error("LZ4 decompression failed (save is damaged or not a Skyrim SE save)");
+			throw std::runtime_error("LZ4 解压失败（存档已损坏，或不是天际 SE 存档）");
 		}
 		return out;
 	}
@@ -41,7 +41,7 @@ namespace ess
 		const int n = LZ4_compress_default(reinterpret_cast<const char*>(a_src.data()), reinterpret_cast<char*>(out.data()),
 			static_cast<int>(a_src.size()), static_cast<int>(out.size()));
 		if (n <= 0) {
-			throw std::runtime_error("LZ4 compression failed");
+			throw std::runtime_error("LZ4 压缩失败");
 		}
 		out.resize(n);
 		return out;
@@ -52,7 +52,7 @@ namespace ess
 		std::vector<std::uint8_t> out(a_dstLen);
 		mz_ulong                  len = static_cast<mz_ulong>(a_dstLen);
 		if (mz_uncompress(out.data(), &len, a_src, static_cast<mz_ulong>(a_srcLen)) != MZ_OK || len != a_dstLen) {
-			throw std::runtime_error("zlib decompression failed");
+			throw std::runtime_error("zlib 解压失败");
 		}
 		return out;
 	}
@@ -62,7 +62,7 @@ namespace ess
 		mz_ulong                  len = mz_compressBound(static_cast<mz_ulong>(a_src.size()));
 		std::vector<std::uint8_t> out(len);
 		if (mz_compress(out.data(), &len, a_src.data(), static_cast<mz_ulong>(a_src.size())) != MZ_OK) {
-			throw std::runtime_error("zlib compression failed");
+			throw std::runtime_error("zlib 压缩失败");
 		}
 		out.resize(len);
 		return out;
@@ -74,14 +74,14 @@ namespace ess
 	{
 		magic.assign(reinterpret_cast<const char*>(r.here()), std::min<std::size_t>(13, r.remaining()));
 		if (magic != "TESV_SAVEGAME") {
-			throw FormatError("not a Skyrim save (bad magic)", 0);
+			throw FormatError("不是天际存档（魔数错误）", 0);
 		}
 		r.seek(13);
 		const auto headerSize = r.u32();
 		const auto start = r.pos();
 		version = r.u32();
 		if (version < 12) {
-			throw FormatError("this is a Skyrim Legendary Edition save; only Special/Anniversary Edition saves are supported", 13);
+			throw FormatError("这是天际传奇版存档；仅支持特别版/周年纪念版存档", 13);
 		}
 		saveNumber = r.u32();
 		playerName = r.wstring();
@@ -97,7 +97,7 @@ namespace ess
 		shotHeight = r.u32();
 		compression = static_cast<Compression>(r.u16());
 		if (r.pos() - start != headerSize) {
-			throw FormatError("header size mismatch", r.pos());
+			throw FormatError("头部大小不匹配", r.pos());
 		}
 		screenshot = r.bytes(static_cast<std::size_t>(shotWidth) * shotHeight * 4);
 	}
@@ -142,7 +142,7 @@ namespace ess
 		{
 			std::ifstream f(a_path, std::ios::binary);
 			if (!f) {
-				throw std::runtime_error("cannot open " + a_path.string());
+				throw std::runtime_error("无法打开 " + a_path.string());
 			}
 			f.seekg(0, std::ios::end);
 			const auto n = static_cast<std::size_t>(f.tellg());
@@ -156,11 +156,11 @@ namespace ess
 		{
 			std::ofstream f(a_path, std::ios::binary | std::ios::trunc);
 			if (!f) {
-				throw std::runtime_error("cannot write " + a_path.string());
+				throw std::runtime_error("无法写入 " + a_path.string());
 			}
 			f.write(reinterpret_cast<const char*>(a_data.data()), static_cast<std::streamsize>(a_data.size()));
 			if (!f) {
-				throw std::runtime_error("write failed: " + a_path.string());
+				throw std::runtime_error("写入失败： " + a_path.string());
 			}
 		}
 
@@ -176,7 +176,7 @@ namespace ess
 				try {
 					g.papyrus->read(sub);
 				} catch (const FormatError& e) {
-					throw FormatError(std::string("Papyrus section: ") + e.what(), r.pos() + e.pos);
+					throw FormatError(std::string("Papyrus 区段： ") + e.what(), r.pos() + e.pos);
 				}
 				r.seek(r.pos() + size);
 			} else {
@@ -220,7 +220,7 @@ namespace ess
 				c.length2 = r.u32();
 				break;
 			default:
-				throw FormatError("invalid change form length width", r.pos());
+				throw FormatError("变更表单长度字段宽度无效", r.pos());
 			}
 			c.data = r.bytes(c.length1);
 			return c;
@@ -282,7 +282,7 @@ namespace ess
 			} else if (save->header.compression == Compression::kZlib) {
 				bodyStore = DecompressZlib(hr.here(), compressed, uncompressed);
 			} else {
-				throw std::runtime_error("unknown compression type " + std::to_string(static_cast<int>(save->header.compression)));
+				throw std::runtime_error("未知的压缩类型 " + std::to_string(static_cast<int>(save->header.compression)));
 			}
 			body = bodyStore.data();
 			bodyLen = bodyStore.size();
@@ -295,7 +295,7 @@ namespace ess
 		Reader            r(body, bodyLen);
 		auto              at = [&](std::uint32_t a_fileOffset) {
             if (a_fileOffset < base) {
-                throw FormatError("file location table offset points into the header", r.pos());
+                throw FormatError("文件位置表的偏移指向了头部内部", r.pos());
             }
             r.seek(a_fileOffset - base);
 		};
@@ -316,7 +316,7 @@ namespace ess
 				}
 			}
 			if (r.pos() - start != infoSize) {
-				throw FormatError("plugin list size mismatch", r.pos());
+				throw FormatError("插件列表大小不匹配", r.pos());
 			}
 		}
 

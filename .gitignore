@@ -9,3 +9,10 @@ out/
 *.bak
 .vs/
 CMakeUserPresets.json
+
+# 汉化辅助产物（可重新生成）
+i18n/shots/
+i18n/strings_src.json
+i18n/report_real.*
+*.zip
+

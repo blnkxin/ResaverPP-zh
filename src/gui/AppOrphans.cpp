@@ -76,11 +76,11 @@ void App::drawOrphansModal()
 		openOrphans();
 	}
 	if (_orphansOpen) {
-		ImGui::OpenPopup("Instances on missing spawned objects");
+		ImGui::OpenPopup("位于缺失生成对象上的实例");
 		_orphansOpen = false;
 	}
 	ImGui::SetNextWindowSize(ImVec2(1000, 660), ImGuiCond_Appearing);
-	if (!ImGui::BeginPopupModal("Instances on missing spawned objects")) {
+	if (!ImGui::BeginPopupModal("位于缺失生成对象上的实例")) {
 		return;
 	}
 	// the mods scan finished while this was open: now "installed" can be told
@@ -88,15 +88,15 @@ void App::drawOrphansModal()
 		buildOrphans();
 	}
 
-	ImGui::TextWrapped("When a mod spawns something during play (a summon, a dropped item, a marker), its script gets saved with it. "
-					   "These script instances belong to spawned objects that no longer exist in the save, so nothing in the world "
-					   "uses them. They are grouped below by the mod that provides their script.");
-	TextColored(theme::Dim(), "Not installed / disabled: leftovers of mods that are gone; safe to remove (ticked). Game object types (ActorBase, "
-							  "ObjectReference...) are only the game's link to the deleted object; also ticked. Installed: a mod you still use; "
-							  "it may keep a reference to them on purpose, so they are not ticked. \"Held\" counts the ones another script, "
-							  "array or call still points to: removing those turns that reference into None.");
+	ImGui::TextWrapped("模组在游戏过程中生成某个东西时（召唤物、掉落的物品、标记），它的脚本会随之被保存。 "
+					   "这些脚本实例属于存档中已不存在的生成对象，因此世界中的任何东西都 "
+					   "不会使用它们。下面按提供其脚本的模组分组。");
+	TextColored(theme::Dim(), "未安装 / 已禁用：已消失的模组的残留，可以安全移除（已勾选）。游戏对象类型（"
+							  "ActorBase、ObjectReference…）只是游戏指向已删除对象的链接，同样已勾选。已安装：你仍在使用的模组，"
+							  "它可能故意保留对它们的引用，所以未勾选。“被引用”统计的是另一个脚本、"
+							  "数组或调用仍然指向的实例：移除这些实例会把该引用变成“无”。");
 	if (scanning()) {
-		TextColored(theme::Warn(), "Your mods are still being scanned; the Status column fills in when the scan finishes.");
+		TextColored(theme::Warn(), "正在扫描你的模组；扫描完成后“状态”列会被填充。");
 		drawBackgroundProgress(0);
 	}
 
@@ -107,9 +107,9 @@ void App::drawOrphansModal()
 	}
 	if (_orphans.empty()) {
 		ImGui::Spacing();
-		ImGui::TextUnformatted("This save has no script instances on missing spawned objects.");
+		ImGui::TextUnformatted("此存档中没有位于缺失生成对象上的脚本实例。");
 	} else {
-		ImGui::Text("%zu instance(s) from %zu mod group(s); %zu held by something else.", total, _orphans.size(), totalHeld);
+		ImGui::Text("%zu 个实例，来自 %zu 个模组分组；其中 %zu 个被其他对象引用。", total, _orphans.size(), totalHeld);
 	}
 
 	const float footer = ImGui::GetFrameHeightWithSpacing() * 3.2f;
@@ -119,10 +119,10 @@ void App::drawOrphansModal()
 			ImVec2(0, -footer))) {
 		ImGui::TableSetupScrollFreeze(0, 1);
 		ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFrameHeight());
-		ImGui::TableSetupColumn("Mod / script", ImGuiTableColumnFlags_WidthStretch, 4.0f);
-		ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch, 1.8f);
-		ImGui::TableSetupColumn("Instances", ImGuiTableColumnFlags_WidthStretch, 0.9f);
-		ImGui::TableSetupColumn("Held", ImGuiTableColumnFlags_WidthStretch, 0.7f);
+		ImGui::TableSetupColumn("模组 / 脚本", ImGuiTableColumnFlags_WidthStretch, 4.0f);
+		ImGui::TableSetupColumn("状态", ImGuiTableColumnFlags_WidthStretch, 1.8f);
+		ImGui::TableSetupColumn("实例数", ImGuiTableColumnFlags_WidthStretch, 0.9f);
+		ImGui::TableSetupColumn("被引用", ImGuiTableColumnFlags_WidthStretch, 0.7f);
 		ImGui::TableHeadersRow();
 		for (std::size_t gi = 0; gi < _orphans.size(); ++gi) {
 			const auto& g = _orphans[gi];
@@ -134,8 +134,8 @@ void App::drawOrphansModal()
 				_orphanSel[gi] = tick ? 1 : 0;
 			}
 			ImGui::TableNextColumn();
-			const bool open = ImGui::TreeNodeEx("##mod", ImGuiTreeNodeFlags_SpanAvailWidth, "%s  (%zu script%s)", g.mod.c_str(),
-				g.scripts.size(), g.scripts.size() == 1 ? "" : "s");
+			const bool open = ImGui::TreeNodeEx("##mod", ImGuiTreeNodeFlags_SpanAvailWidth, "%s  （%zu 个脚本%s）", g.mod.c_str(),
+				g.scripts.size(), g.scripts.size() == 1 ? "" : "");
 			ImGui::TableNextColumn();
 			ImGui::PushStyleColor(ImGuiCol_Text, StatusColor(g.status));
 			ImGui::TextUnformatted(orphans::StatusText(g.status));
@@ -159,7 +159,7 @@ void App::drawOrphansModal()
 						viewScript(s.script);
 					}
 					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("Double-click to view the script");
+						ImGui::SetTooltip("双击查看脚本");
 					}
 					ImGui::Unindent();
 					ImGui::TableNextColumn();
@@ -179,21 +179,21 @@ void App::drawOrphansModal()
 		ImGui::EndTable();
 	}
 
-	if (ImGui::Button("Tick not installed")) {
+	if (ImGui::Button("勾选未安装项")) {
 		for (std::size_t i = 0; i < _orphans.size(); ++i) {
 			_orphanSel[i] = DefaultTick(_orphans[i].status) ? 1 : 0;
 		}
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Tick all")) {
+	if (ImGui::Button("全选")) {
 		std::fill(_orphanSel.begin(), _orphanSel.end(), 1);
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Tick none")) {
+	if (ImGui::Button("全不选")) {
 		std::fill(_orphanSel.begin(), _orphanSel.end(), 0);
 	}
 	ImGui::SameLine();
-	ImGui::Checkbox("Keep the held ones (safer)", &_orphansKeepHeld);
+	ImGui::Checkbox("保留被引用的实例（更安全）", &_orphansKeepHeld);
 
 	std::set<EID> ids;
 	for (std::size_t i = 0; i < _orphans.size(); ++i) {
@@ -209,19 +209,19 @@ void App::drawOrphansModal()
 		}
 	}
 	ImGui::BeginDisabled(ids.empty());
-	if (ImGui::Button(Fmt("Remove %zu instance(s)", ids.size()).c_str(), ImVec2(220, 0))) {
+	if (ImGui::Button(Fmt("移除 %zu 个实例", ids.size()).c_str(), ImVec2(220, 0))) {
 		const auto n = orphans::Remove(*_save, ids);
 		ImGui::CloseCurrentPopup();
 		_orphans.clear();
 		_orphanSel.clear();
-		markEdited(Fmt("Removed %zu instance(s) on missing spawned objects", n));
+		markEdited(Fmt("已移除 %zu 个位于缺失生成对象上的实例", n));
 	}
 	ImGui::EndDisabled();
 	ImGui::SameLine();
-	if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+	if (ImGui::Button("取消", ImVec2(120, 0))) {
 		ImGui::CloseCurrentPopup();
 	}
 	ImGui::SameLine();
-	TextColored(theme::Dim(), "Only the edited save in memory changes; write it with File > Save As.");
+	TextColored(theme::Dim(), "只有内存中已编辑的存档会变化；请用文件 > 另存为写入。");
 	ImGui::EndPopup();
 }

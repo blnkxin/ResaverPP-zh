@@ -225,7 +225,7 @@ namespace ess
 							}
 							strings = ReadStrings(data);
 						} catch (const std::exception& e) {
-							errors.push_back(pluginName + " strings: " + e.what());
+							errors.push_back(pluginName + " 字符串： " + e.what());
 						}
 						if (!strings.empty()) {
 							break;
@@ -334,7 +334,7 @@ namespace ess
 				}
 				++pluginsRead;
 			} catch (const std::exception& e) {
-				errors.push_back(pluginName + ": " + e.what());
+				errors.push_back(pluginName + "： " + e.what());
 			}
 			++a_progress.done;
 		}

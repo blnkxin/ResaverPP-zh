@@ -56,30 +56,30 @@ void App::drawModCharged(const std::string& a_plugin)
 	for (const auto* c : mine) {
 		broken += cf::NeedsChargeFix(c->inv) ? 1 : 0;
 	}
-	ImGui::SeparatorText(Fmt("Enchanted and charged items from this mod (%zu)", mine.size()).c_str());
+	ImGui::SeparatorText(Fmt("来自此模组的附魔物品与充能物品（%zu）", mine.size()).c_str());
 	if (mine.empty()) {
-		ImGui::TextDisabled("(none in any inventory)");
+		ImGui::TextDisabled("（任何物品栏中都没有）");
 		return;
 	}
 	ImGui::PushStyleColor(ImGuiCol_Text, theme::Dim());
-	ImGui::TextWrapped("Items whose base record or enchantment comes from this mod, in any inventory (yours, followers', containers). "
-					   "Enchantment and Max charge are stored on the item itself in the save (ExtraEnchantment), Charge is what is left "
-					   "(ExtraCharge); xEdit does not show these. \"From the plugin\": the base record's own enchantment and EAMT apply. "
-					   "An item with an enchantment but max charge 0 can never be recharged with soul gems.");
+	ImGui::TextWrapped("基础记录或附魔来自此模组的物品，位于任何物品栏中（你的、随从的、容器的）。 "
+					   "附魔与最大充能保存在存档中该物品自身（ExtraEnchantment），充能值则是剩余的部分 "
+					   "（ExtraCharge）；xEdit 不显示这些。“来自插件”：基础记录自身的附魔与 EAMT 生效。 "
+					   "有附魔但最大充能为 0 的物品永远无法用灵魂石充能。");
 	ImGui::PopStyleColor();
 	if (broken) {
 		ImGui::PushStyleColor(ImGuiCol_Text, theme::Bad());
-		ImGui::TextWrapped("%zu item(s) cannot be recharged.", broken);
+		ImGui::TextWrapped("%zu 个物品无法充能。", broken);
 		ImGui::PopStyleColor();
 	}
 
 	if (ImGui::BeginTable("charged", 6, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable)) {
-		ImGui::TableSetupColumn("Item", ImGuiTableColumnFlags_WidthStretch, 2.2f);
-		ImGui::TableSetupColumn("Held by", ImGuiTableColumnFlags_WidthStretch, 1.6f);
-		ImGui::TableSetupColumn("Enchantment", ImGuiTableColumnFlags_WidthStretch, 2.0f);
-		ImGui::TableSetupColumn("Max charge", ImGuiTableColumnFlags_WidthStretch, 0.9f);
-		ImGui::TableSetupColumn("Charge", ImGuiTableColumnFlags_WidthStretch, 0.7f);
-		ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch, 1.6f);
+		ImGui::TableSetupColumn("物品", ImGuiTableColumnFlags_WidthStretch, 2.2f);
+		ImGui::TableSetupColumn("持有者", ImGuiTableColumnFlags_WidthStretch, 1.6f);
+		ImGui::TableSetupColumn("附魔", ImGuiTableColumnFlags_WidthStretch, 2.0f);
+		ImGui::TableSetupColumn("最大充能", ImGuiTableColumnFlags_WidthStretch, 0.9f);
+		ImGui::TableSetupColumn("充能值", ImGuiTableColumnFlags_WidthStretch, 0.7f);
+		ImGui::TableSetupColumn("状态", ImGuiTableColumnFlags_WidthStretch, 1.6f);
 		ImGui::TableHeadersRow();
 		for (const auto* c : mine) {
 			const auto& e = c->inv;
@@ -91,17 +91,17 @@ void App::drawModCharged(const std::string& a_plugin)
 				ImGui::TextDisabled("x%d", e.count);
 			}
 			ImGui::TableNextColumn();
-			ImGui::TextUnformatted(c->holder == 0x14 ? "Player" : formText(c->holder).c_str());
+			ImGui::TextUnformatted(c->holder == 0x14 ? "玩家" : formText(c->holder).c_str());
 			ImGui::TableNextColumn();
 			if (!e.hasEnchant) {
-				ImGui::TextDisabled("from the plugin");
+				ImGui::TextDisabled("来自插件");
 			} else if (!e.enchRaw) {
-				ImGui::TextDisabled("(none)");
+				ImGui::TextDisabled("（无）");
 			} else {
 				ImGui::TextUnformatted(formText(e.ench).c_str());
 				if ((e.ench >> 24) == 0xFF) {
 					ImGui::SameLine();
-					ImGui::TextDisabled("(made in game)");
+					ImGui::TextDisabled("（游戏内制作）");
 				}
 			}
 			ImGui::TableNextColumn();
@@ -114,19 +114,19 @@ void App::drawModCharged(const std::string& a_plugin)
 			if (e.hasCharge) {
 				ImGui::Text("%.0f", e.charge);
 			} else {
-				ImGui::TextDisabled("full");
+				ImGui::TextDisabled("已满");
 			}
 			ImGui::TableNextColumn();
 			if (e.hasEnchant && e.enchRaw && e.maxCharge == 0) {
 				ImGui::PushStyleColor(ImGuiCol_Text, theme::Bad());
-				ImGui::TextUnformatted("Cannot be recharged (max charge 0)");
+				ImGui::TextUnformatted("无法充能（最大充能为 0）");
 				ImGui::PopStyleColor();
 			} else if (cf::NeedsChargeFix(e)) {
 				ImGui::PushStyleColor(ImGuiCol_Text, theme::Warn());
-				ImGui::TextUnformatted("Charge above its max");
+				ImGui::TextUnformatted("充能值超过上限");
 				ImGui::PopStyleColor();
 			} else if (e.hasEnchant && !e.enchRaw) {
-				ImGui::TextDisabled("No enchantment set");
+				ImGui::TextDisabled("未设置附魔");
 			} else {
 				ImGui::PushStyleColor(ImGuiCol_Text, theme::Good());
 				ImGui::TextUnformatted("OK");
@@ -138,11 +138,11 @@ void App::drawModCharged(const std::string& a_plugin)
 
 	if (broken) {
 		ImGui::SetNextItemWidth(120);
-		ImGui::InputInt("Max charge to give them", &_chargeFixValue, 100, 500);
+		ImGui::InputInt("要赋予的最大充能", &_chargeFixValue, 100, 500);
 		_chargeFixValue = std::clamp(_chargeFixValue, 1, 65535);
 		ImGui::SameLine();
-		ImGui::TextDisabled("(a grand or black soul gem holds 3000)");
-		if (ImGui::Button(Fmt("Fix %zu item(s) so they can be recharged", broken).c_str())) {
+		ImGui::TextDisabled("（大灵魂石或黑色灵魂石可容纳 3000）");
+		if (ImGui::Button(Fmt("修复 %zu 个物品使其可以充能", broken).c_str())) {
 			std::vector<std::pair<std::uint32_t, std::uint32_t>> only;
 			for (const auto* c : mine) {
 				if (cf::NeedsChargeFix(c->inv)) {
@@ -150,8 +150,8 @@ void App::drawModCharged(const std::string& a_plugin)
 				}
 			}
 			const auto n = cf::FixCharges(*_save, static_cast<std::uint16_t>(_chargeFixValue), only);
-			markEdited(Fmt("Gave %zu item(s) of %s a max charge of %d", n, a_plugin.c_str(), _chargeFixValue));
+			markEdited(Fmt("将 %zu 个物品（属于 %s）的最大充能设为 %d", n, a_plugin.c_str(), _chargeFixValue));
 		}
-		ImGui::TextDisabled("Only the edited save in memory changes; write it with File > Save As.");
+		ImGui::TextDisabled("只有内存中已编辑的存档会变化；请用文件 > 另存为写入。");
 	}
 }

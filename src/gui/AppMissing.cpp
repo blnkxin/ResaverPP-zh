@@ -91,14 +91,14 @@ void App::checkMissingPlugins()
 	std::filesystem::path txt;
 	if (_mo2 && !_profile.empty()) {
 		txt = _mo2->profilesDir / platform::FromUtf8(_profile) / "plugins.txt";
-		_missingSource = "Mod Organizer profile \"" + _profile + "\"";
+		_missingSource = "Mod Organizer 配置 \"" + _profile + "\"";
 	} else {
 		txt = loadorder::GamePluginsTxt(_vr);
-		_missingSource = _vortex ? "your load order (Vortex)" : "your load order";
+		_missingSource = _vortex ? "你的加载顺序（Vortex）" : "你的加载顺序";
 	}
 	const auto active = loadorder::Read(txt, gameFolder(), _vr);
 	if (!active.known) {
-		_missingSource = "your load order";
+		_missingSource = "你的加载顺序";
 		return;  // no load order to compare plugins with (missing scripts can still be listed)
 	}
 	std::vector<std::string> all = _save->plugins.full;
@@ -160,28 +160,28 @@ void App::drawMissingBanner()
 	ImGui::BeginChild("##missing", ImVec2(0, ImGui::GetTextLineHeightWithSpacing() * (scanning() ? 4.6f : 3.2f)), ImGuiChildFlags_Borders);
 	std::string msg;
 	if (!_missing.empty()) {
-		msg = _installKnown ? Fmt("%zu mod(s) in this save are not in %s: %zu no longer installed, %zu installed but not enabled.", _missing.size(),
+		msg = _installKnown ? Fmt("本存档中有 %zu 个模组不在 %s 中：其中 %zu 个已不再安装，%zu 个已安装但未启用。", _missing.size(),
 								  _missingSource.c_str(), gone, disabled)
-							: Fmt("%zu mod(s) in this save are not in %s.", _missing.size(), _missingSource.c_str());
+							: Fmt("本存档中有 %zu 个模组不在 %s 中。", _missing.size(), _missingSource.c_str());
 	}
 	if (!_missingScripts.empty()) {
-		msg += (msg.empty() ? "" : " ") + Fmt("%zu script(s) in it are no longer installed anywhere.", _missingScripts.size());
+		msg += (msg.empty() ? "" : " ") + Fmt("其中 %zu 个脚本已不再安装于任何位置。", _missingScripts.size());
 	}
 	if (!_installKnown && scanning()) {
-		msg += "  Checking which are still installed (scanning your mods)...";
+		msg += "  正在检查哪些仍然安装着（正在扫描你的模组）…";
 	}
 	TextColored(theme::Warn(), msg);
 	if (scanning()) {
 		drawBackgroundProgress(0);
 	}
-	if (ImGui::Button("Review and remove their leftovers...")) {
+	if (ImGui::Button("查看并移除残留…")) {
 		for (auto& m : _missing) {
 			m.planned = false;
 		}
 		_missingOpen = true;
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Hide")) {
+	if (ImGui::Button("隐藏")) {
 		_missingDismissed = true;
 	}
 	ImGui::EndChild();
@@ -195,33 +195,33 @@ void App::drawMissingModal()
 		_missingOpen = true;  // (test hook)
 	}
 	if (_missingOpen) {
-		ImGui::OpenPopup("Mods no longer in your load order");
+		ImGui::OpenPopup("已不在加载顺序中的模组");
 		_missingOpen = false;
 	}
 	ImGui::SetNextWindowSize(ImVec2(980, 640), ImGuiCond_Appearing);
-	if (!ImGui::BeginPopupModal("Mods no longer in your load order")) {
+	if (!ImGui::BeginPopupModal("已不在加载顺序中的模组")) {
 		return;
 	}
-	ImGui::TextWrapped("These plugins are listed in the save but are not enabled in %s. The game does not load them, so their scripts "
-					   "and saved data are leftovers. Removing them cleans the save the way \"Remove mod from save\" does, with the "
-					   "same safety checks, and writes a NEW save file: the original is not changed.",
+	ImGui::TextWrapped("这些插件记录在存档中，但未在 %s 中启用。游戏不会加载它们，因此它们的脚本 "
+					   "和存档数据都是残留。移除它们会像“从存档移除模组”那样清理存档，经过 "
+					   "同样的安全检查，并写入一个新的存档文件：原文件不会被改动。",
 		_missingSource.c_str());
-	TextColored(theme::Dim(), "A mod that is only disabled for a test, or enabled in another profile, will need its data again: leave it unticked.");
+	TextColored(theme::Dim(), "只为测试而临时禁用、或在另一个配置中启用的模组，之后还会需要这些数据：请不要勾选。");
 	if (!_installKnown && scanning()) {
-		TextColored(theme::Warn(), "Still scanning your mods: until it is done ReSaver++ cannot tell uninstalled mods from disabled ones, so nothing "
-								   "is ticked. The list updates by itself when the scan is done.");
+		TextColored(theme::Warn(), "仍在扫描你的模组：扫描完成前 ReSaver++ 无法区分已卸载的模组和已禁用的模组，因此没有 "
+								   "任何一项被勾选。扫描完成后列表会自动更新。");
 	} else if (!_installKnown) {
-		TextColored(theme::Warn(), "Your mods folder is not set (Options > Settings), so ReSaver++ cannot tell uninstalled mods from disabled ones: "
-						   "nothing is ticked.");
+		TextColored(theme::Warn(), "尚未设置模组文件夹（选项 > 设置），因此 ReSaver++ 无法区分已卸载的模组和已禁用的模组： "
+						   "没有勾选任何一项。");
 	}
 	ImGui::Separator();
 
 	ImGui::BeginChild("rows", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 2.6f));
 	if (ImGui::BeginTable("missing", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
-		ImGui::TableSetupColumn("Plugin", 0, 3);
-		ImGui::TableSetupColumn("Status", 0, 3);
-		ImGui::TableSetupColumn("Left in the save", 0, 3);
-		ImGui::TableSetupColumn("Safety check", 0, 4);
+		ImGui::TableSetupColumn("插件", 0, 3);
+		ImGui::TableSetupColumn("状态", 0, 3);
+		ImGui::TableSetupColumn("存档中的残留", 0, 3);
+		ImGui::TableSetupColumn("安全检查", 0, 4);
 		ImGui::TableHeadersRow();
 		for (std::size_t i = 0; i < _missing.size(); ++i) {
 			auto& m = _missing[i];
@@ -241,21 +241,21 @@ void App::drawMissingModal()
 			ImGui::EndDisabled();
 			ImGui::TableSetColumnIndex(1);
 			if (m.installed) {
-				TextColored(theme::Warn(), "installed but not enabled" + (m.folder.empty() ? std::string() : " (" + m.folder + ")"));
+				TextColored(theme::Warn(), "已安装但未启用" + (m.folder.empty() ? std::string() : "（" + m.folder + "）"));
 			} else {
-				ImGui::TextUnformatted("not installed");
+				ImGui::TextUnformatted("未安装");
 			}
 			ImGui::TableSetColumnIndex(2);
 			if (nothing) {
-				ImGui::TextDisabled("nothing (already clean)");
+				ImGui::TextDisabled("无（已经干净）");
 			} else {
-				ImGui::Text("%zu forms, %zu scripts, %zu instances, %zu threads", m.changeForms, m.scripts, m.instances, m.threads);
+				ImGui::Text("%zu 个变更表单，%zu 个脚本，%zu 个脚本实例，%zu 个线程", m.changeForms, m.scripts, m.instances, m.threads);
 			}
 			ImGui::TableSetColumnIndex(3);
 			if (!m.selected) {
 				ImGui::TextDisabled("-");
 			} else if (m.blocked) {
-				TextColored(theme::Bad(), "refused (see details)");
+				TextColored(theme::Bad(), "已拒绝（见详情）");
 			} else {
 				ImGui::TextUnformatted("OK");
 			}
@@ -264,7 +264,7 @@ void App::drawMissingModal()
 			}
 			if (m.selected && m.planned) {
 				ImGui::SameLine();
-				if (ImGui::SmallButton("details")) {
+				if (ImGui::SmallButton("详情")) {
 					ImGui::OpenPopup("plan");
 				}
 				if (ImGui::BeginPopup("plan")) {
@@ -280,17 +280,17 @@ void App::drawMissingModal()
 	}
 	// scripts whose files are gone (a script-only mod, or a mod's scripts on other mods' objects)
 	if (!_missingScripts.empty()) {
-		ImGui::Checkbox(Fmt("Also remove %zu script(s) that are no longer installed anywhere (their threads, queued calls and instances)",
+		ImGui::Checkbox(Fmt("同时移除在任何地方都已不再安装的 %zu 个脚本（以及它们的线程、排队调用和实例）",
 							_missingScripts.size())
 							.c_str(),
 			&_removeMissingScripts);
-		if (ImGui::TreeNode("missing scripts", "Show them")) {
+		if (ImGui::TreeNode("missing scripts", "显示")) {
 			for (const auto& [name, n] : _missingScripts) {
-				ImGui::BulletText("%s  (%zu in use)", name.c_str(), n);
+				ImGui::BulletText("%s  （%zu 个仍在使用）", name.c_str(), n);
 			}
 			ImGui::TreePop();
 		}
-		TextColored(theme::Dim(), "Not found in any mod folder (enabled or not) nor in the game's own archives. The game cannot run them any more.");
+		TextColored(theme::Dim(), "在任何模组文件夹（无论是否启用）以及游戏自带的归档中都找不到。游戏已经无法运行它们。");
 	}
 	ImGui::EndChild();
 
@@ -308,11 +308,11 @@ void App::drawMissingModal()
 			target.replace_filename(base + u8"_" + std::u8string(reinterpret_cast<const char8_t*>(std::to_string(n).c_str())) + u8".ess");
 		}
 	}
-	ImGui::TextDisabled("New file: %s%s", platform::ToUtf8(target.filename()).c_str(),
-		refused ? Fmt("   (%zu refused by the safety check will be skipped)", refused).c_str() : "");
+	ImGui::TextDisabled("新文件：%s%s", platform::ToUtf8(target.filename()).c_str(),
+		refused ? Fmt("   （%zu 个被安全检查拒绝，将被跳过）", refused).c_str() : "");
 	const bool scriptsToo = _removeMissingScripts && !_missingScripts.empty();
 	ImGui::BeginDisabled(ticked == refused && !scriptsToo);
-	if (ImGui::Button("Remove and write new save", ImVec2(280, 0))) {
+	if (ImGui::Button("移除并写入新存档", ImVec2(280, 0))) {
 		// one after the other: each plan is made on the save as the previous removal left it
 		std::size_t done = 0;
 		std::string skipped;
@@ -351,20 +351,20 @@ void App::drawMissingModal()
 		}
 		ImGui::CloseCurrentPopup();
 		if (done || scriptsDone) {
-			markEdited(Fmt("Removed the leftovers of %zu mod(s) and %zu missing script(s)", done, scriptsDone));
+			markEdited(Fmt("已移除 %zu 个模组的残留和 %zu 个缺失脚本", done, scriptsDone));
 			_modsDirty = true;
 			doSave(target);
 			_report = std::make_unique<ops::Report>(ops::Analyze(*_save));
 			if (_error.empty()) {
-				_status = Fmt("Removed the leftovers of %zu mod(s) and %zu missing script(s), and wrote ", done, scriptsDone) + platform::ToUtf8(target.filename()) +
-						  (skipped.empty() ? "" : "  (skipped: " + skipped + ")");
+				_status = Fmt("已移除 %zu 个模组的残留和 %zu 个缺失脚本，并写入 ", done, scriptsDone) + platform::ToUtf8(target.filename()) +
+						  (skipped.empty() ? "" : "  （已跳过：" + skipped + "）");
 			}
 			checkMissingPlugins();
 		}
 	}
 	ImGui::EndDisabled();
 	ImGui::SameLine();
-	if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+	if (ImGui::Button("取消", ImVec2(120, 0))) {
 		ImGui::CloseCurrentPopup();
 	}
 	ImGui::EndPopup();

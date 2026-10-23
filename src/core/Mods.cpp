@@ -52,9 +52,9 @@ namespace ess::mods
 		for (std::size_t i = 0; i < a_save.plugins.lite.size(); ++i) {
 			row(a_save.plugins.lite[i], Kind::kLight, static_cast<int>(i));
 		}
-		const std::string kCreatedName = "(spawned in game)";
-		const std::string kUnattachedName = "(attached to nothing)";
-		const std::string kGlobalName = "(no object / unknown mod)";
+		const std::string kCreatedName = "（游戏中生成）";
+		const std::string kUnattachedName = "（未附加到任何对象）";
+		const std::string kGlobalName = "（无对象／未知模组）";
 		row(kCreatedName, Kind::kCreated, -1);
 		row(kUnattachedName, Kind::kUnattached, -1);
 		row(kGlobalName, Kind::kGlobal, -1);

@@ -13,9 +13,9 @@ namespace theme
 	const char* Name(Kind k)
 	{
 		switch (k) {
-		case Kind::kLight: return "Light";
-		case Kind::kGrey: return "Grey";
-		default: return "Dark";
+		case Kind::kLight: return "浅色";
+		case Kind::kGrey: return "灰色";
+		default: return "深色";
 		}
 	}
 

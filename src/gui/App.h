@@ -319,7 +319,7 @@ private:
 	std::unique_ptr<ess::SaveFile> _save;
 	std::unique_ptr<ess::ops::Report> _report;
 	std::filesystem::path          _path;
-	std::string                    _status = "Open a Skyrim SE/AE save (File > Open, or drop a .ess onto this window).";
+	std::string                    _status = "打开 Skyrim SE/AE 存档（文件 > 打开，或将 .ess 拖到本窗口）。";
 	bool                           _dirty = false;
 	bool                           _quit = false;
 	bool                           _quitPending = false;

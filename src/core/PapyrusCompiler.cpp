@@ -85,7 +85,7 @@ namespace ess::papc
 			SECURITY_ATTRIBUTES sa{ sizeof(sa), nullptr, TRUE };
 			HANDLE              rd = nullptr, wr = nullptr;
 			if (!CreatePipe(&rd, &wr, &sa, 0)) {
-				a_error = "could not create a pipe";
+				a_error = "无法创建管道";
 				return -1;
 			}
 			SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
@@ -100,7 +100,7 @@ namespace ess::papc
 			std::wstring        cmd = Wide(a_cmd);
 			const std::wstring  dir = a_dir.wstring();
 			if (!CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr, dir.empty() ? nullptr : dir.c_str(), &si, &pi)) {
-				a_error = "could not start the compiler (error " + std::to_string(GetLastError()) + ")";
+				a_error = "无法启动编译器（错误 " + std::to_string(GetLastError()) + "）";
 				CloseHandle(rd);
 				CloseHandle(wr);
 				return -1;
@@ -132,7 +132,7 @@ namespace ess::papc
 			const std::string full = (a_dir.empty() ? std::string() : "cd " + Quote(U8(a_dir)) + " && ") + a_cmd + " 2>&1";
 			FILE*             p = popen(full.c_str(), "r");
 			if (!p) {
-				a_error = "could not start the compiler";
+				a_error = "无法启动编译器";
 				return -1;
 			}
 			std::string pending;
@@ -192,13 +192,13 @@ namespace ess::papc
 	{
 		std::fstream f(a_pex, std::ios::binary | std::ios::in | std::ios::out);
 		if (!f) {
-			a_error = "cannot open " + U8(a_pex.filename());
+			a_error = "无法打开 " + U8(a_pex.filename());
 			return false;
 		}
 		unsigned char magic[4]{};
 		f.read(reinterpret_cast<char*>(magic), 4);
 		if (!(magic[0] == 0xFA && magic[1] == 0x57 && magic[2] == 0xC0 && magic[3] == 0xDE)) {
-			a_error = U8(a_pex.filename()) + " is not a Skyrim .pex";
+			a_error = U8(a_pex.filename()) + " 不是天际 .pex 文件";
 			return false;
 		}
 		f.seekg(16);  // magic, version (2), game (2), compile time (8)
@@ -207,7 +207,7 @@ namespace ess::papc
 			f.read(reinterpret_cast<char*>(len), 2);
 			const int n = (len[0] << 8) | len[1];
 			if (!f || n < 0) {
-				a_error = "unexpected end of " + U8(a_pex.filename());
+				a_error = "文件意外结束： " + U8(a_pex.filename());
 				return false;
 			}
 			const auto pos = f.tellg();
@@ -241,8 +241,8 @@ namespace ess::papc
 		Result          r;
 		std::error_code ec;
 		if (!std::filesystem::exists(a_req.compiler, ec)) {
-			r.error = "PapyrusCompiler.exe was not found at " + U8(a_req.compiler) +
-					  ". It comes with the Creation Kit (game folder \\Papyrus Compiler); set its location in the script viewer's compile settings.";
+			r.error = "在以下位置没有找到 PapyrusCompiler.exe： " + U8(a_req.compiler) +
+					  "。它随 Creation Kit 一起提供（游戏目录 \\Papyrus Compiler）；请在脚本查看器的编译设置中指定它的位置。";
 			return r;
 		}
 		std::filesystem::create_directories(a_req.output, ec);
@@ -287,7 +287,7 @@ namespace ess::papc
 			if (a_req.anonymize) {
 				std::string err;
 				if (!Anonymize(pex, err)) {
-					r.error = "compiled, but could not anonymize: " + err;
+					r.error = "已编译，但无法匿名化： " + err;
 				}
 			}
 		}

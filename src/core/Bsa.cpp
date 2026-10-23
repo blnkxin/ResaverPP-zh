@@ -28,11 +28,11 @@ namespace ess
 	{
 		std::ifstream f(a_path, std::ios::binary);
 		if (!f) {
-			throw std::runtime_error("cannot open");
+			throw std::runtime_error("无法打开归档");
 		}
 		std::uint8_t hdr[36];
 		if (!f.read(reinterpret_cast<char*>(hdr), 36) || std::memcmp(hdr, "BSA\0", 4) != 0) {
-			throw std::runtime_error("not a BSA");
+			throw std::runtime_error("不是 BSA 归档");
 		}
 		Reader h(hdr, 36);
 		h.seek(4);
@@ -44,7 +44,7 @@ namespace ess
 		const auto folderNamesLen = h.u32();
 		const auto fileNamesLen = h.u32();
 		if (_version != 104 && _version != 105) {
-			throw std::runtime_error("unsupported BSA version " + std::to_string(_version));
+			throw std::runtime_error("不支持的 BSA 版本 " + std::to_string(_version));
 		}
 		const bool        dirNames = _flags & 1, fileNames = _flags & 2, compressedByDefault = _flags & 4;
 		const std::size_t folderRec = _version == 105 ? 24 : 16;
@@ -118,25 +118,25 @@ namespace ess
 	{
 		std::ifstream f(_path, std::ios::binary);
 		if (!f) {
-			throw std::runtime_error("cannot open archive");
+			throw std::runtime_error("无法打开归档");
 		}
 		std::vector<std::uint8_t> raw(a_entry.size);
 		f.seekg(a_entry.offset);
 		if (!f.read(reinterpret_cast<char*>(raw.data()), a_entry.size)) {
-			throw std::runtime_error("short read in archive");
+			throw std::runtime_error("无法读取归档，内容不完整");
 		}
 		std::size_t pos = 0;
 		if (_flags & 0x100) {  // embedded file name: bstring
 			pos = 1 + std::size_t(raw.empty() ? 0 : raw[0]);
 		}
 		if (pos > raw.size()) {
-			throw std::runtime_error("bad embedded name");
+			throw std::runtime_error("内嵌文件名无效");
 		}
 		if (!a_entry.compressed) {
 			return { raw.begin() + static_cast<std::ptrdiff_t>(pos), raw.end() };
 		}
 		if (raw.size() < pos + 4) {
-			throw std::runtime_error("bad compressed entry");
+			throw std::runtime_error("压缩条目无效");
 		}
 		std::uint32_t original;
 		std::memcpy(&original, raw.data() + pos, 4);
@@ -151,7 +151,7 @@ namespace ess
 	{
 		Reader r(a_src, a_srcLen);
 		if (r.u32() != 0x184D2204) {
-			throw std::runtime_error("not an LZ4 frame");
+			throw std::runtime_error("不是 LZ4 帧");
 		}
 		const auto flg = r.u8();
 		r.u8();  // BD
@@ -175,7 +175,7 @@ namespace ess
 			r.need(len);
 			if (stored) {
 				if (pos + len > out.size()) {
-					throw std::runtime_error("LZ4 frame larger than expected");
+					throw std::runtime_error("LZ4 帧大于预期大小");
 				}
 				std::memcpy(out.data() + pos, r.here(), len);
 				pos += len;
@@ -184,7 +184,7 @@ namespace ess
 				const int n = LZ4_decompress_safe_usingDict(reinterpret_cast<const char*>(r.here()), reinterpret_cast<char*>(out.data() + pos),
 					static_cast<int>(len), static_cast<int>(out.size() - pos), reinterpret_cast<const char*>(out.data()), static_cast<int>(pos));
 				if (n < 0) {
-					throw std::runtime_error("LZ4 frame block is corrupt");
+					throw std::runtime_error("LZ4 帧数据块已损坏");
 				}
 				pos += static_cast<std::size_t>(n);
 			}
@@ -194,7 +194,7 @@ namespace ess
 			}
 		}
 		if (pos != a_dstLen) {
-			throw std::runtime_error("LZ4 frame size mismatch");
+			throw std::runtime_error("LZ4 帧大小不匹配");
 		}
 		return out;
 	}

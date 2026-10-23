@@ -5,7 +5,7 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(r"C:\Users\14034\Documents\deepseek-harness\default-workspace\ResaverPP")
+ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "i18n" / "strings_src.json"
 
 # literals we never want to translate

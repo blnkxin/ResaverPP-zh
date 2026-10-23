@@ -1,4 +1,5 @@
 // ReSaver++ - C++ port of ReSaver (FallrimTools) by Mark Fairchild, Apache License 2.0.
+// 本地化新增：为中文 PDF 报告做 TrueType 字体子集化（详见 README.zh-CN.md）。
 #include "PdfCjk.h"
 
 #include <algorithm>

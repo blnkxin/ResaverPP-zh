@@ -7,7 +7,7 @@ Chinese text renders even on a Windows whose ANSI code page is not 936.
 import re
 from pathlib import Path
 
-ROOT = Path(r"C:\Users\14034\Documents\deepseek-harness\default-workspace\ResaverPP")
+ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "src" / "gui" / "UiGlyphs.h"
 
 FILES = [

@@ -1,4 +1,5 @@
 // ReSaver++ - C++ port of ReSaver (FallrimTools) by Mark Fairchild, Apache License 2.0.
+// 本地化修改：界面、提示与报告文字改为简体中文（详见 README.zh-CN.md）。
 // Mods that are still in a save but no longer in the player's load order: listed when the save is
 // opened, and their leftovers removed after the player confirms (each through the same safety checks
 // as "Remove mod from save"), into a new save file.

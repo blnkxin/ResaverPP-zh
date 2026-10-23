@@ -8,7 +8,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 EXE = ROOT / "release" / "ReSaverPP-中文版" / "ReSaverPP.exe"
 OUT = ROOT / "i18n" / "shots"
-SAVE = Path(os.environ.get("SHOOT_SAVE", r"E:\FFOutput\ES5\profiles\slb\saves\Save3_FDCD2592_0_E788B1E79086_HelgenKeep01_000011_20260905054443_1_1.ess"))
+if not os.environ.get("SHOOT_SAVE"):
+    raise SystemExit("请用 SHOOT_SAVE=<某个 .ess 存档的路径> 指定要截图的存档")
+SAVE = Path(os.environ["SHOOT_SAVE"])
 
 CATS = {
     "overview": 0,

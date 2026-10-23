@@ -1,4 +1,5 @@
 // ReSaver++ - C++ port of ReSaver (FallrimTools) by Mark Fairchild, Apache License 2.0.
+// 本地化修改：界面、提示与报告文字改为简体中文（详见 README.zh-CN.md）。
 // Clean > Remove instances on missing spawned objects: the instances grouped by the mod that provides
 // their script (not installed / disabled / installed), with how many something else still points to,
 // so the player removes the leftovers of mods that are gone and keeps what an installed mod may use.

@@ -1,4 +1,5 @@
 // ReSaver++ - C++ port of ReSaver (FallrimTools) by Mark Fairchild, Apache License 2.0.
+// 本地化修改：界面、提示与报告文字改为简体中文（详见 README.zh-CN.md）。
 // Mods view: the enchanted and charged items of the selected mod found in inventories. Skyrim keeps
 // an item's own enchantment and its max charge (ExtraEnchantment) and its charge left (ExtraCharge) in
 // the save, on that one item, so xEdit never shows them. An item with an enchantment but max charge 0

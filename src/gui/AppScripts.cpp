@@ -1,4 +1,5 @@
 // ReSaver++ - C++ port of ReSaver (FallrimTools) by Mark Fairchild, Apache License 2.0.
+// 本地化修改：界面、提示与报告文字改为简体中文（详见 README.zh-CN.md）。
 // Script viewer: double-click a script anywhere to see its Papyrus source, with syntax colours,
 // matching block keywords, folding, find and an outline; compile it with the game's Papyrus
 // compiler. Modelled on the npp-papyrus Notepad++ plugin (blu3mania/npp-papyrus).

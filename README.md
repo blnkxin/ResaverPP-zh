@@ -1,3 +1,6 @@
+> **简体中文汉化分支**：本仓库是 [ReSaver++](https://github.com/Tonycubed2/ResaverPP) 的简体中文版本，界面与报告已汉化（分支 `zh-cn`，`main` 与上游保持一致）。中文说明见 [README.zh-CN.md](README.zh-CN.md)。
+> This is a Simplified-Chinese localization branch of ReSaver++ — see [README.zh-CN.md](README.zh-CN.md).
+
 # ReSaver++
 
 A C++ port of ReSaver (FallrimTools, by Mark Fairchild) for **Skyrim Special Edition / Anniversary

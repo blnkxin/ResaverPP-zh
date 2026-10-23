@@ -1,4 +1,5 @@
 // ReSaver++ - C++ port of ReSaver (FallrimTools) by Mark Fairchild, Apache License 2.0.
+// 本地化新增：为中文 PDF 报告做 TrueType 字体子集化（详见 README.zh-CN.md）。
 // Subsets a system TrueType font to the characters a report uses, so the PDF report can show Chinese.
 #pragma once
 

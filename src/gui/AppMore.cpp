@@ -1,4 +1,5 @@
 // ReSaver++ - C++ port of ReSaver (FallrimTools) by Mark Fairchild, Apache License 2.0.
+// 本地化修改：界面、提示与报告文字改为简体中文（详见 README.zh-CN.md）。
 // The rest of ReSaver's features: filters, plugin actions, array editing, arrays analysis,
 // plugin list export, log, settings, support links, script (.pex) viewer.
 #include "App.h"

@@ -54,6 +54,24 @@ cmake --build build/vs --config Release --target ReSaverPP resaverpp-cli
 
 > 注意：`ALL_BUILD` 目标在部分受限环境里会异常退出，请像上面那样指定 target。
 
+### 给玩家：一键自编译
+
+不想等发布包 / 担心杀软误报，可以自己编一份（Windows 10/11 x64）：
+
+1. 解压源码包，双击 **`一键编译.cmd`**；
+2. 首次运行会用 winget 安装 Visual Studio Build Tools（约 2–3 GB，10–30 分钟，需要点「是」授予管理员权限），
+   没装 winget 的机器会给出 [Build Tools 下载地址](https://aka.ms/vs/17/release/vs_buildtools.exe)（安装时勾选「使用 C++ 的桌面开发」）；
+3. 编完把 `out\ReSaverPP.exe` 和 `out\resaverpp-cli.exe` 复制出来就能用，脚本会打印两个 exe 的 SHA256。
+
+之后每次重编只要再双击一次（只编译改动的文件，约 1 分钟）。依赖都在 `third_party/` 里，不需要联网（除首次装编译器）。
+
+> **路径含中文也能编**：`rc.exe`（编译 exe 的版本信息）只认 ANSI 路径，源码放在含中文的目录里会直接失败。
+> 脚本检测到路径非 ASCII 时，会自动把源码同步到 `%PUBLIC%\ReSaverPP-build` 里编译，再把 exe 拷回本目录的 `out\`。
+> 英文路径不受影响，缓存约 110 MB，可以随时删掉。
+>
+> 脚本本身是 `一键编译.cmd`（纯 ASCII 启动器）+ `build-player.ps1`（中文提示，**必须保留 UTF-8 BOM**，
+> 否则 Windows PowerShell 5.1 会把中文读成乱码）。
+
 ## 与上游同步
 
 ```bat

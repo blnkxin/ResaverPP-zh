@@ -801,7 +801,7 @@ void App::draw()
 			drawOverview();
 			ImGui::EndChild();
 		} else {
-			const float listW = ImGui::GetContentRegionAvail().x * (_cat == Cat::kMods ? 0.42f : 0.48f);
+			const float listW = ImGui::GetContentRegionAvail().x * (_cat == Cat::kMods ? 0.46f : 0.48f);
 			ImGui::BeginChild("##list", ImVec2(listW, 0), ImGuiChildFlags_Borders);
 			if (_cat == Cat::kMods) {
 				drawModsList();
@@ -2466,7 +2466,7 @@ void App::drawModsList()
 	if (scanning()) {
 		drawBackgroundProgress(0);  // the lists fill in when the scan is done
 	}
-	ImGui::SetNextItemWidth(-260);
+	ImGui::SetNextItemWidth(-360);  // room for the Chinese checkbox label, not just "Only with scripts"
 	bool changed = ImGui::InputTextWithHint("##modfilter", "过滤模组", _filter, sizeof(_filter));
 	ImGui::SameLine();
 	changed |= ImGui::Checkbox("只显示带脚本或附魔物品的模组", &_modsOnlyScripts);
@@ -2550,11 +2550,12 @@ void App::drawModsList()
 		return;
 	}
 	ImGui::TableSetupScrollFreeze(0, 1);
-	ImGui::TableSetupColumn("加载", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch, 0.62f);
+	// 2 字中文表头 + 排序箭头在 0.6 的权重下会被裁成「加」/「运…」: fixed widths for the short columns
+	ImGui::TableSetupColumn("加载", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthFixed, 84.0f);
 	ImGui::TableSetupColumn("模组", ImGuiTableColumnFlags_WidthStretch, 2.48f);
 	ImGui::TableSetupColumn("脚本", ImGuiTableColumnFlags_PreferSortDescending | ImGuiTableColumnFlags_WidthStretch, 1.0f);
 	ImGui::TableSetupColumn("实例", ImGuiTableColumnFlags_PreferSortDescending | ImGuiTableColumnFlags_WidthStretch, 1.0f);
-	ImGui::TableSetupColumn("运行", ImGuiTableColumnFlags_PreferSortDescending | ImGuiTableColumnFlags_WidthStretch, 0.95f);
+	ImGui::TableSetupColumn("运行", ImGuiTableColumnFlags_PreferSortDescending | ImGuiTableColumnFlags_WidthFixed, 84.0f);
 	ImGui::TableHeadersRow();
 
 	if (ImGuiTableSortSpecs* specs = ImGui::TableGetSortSpecs(); specs && (specs->SpecsDirty || changed)) {
@@ -2695,22 +2696,34 @@ void App::detailMod(std::uint64_t k)
 	}
 	// The Chinese labels are wider than the English ones were: lay the buttons out by their real
 	// width and start a new line when a button would not fit (the pane is resizable).
-	const std::string btnTerminate = Fmt("终止全部线程（%zu）", allThreads.size());
-	const std::string btnStop = Fmt("停止全部（%zu）", allThreads.size());
-	const std::string btnKillScripts = Fmt("强制结束全部脚本（%zu）", allInst.size());
-	const std::string btnKillAll = Fmt("强制结束所有实例（%zu）", everyInst.size());
+	const std::string btnTerminate = Fmt("终止线程（%zu）", allThreads.size());
+	const std::string btnStop = Fmt("停止线程（%zu）", allThreads.size());
+	const std::string btnKillScripts = Fmt("强制结束脚本（%zu）", allInst.size());
+	const std::string btnKillAll = Fmt("强制结束实例（%zu）", everyInst.size());
 	const std::string btnReport = "报告…";
 	const std::string btnRemove = "从存档移除模组…";
-	const float       rowEnd = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
-	bool              firstOnRow = true;
-	auto              place = [&](const std::string& a_label) {
+	// leave room for the pane's scrollbar/padding: at the exact boundary ImGui overflowed the child
+	const float rowEnd = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ScrollbarSize;
+	// A button leaves the cursor at the start of the NEXT line, so the end of the row has to be tracked
+	// here (GetCursorPosX() after a button is the line start, not the button's right edge).
+	float rowX = ImGui::GetCursorPosX();
+	bool  firstOnRow = true;
+	auto  place = [&](const std::string& a_label) {
         const float w = ImGui::CalcTextSize(a_label.c_str()).x + ImGui::GetStyle().FramePadding.x * 2.0f;
-        if (!firstOnRow && ImGui::GetCursorPosX() + w > rowEnd) {
-            ImGui::NewLine();
-        } else if (!firstOnRow) {
-            ImGui::SameLine();
+        if (!firstOnRow) {
+            const float nextX = rowX + ImGui::GetStyle().ItemSpacing.x;
+            if (nextX + w > rowEnd) {
+                ImGui::NewLine();
+                rowX = ImGui::GetCursorPosX();
+            } else {
+                ImGui::SameLine(nextX);
+                rowX = nextX;
+            }
+        } else {
+            rowX = ImGui::GetCursorPosX();
         }
         firstOnRow = false;
+        rowX += w;
 	};
 	ImGui::BeginDisabled(allThreads.empty());
 	place(btnTerminate);
@@ -2775,13 +2788,13 @@ void App::detailMod(std::uint64_t k)
 					   ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp)) {
 		// click a header to sort; click again to reverse
 		ImGui::TableSetupColumn("脚本", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_PreferSortAscending, 1.3f, 0);
-		ImGui::TableSetupColumn("实例", ImGuiTableColumnFlags_PreferSortDescending | ImGuiTableColumnFlags_WidthStretch, 0.42f, 1);
-		ImGui::TableSetupColumn("运行", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending | ImGuiTableColumnFlags_WidthStretch,
-			0.38f, 2);
+		ImGui::TableSetupColumn("实例", ImGuiTableColumnFlags_PreferSortDescending | ImGuiTableColumnFlags_WidthFixed, 84.0f, 1);
+		ImGui::TableSetupColumn("运行", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending | ImGuiTableColumnFlags_WidthFixed,
+			84.0f, 2);
 		if (_mods->hasSources) {
-			ImGui::TableSetupColumn("来源", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_PreferSortAscending, 0.6f, 3);
+			ImGui::TableSetupColumn("来源", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_PreferSortAscending, 0.8f, 3);
 		}
-		ImGui::TableSetupColumn("", ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_WidthStretch, 1.9f, 4);
+		ImGui::TableSetupColumn("", ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_WidthFixed, 220.0f, 4);
 		ImGui::TableHeadersRow();
 
 		std::vector<const mods::ScriptRow*> list;

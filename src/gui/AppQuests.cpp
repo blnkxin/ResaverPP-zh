@@ -71,17 +71,17 @@ const App::QuestPreview& App::questPreview(std::uint32_t a_formID)
 	pv.done = true;
 	const auto* def = _db ? _db->quest(a_formID) : nullptr;
 	if (!def) {
-		pv.error = "The plugins are not read yet (Options > Settings: mods folder, then names are read automatically).";
+		pv.error = "插件还没有读取（选项 > 设置：模组文件夹，之后会自动读取名称）。";
 		return pv;
 	}
 	if (def->fragmentScript.empty()) {
-		pv.error = "This quest has no stage scripts.";
+		pv.error = "这个任务没有阶段脚本。";
 		return pv;
 	}
 	try {
 		const auto px = _sources.findPex(def->fragmentScript);
 		if (!px) {
-			pv.error = "Its stage script " + def->fragmentScript + ".pex was not found in your mods.";
+			pv.error = "它的阶段脚本 " + def->fragmentScript + ".pex 没在你的模组里找到。";
 			return pv;
 		}
 		const auto file = pex::Read(ScriptSources::readPex(*px));
@@ -94,7 +94,7 @@ const App::QuestPreview& App::questPreview(std::uint32_t a_formID)
 			}
 		}
 	} catch (const std::exception& e) {
-		pv.error = std::string("Could not read its stage script: ") + e.what();
+		pv.error = std::string("读不出它的阶段脚本：") + e.what();
 	}
 	return pv;
 }
@@ -257,23 +257,23 @@ void App::drawQuestsList()
 			shownDone += n;
 		}
 	}
-	ImGui::TextUnformatted(Fmt("Your journal shows %zu objective(s).", shown).c_str());
+	ImGui::TextUnformatted(Fmt("任务日志里显示了 %zu 个目标。", shown).c_str());
 	if (shownDone) {
 		ImGui::SameLine();
-		TextColored(theme::Warn(), Fmt("%zu of them belong to quests that are completed or stopped.", shownDone));
+		TextColored(theme::Warn(), Fmt("其中 %zu 个属于已完成或已停止的任务。", shownDone));
 	}
 	drawRefreshJournal(true);
 	if (!_db) {
-		Dim(namesLoading() ? "Reading your plugins for quest names, stages and journal text..."
-						   : "Quest names, stages and journal text come from your plugins: set your mods folder in Options > Settings.");
+		Dim(namesLoading() ? "正在读取插件，以取得任务名称、阶段和任务日志文本…"
+						   : "任务名称、阶段和日志文本来自你的插件：请在 选项 > 设置 里设置模组文件夹。");
 	}
 	ImGui::Separator();
 
 	ImGui::SetNextItemWidth(-220);
-	ImGui::InputTextWithHint("##qfilter", "filter by name, editor ID or form ID", _questFilter, sizeof(_questFilter));
+	ImGui::InputTextWithHint("##qfilter", "按名称、编辑器 ID 或 Form ID 过滤", _questFilter, sizeof(_questFilter));
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(-1);
-	const char* shows[] = { "In the journal", "Running", "Completed", "All" };
+	const char* shows[] = { "在日志中", "进行中", "已完成", "全部" };
 	ImGui::Combo("##qshow", &_questShow, shows, 4);
 
 	struct Row
@@ -317,11 +317,12 @@ void App::drawQuestsList()
 	if (ImGui::BeginTable("quests", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable |
 										   ImGuiTableFlags_SizingStretchProp)) {
 		ImGui::TableSetupScrollFreeze(0, 1);
-		ImGui::TableSetupColumn("Quest", ImGuiTableColumnFlags_WidthStretch, 4.0f);
-		ImGui::TableSetupColumn("Form ID", ImGuiTableColumnFlags_WidthStretch, 1.0f);
-		ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch, 1.6f);
-		ImGui::TableSetupColumn("Stage", ImGuiTableColumnFlags_WidthStretch, 0.7f);
-		ImGui::TableSetupColumn("Shown", ImGuiTableColumnFlags_WidthStretch, 0.7f);
+		// the form ID is always 8 hex digits: a stretch weight squeezed it to 7 ("0003372...")
+		ImGui::TableSetupColumn("任务", ImGuiTableColumnFlags_WidthStretch, 3.4f);
+		ImGui::TableSetupColumn("Form ID", ImGuiTableColumnFlags_WidthFixed, 86.0f);
+		ImGui::TableSetupColumn("状态", ImGuiTableColumnFlags_WidthStretch, 1.5f);
+		ImGui::TableSetupColumn("阶段", ImGuiTableColumnFlags_WidthFixed, 64.0f);
+		ImGui::TableSetupColumn("显示", ImGuiTableColumnFlags_WidthFixed, 64.0f);
 		ImGui::TableHeadersRow();
 		ImGuiListClipper clip;
 		clip.Begin(static_cast<int>(rows.size()));
@@ -375,7 +376,7 @@ void App::drawQuestDetail()
 		}
 	}
 	if (!q) {
-		Dim("Click a quest to see its stages, journal entries and objectives, and what completing it gives.");
+		Dim("点击一个任务，查看它的阶段、日志条目和目标，以及完成它会带来什么。");
 		return;
 	}
 	const auto* def = _db ? _db->quest(q->formID) : nullptr;
@@ -384,7 +385,7 @@ void App::drawQuestDetail()
 
 	ImGui::TextUnformatted(def && !def->name.empty() ? def->name.c_str() : (def ? def->edid.c_str() : Fmt("%08X", q->formID).c_str()));
 	Dim(Fmt("%s  |  %08X  |  %s", def ? def->edid.c_str() : "?", q->formID, def ? _db->plugins()[def->plugin].c_str() : _save->pluginOf(q->formID).c_str()));
-	ImGui::Text("In this save: %s, highest stage done %d, %zu objective(s) shown in the journal", q->statusText(), q->highestDoneStage(), q->shownObjectives());
+	ImGui::Text("本存档中：%s，已完成最高阶段 %d，日志里显示 %zu 个目标", q->statusText(), q->highestDoneStage(), q->shownObjectives());
 	if (live) {
 		auto it = _liveQuests.find(q->formID);
 		if (it != _liveQuests.end() && it->second.valid) {
@@ -438,11 +439,11 @@ void App::drawQuestDetail()
 		}
 	}
 	_setStageIdx = std::clamp(_setStageIdx, 0, std::max(0, static_cast<int>(stageList.size()) - 1));
-	ImGui::SetNextItemWidth(110);
+	ImGui::SetNextItemWidth(150);  // "阶段 1000" needs more room than "stage 1000"
 	ImGui::BeginDisabled(stageList.empty());
-	if (ImGui::BeginCombo("##stage", stageList.empty() ? "stage" : Fmt("stage %u", stageList[_setStageIdx]).c_str())) {
+	if (ImGui::BeginCombo("##stage", stageList.empty() ? "阶段" : Fmt("阶段 %u", stageList[_setStageIdx]).c_str())) {
 		for (int i = 0; i < static_cast<int>(stageList.size()); ++i) {
-			if (ImGui::Selectable(Fmt("stage %u", stageList[i]).c_str(), i == _setStageIdx)) {
+			if (ImGui::Selectable(Fmt("阶段 %u", stageList[i]).c_str(), i == _setStageIdx)) {
 				_setStageIdx = i;
 			}
 		}
@@ -462,42 +463,42 @@ void App::drawQuestDetail()
 	}
 	ImGui::SameLine();
 	ImGui::BeginDisabled(!def || def->edid.empty() || (completion.empty() && stageList.empty()));
-	if (ImGui::Button("Copy console command") && def) {
+	if (ImGui::Button("复制控制台命令") && def) {
 		const auto st = completion.empty() ? stageList[_setStageIdx] : completion.front();
 		ImGui::SetClipboardText(Fmt("setstage %s %u", def->edid.c_str(), st).c_str());
-		_status = Fmt("Copied: setstage %s %u  (paste it into the game's console with Ctrl+V)", def->edid.c_str(), st);
+		_status = Fmt("已复制：setstage %s %u （在游戏控制台里按 Ctrl+V 粘贴）", def->edid.c_str(), st);
 	}
 	ImGui::EndDisabled();
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-		ImGui::SetTooltip("Copies the console command that completes the quest (its completion stage), or sets the stage picked on the left.");
+		ImGui::SetTooltip("复制能完成该任务的控制台命令（用它的完成阶段），或设置左侧选中的阶段。");
 	}
 
 	if (!def) {
 		ImGui::Spacing();
-		Dim("Stages, journal entries and objectives are read from your plugins once your mods folder is set.");
+		Dim("设置好模组文件夹后，阶段、日志条目和目标就从你的插件里读取。");
 		return;
 	}
 
 	// ---- what completing it does
 	if (!completion.empty()) {
-		ImGui::SeparatorText("What completing it does");
+		ImGui::SeparatorText("完成它会发生什么");
 		const auto& pv = questPreview(q->formID);
 		if (!pv.error.empty()) {
 			Dim(pv.error);
 		}
 		for (const auto& [st, body] : pv.bodies) {
-			ImGui::Text("Stage %u completes the quest.", st);
+			ImGui::Text("阶段 %u 完成该任务。", st);
 			const auto effects = quests::ScanEffects(body);
 			if (body.empty()) {
-				Dim("  Its stage has no script.");
+				Dim("  这个阶段没有脚本。");
 			} else if (effects.empty()) {
-				Dim("  Its script gives nothing directly (rewards, if any, come from other scripts or dialogue).");
+				Dim("  它的脚本不直接给出任何东西（奖励如有，来自其他脚本或对话）。");
 			}
 			for (const auto& e : effects) {
 				const auto col = e.kind == quests::Effect::Kind::kReward ? theme::Good() : e.kind == quests::Effect::Kind::kQuest ? theme::Warn() : theme::Dim();
-				TextColored(col, (e.kind == quests::Effect::Kind::kReward ? "  gives / changes:  " : e.kind == quests::Effect::Kind::kQuest ? "  quests:  " : "  calls:  ") + e.line);
+				TextColored(col, (e.kind == quests::Effect::Kind::kReward ? "  给予 / 改变：  " : e.kind == quests::Effect::Kind::kQuest ? "  任务：  " : "  调用：  ") + e.line);
 			}
-			if (!body.empty() && ImGui::TreeNode(Fmt("##body%u", st).c_str(), "Its full script (%zu lines)", body.size())) {
+			if (!body.empty() && ImGui::TreeNode(Fmt("##body%u", st).c_str(), "它的完整脚本（%zu 行）", body.size())) {
 				if (monoFont) {
 					ImGui::PushFont(monoFont);
 				}
@@ -511,11 +512,11 @@ void App::drawQuestDetail()
 			}
 		}
 		// the properties the script uses, so names like JarlRewardLightArmor can be looked up
-		if (!def->properties.empty() && ImGui::TreeNode("props", "Properties of its stage script (%zu)", def->properties.size())) {
+		if (!def->properties.empty() && ImGui::TreeNode("props", "它的阶段脚本的属性（%zu）", def->properties.size())) {
 			for (const auto& p : def->properties) {
 				std::string v = p.type == 1 ? formText(p.form) : p.text;
 				if (p.type == 1 && p.alias >= 0) {
-					v = Fmt("alias %d of this quest", p.alias);
+					v = Fmt("本任务的别名 %d", p.alias);
 				}
 				ImGui::BulletText("%s = %s", p.name.c_str(), v.c_str());
 			}
@@ -524,11 +525,11 @@ void App::drawQuestDetail()
 	}
 
 	// ---- stages
-	ImGui::SeparatorText(Fmt("Stages (%zu)", def->stages.size()).c_str());
+	ImGui::SeparatorText(Fmt("阶段（%zu）", def->stages.size()).c_str());
 	if (ImGui::BeginTable("stages", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
-		ImGui::TableSetupColumn("Stage", ImGuiTableColumnFlags_WidthStretch, 0.7f);
-		ImGui::TableSetupColumn("Done", ImGuiTableColumnFlags_WidthStretch, 0.5f);
-		ImGui::TableSetupColumn("Journal entry", ImGuiTableColumnFlags_WidthStretch, 6.0f);
+		ImGui::TableSetupColumn("阶段", ImGuiTableColumnFlags_WidthStretch, 0.7f);
+		ImGui::TableSetupColumn("完成", ImGuiTableColumnFlags_WidthFixed, 80.0f);  // "已完成" wrapped to 3 lines at 0.5
+		ImGui::TableSetupColumn("日志条目", ImGuiTableColumnFlags_WidthStretch, 6.0f);
 		ImGui::TableHeadersRow();
 		for (const auto& s : def->stages) {
 			bool done = false;
@@ -540,7 +541,7 @@ void App::drawQuestDetail()
 			ImGui::Text("%u", s.index);
 			ImGui::TableNextColumn();
 			if (done) {
-				TextColored(theme::Good(), "done");
+				TextColored(theme::Good(), "已完成");
 			}
 			ImGui::TableNextColumn();
 			std::string text;
@@ -550,10 +551,10 @@ void App::drawQuestDetail()
 				}
 			}
 			if (s.completes()) {
-				TextColored(theme::Good(), "[completes the quest]");
+				TextColored(theme::Good(), "［完成任务］");
 			}
 			if (s.fails()) {
-				TextColored(theme::Bad(), "[fails the quest]");
+				TextColored(theme::Bad(), "［使任务失败］");
 			}
 			if (!text.empty()) {
 				ImGui::TextWrapped("%s", text.c_str());
@@ -563,11 +564,11 @@ void App::drawQuestDetail()
 	}
 
 	// ---- objectives
-	ImGui::SeparatorText(Fmt("Objectives (%zu)", def->objectives.size()).c_str());
+	ImGui::SeparatorText(Fmt("目标（%zu）", def->objectives.size()).c_str());
 	if (ImGui::BeginTable("objs", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
 		ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthStretch, 0.5f);
-		ImGui::TableSetupColumn("In this save", ImGuiTableColumnFlags_WidthStretch, 1.4f);
-		ImGui::TableSetupColumn("Objective", ImGuiTableColumnFlags_WidthStretch, 5.0f);
+		ImGui::TableSetupColumn("本存档中", ImGuiTableColumnFlags_WidthStretch, 1.4f);
+		ImGui::TableSetupColumn("目标", ImGuiTableColumnFlags_WidthStretch, 5.0f);
 		ImGui::TableHeadersRow();
 		for (const auto& o : def->objectives) {
 			int state = 0;

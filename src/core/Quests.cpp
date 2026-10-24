@@ -131,7 +131,7 @@ namespace ess::quests
 						ReadObject(r, a_objFormat, a_rt, f, a);
 						p.forms.push_back(f);
 					}
-					p.text = std::to_string(n) + " object(s)";
+					p.text = std::to_string(n) + " 个对象";
 					break;
 				}
 			case 12:
@@ -167,7 +167,7 @@ namespace ess::quests
 					break;
 				}
 			default:
-				throw std::runtime_error("unknown VMAD property type " + std::to_string(p.type));
+				throw std::runtime_error("未知的 VMAD 属性类型 " + std::to_string(p.type));
 			}
 			return p;
 		}
@@ -348,26 +348,26 @@ namespace ess::quests
 	const char* QuestState::statusText() const
 	{
 		if (!hasFlags) {
-			return "not started / unknown";
+			return "未开始 / 未知";
 		}
 		if (failed()) {
-			return "failed";
+			return "失败";
 		}
 		if (completed()) {
-			return running() ? "completed (still running)" : "completed";
+			return running() ? "已完成（仍在运行）" : "已完成";
 		}
-		return running() ? "running" : "stopped";
+		return running() ? "进行中" : "已停止";
 	}
 
 	const char* ObjectiveStateText(std::int32_t a_state)
 	{
 		switch (a_state) {
-		case 0: return "not shown";
-		case 1: return "shown";
-		case 2: return "completed";
-		case 3: return "completed, shown";
-		case 4: return "failed";
-		case 5: return "failed, shown";
+		case 0: return "未显示";
+		case 1: return "已显示";
+		case 2: return "已完成";
+		case 3: return "已完成，已显示";
+		case 4: return "已失败";
+		case 5: return "已失败，已显示";
 		default: return "?";
 		}
 	}

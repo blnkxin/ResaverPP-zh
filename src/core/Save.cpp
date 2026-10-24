@@ -279,7 +279,7 @@ namespace ess
 			const auto compressed = hr.u32();
 			hr.need(compressed);
 			if (hr.remaining() > compressed) {
-				save->problems.push_back(std::to_string(hr.remaining() - compressed) + " byte(s) after the compressed data");
+				save->problems.push_back(std::to_string(hr.remaining() - compressed) + " 个字节位于压缩数据之后");
 			}
 			if (save->header.compression == Compression::kLZ4) {
 				bodyStore = DecompressLZ4(hr.here(), compressed, uncompressed);
@@ -291,7 +291,7 @@ namespace ess
 			body = bodyStore.data();
 			bodyLen = bodyStore.size();
 			if (bodyLen != uncompressed) {
-				save->problems.push_back("the data unpacks to " + std::to_string(bodyLen) + " bytes, the header says " + std::to_string(uncompressed));
+				save->problems.push_back("数据解压后是 " + std::to_string(bodyLen) + " 字节，文件头写的是 " + std::to_string(uncompressed));
 			}
 		}
 		save->originalBodySize = bodyLen;
@@ -353,29 +353,29 @@ namespace ess
 		// otherwise bytes in between would be lost (or invented) when the save is written again
 		auto expect = [&](std::uint32_t a_fileOffset, const char* a_what) {
 			if (a_fileOffset >= base && r.pos() != a_fileOffset - base) {
-				save->problems.push_back(std::string(a_what) + " does not start where the previous section ends (" +
+				save->problems.push_back(std::string(a_what) + " 没有从上一段结束的位置开始（有 " +
 										 std::to_string(static_cast<long long>(a_fileOffset - base) - static_cast<long long>(r.pos())) +
-										 " byte(s) unaccounted for)");
+										 " 个字节没有着落）");
 			}
 		};
 		at(t.table1Offset);
 		for (std::uint32_t i = 0; i < t.table1Count; ++i) {
 			save->table1.push_back(ReadGlobal(r));
 		}
-		expect(t.table2Offset, "global data table 2");
+		expect(t.table2Offset, "全局数据表 2");
 		for (std::uint32_t i = 0; i < t.table2Count; ++i) {
 			save->table2.push_back(ReadGlobal(r));
 		}
-		expect(t.changeFormsOffset, "the change forms");
+		expect(t.changeFormsOffset, "变更表单段");
 		save->changeForms.reserve(t.changeFormCount);
 		for (std::uint32_t i = 0; i < t.changeFormCount; ++i) {
 			save->changeForms.push_back(ReadChangeForm(r));
 		}
-		expect(t.table3Offset, "global data table 3");
+		expect(t.table3Offset, "全局数据表 3");
 		for (std::uint32_t i = 0; i < t.table3Count; ++i) {
 			save->table3.push_back(ReadGlobal(r));
 		}
-		expect(t.formIDArrayCountOffset, "the form ID array");
+		expect(t.formIDArrayCountOffset, "Form ID 数组段");
 
 		r.seek(t.formIDArrayCountOffset - base + 4 + 4 * static_cast<std::size_t>(formIDCount));
 		const auto wsCount = r.u32();
@@ -394,7 +394,7 @@ namespace ess
 		if (auto* p = save->papyrus()) {
 			p->reindex();
 			for (auto& msg : p->check()) {
-				save->problems.push_back("Papyrus: " + msg);
+				save->problems.push_back("Papyrus：" + msg);
 			}
 		}
 		return save;
@@ -521,11 +521,11 @@ namespace ess
 			}
 			auto check = SaveFile::load(tmp);
 			if (!check->papyrus()) {
-				throw std::runtime_error("the written save has no Papyrus section");
+				throw std::runtime_error("写出的存档没有 Papyrus 区块");
 			}
 		} catch (const std::exception& e) {
 			cleanup();
-			throw std::runtime_error(std::string("could not write the new save (nothing was changed): ") + e.what());
+			throw std::runtime_error(std::string("无法写出新存档（什么都没改动）：") + e.what());
 		}
 
 		// 2. back up what is there, as one generation for both files
@@ -548,7 +548,7 @@ namespace ess
 				res.backup += suffix;
 				if (!std::filesystem::copy_file(a_path, res.backup, ec) || ec) {
 					cleanup();
-					throw std::runtime_error("could not back up " + a_path.filename().string() + " (" + ec.message() + "); nothing was changed");
+					throw std::runtime_error("无法备份 " + a_path.filename().string() + "（" + ec.message() + "）；什么都没改动");
 				}
 			}
 			if (hadCo) {
@@ -556,7 +556,7 @@ namespace ess
 				res.cosaveBackup += suffix;
 				if (!std::filesystem::copy_file(co, res.cosaveBackup, ec) || ec) {
 					cleanup();
-					throw std::runtime_error("could not back up " + co.filename().string() + " (" + ec.message() + "); nothing was changed");
+					throw std::runtime_error("无法备份 " + co.filename().string() + "（" + ec.message() + "）；什么都没改动");
 				}
 			}
 		}
@@ -565,7 +565,7 @@ namespace ess
 		std::filesystem::rename(tmp, a_path, ec);
 		if (ec) {
 			cleanup();
-			throw std::runtime_error("could not replace " + a_path.filename().string() + " (" + ec.message() + "); nothing was changed");
+			throw std::runtime_error("无法替换 " + a_path.filename().string() + "（" + ec.message() + "）；什么都没改动");
 		}
 		if (!cosave.empty()) {
 			std::filesystem::rename(tmpCo, co, ec);
@@ -579,8 +579,8 @@ namespace ess
 					restored = std::filesystem::remove(a_path, e2) && !e2;
 				}
 				cleanup();
-				throw std::runtime_error("could not write the co-save " + co.filename().string() + " (" + why + "); " +
-										 (restored ? "the save was put back as it was" : "the save could not be put back: restore it from its .bak copy"));
+				throw std::runtime_error("无法写入协同存档 " + co.filename().string() + "（" + why + "）；" +
+										 (restored ? "存档已恢复原样" : "存档无法恢复原样：请从它的 .bak 副本还原"));
 			}
 		}
 		return res;

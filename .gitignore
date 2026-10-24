@@ -16,3 +16,5 @@ i18n/strings_src.json
 i18n/report_real.*
 *.zip
 
+# python caches
+__pycache__/

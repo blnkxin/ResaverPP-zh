@@ -10,26 +10,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "src" / "gui" / "UiGlyphs.h"
 
-FILES = [
-    "src/gui/App.cpp",
-    "src/gui/AppScripts.cpp",
-    "src/gui/AppMore.cpp",
-    "src/gui/AppTools.cpp",
-    "src/gui/AppMissing.cpp",
-    "src/gui/AppCharges.cpp",
-    "src/gui/AppOrphans.cpp",
-    "src/gui/App.h",
-    "src/gui/Platform.cpp",
-    "src/gui/main.cpp",
-    "src/gui/Theme.cpp",
-    "src/core/Ops.cpp",
-    "src/core/Report.cpp",
-    "src/core/Orphans.cpp",
-    "src/core/Compare.cpp",
-    "src/core/Mods.cpp",
-    "src/core/ModRemove.cpp",
-    "src/core/ScriptSources.cpp",
-]
+def sources() -> list:
+    """Every source file under src/: a whitelist went stale silently (Bsa.cpp, Save.cpp, Quests.cpp and
+    AppQuests.cpp were translated but never scanned), and new upstream files are easy to forget."""
+    return sorted(str(p.relative_to(ROOT)).replace("\\", "/") for p in (ROOT / "src").rglob("*") if p.suffix in (".cpp", ".h"))
+
 
 # ranges the base UI font usually lacks that Chinese text needs
 EXTRA = list(range(0x3000, 0x3040)) + list(range(0xFF01, 0xFF5F)) + list(range(0x2000, 0x2070))
@@ -38,7 +23,7 @@ KEEP_BELOW = 0x2000   # Latin, Greek, Cyrillic etc. come from the base font
 
 def main() -> None:
     cps = set(EXTRA)
-    for rel in FILES:
+    for rel in sources():
         p = ROOT / rel
         if not p.exists():
             print("missing", rel)

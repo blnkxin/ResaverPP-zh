@@ -228,13 +228,13 @@ void App::drawMissingBanner()
 		msg += (msg.empty() ? "" : " ") + Fmt("其中 %zu 个脚本已不再安装于任何位置。", _missingScripts.size());
 	}
 	if (!_unfoundScripts.empty()) {
-		msg += (msg.empty() ? "" : " ") + Fmt("%zu script(s) were not found in your mods (the game still had them when it saved).", _unfoundScripts.size());
+		msg += (msg.empty() ? "" : " ") + Fmt("%zu 个脚本没在你的模组里找到（做这个存档时游戏仍在加载它们）。", _unfoundScripts.size());
 	}
 	if (!_installKnown && scanning()) {
 		msg += "  正在检查哪些仍然安装着（正在扫描你的模组）…";
 	}
 	if (_orderSuspect || _scanSuspect) {
-		msg += "  This looks wrong (see the review): nothing is ticked.";
+		msg += "  看起来不对（见复查）：没有勾选任何项。";
 	}
 	TextColored(theme::Warn(), msg);
 	if (scanning()) {
@@ -251,7 +251,7 @@ void App::drawMissingBanner()
 		_missingDismissed = true;
 	}
 	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("Hides this until the next save is opened. Clean > Mods and scripts no longer installed... brings it back.");
+		ImGui::SetTooltip("隐藏到下次打开存档为止。清理 > 已不再安装的模组与脚本… 可以让它重新出现。");
 	}
 	ImGui::EndChild();
 	ImGui::PopStyleColor();
@@ -283,12 +283,12 @@ void App::drawMissingModal()
 		TextColored(theme::Warn(), "尚未设置模组文件夹（选项 > 设置），因此 ReSaver++ 无法区分已卸载的模组和已禁用的模组： "
 						   "没有勾选任何一项。");
 	}
-	TextColored(theme::Dim(), "Load order read from: " + platform::ToUtf8(_missingFile) +
-								  (_installKnown ? "    Mods folder: " + _sourcesPath : std::string()));
+	TextColored(theme::Dim(), "加载顺序读取自：" + platform::ToUtf8(_missingFile) +
+								  (_installKnown ? "    模组文件夹：" + _sourcesPath : std::string()));
 	if (_orderSuspect) {
-		TextColored(theme::Bad(), Fmt("This load order does not match the save: only %zu of the save's %zu plugins are in it. It is probably the "
-									  "wrong file (another profile, or an old plugins.txt). Nothing is ticked. Pick the right MO2 profile in the "
-									  "Mods view, or check Options > Settings.",
+		TextColored(theme::Bad(), Fmt("这个加载顺序和存档对不上：存档的 %zu 个插件里只有 %zu 个在其中。多半是选错了文件"
+									  "（别的配置，或旧的 plugins.txt）。没有勾选任何项。请在模组视图里选对 MO2 配置，或检查 "
+									  "选项 > 设置。",
 									  _activeInSave, _save ? _save->plugins.full.size() + _save->plugins.lite.size() : 0));
 	}
 	if (_installKnown && !_sources.errors.empty()) {
@@ -297,16 +297,16 @@ void App::drawMissingModal()
 			list += "\n    " + _sources.errors[i];
 		}
 		if (_sources.errors.size() > 6) {
-			list += Fmt("\n    ... and %zu more", _sources.errors.size() - 6);
+			list += Fmt("\n    … 还有 %zu 个", _sources.errors.size() - 6);
 		}
-		TextColored(theme::Warn(), Fmt("%zu archive(s) or folder(s) could not be read, so a script \"not found\" may just be in one of them. "
-									   "Missing scripts are not ticked:",
+		TextColored(theme::Warn(), Fmt("%zu 个归档或文件夹读不出来，所以“没找到”的脚本可能就在其中一个里。"
+									   "缺失的脚本没有勾选：",
 									   _sources.errors.size()) +
 									   list);
 	}
 	if (_scanSuspect) {
-		TextColored(theme::Bad(), Fmt("The mods scan found only %zu of the %zu plugins your load order enables, so it probably looked in the wrong "
-									  "folder. Nothing is ticked: check the mods folder in Options > Settings.",
+		TextColored(theme::Bad(), Fmt("模组扫描只找到 %zu 个，而你的加载顺序启用了 %zu 个插件，所以多半是扫错了文件夹。"
+									  "没有勾选任何项：请在 选项 > 设置 里检查模组文件夹。",
 									  _activeFound, _activeChecked));
 	}
 	ImGui::Separator();

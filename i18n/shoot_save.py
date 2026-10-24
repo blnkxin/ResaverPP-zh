@@ -6,11 +6,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-EXE = ROOT / "release" / "ReSaverPP-中文版" / "ReSaverPP.exe"
+EXE = ROOT / "build" / "vs" / "Release" / "ReSaverPP.exe"
+if not EXE.exists():
+    EXE = ROOT / "release" / "ReSaverPP-中文版" / "ReSaverPP.exe"
 OUT = ROOT / "i18n" / "shots"
 if not os.environ.get("SHOOT_SAVE"):
     raise SystemExit("请用 SHOOT_SAVE=<某个 .ess 存档的路径> 指定要截图的存档")
 SAVE = Path(os.environ["SHOOT_SAVE"])
+DELAY = float(os.environ.get("SHOOT_DELAY", "3.0"))
 
 CATS = {
     "overview": 0,
@@ -26,10 +29,11 @@ CATS = {
     "messages": 10,
     "suspended": 11,
     "unbinds": 12,
+    "quests": 13,
 }
 
 
-def shoot(name: str, cat: int, delay: float = 3.0, extra: dict | None = None) -> None:
+def shoot(name: str, cat: int, delay: float = DELAY, extra: dict | None = None) -> None:
     ppm = OUT / f"save_{name}.ppm"
     png = OUT / f"save_{name}.png"
     if ppm.exists():
@@ -63,5 +67,9 @@ if __name__ == "__main__":
     for n in names:
         if n == "analysis":
             shoot(n, 0, 5.0, {"RESAVERPP_TEST_ANALYSIS": "1"})
+        elif ":" in n:
+            # "quests:0003372B" - the quest page with that quest selected (test hook of App::testOpen)
+            view, fid = n.split(":", 1)
+            shoot(f"quest_{fid}", CATS.get(view, 13), DELAY, {"RESAVERPP_TEST_OPEN": f"quest:{fid}"})
         else:
-            shoot(n, CATS.get(n, 0), 3.0)
+            shoot(n, CATS.get(n, 0), DELAY)

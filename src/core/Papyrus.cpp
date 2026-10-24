@@ -697,8 +697,8 @@ namespace ess
 			}
 		}
 		if (badStr) {
-			out.push_back(std::to_string(badStr) + " string reference(s) point past the end of the string table (" + std::to_string(strings.size()) +
-						  " strings)");
+			out.push_back(std::to_string(badStr) + " 个字符串引用指向字符串表末尾之外（表里共 " + std::to_string(strings.size()) +
+						  " 个字符串）");
 		}
 
 		auto dups = [&](const char* what, auto ids) {
@@ -709,7 +709,7 @@ namespace ess
 				for (std::size_t i = 1; i < ids.size(); ++i) {
 					c += ids[i] == ids[i - 1] ? 1 : 0;
 				}
-				out.push_back(std::to_string(c) + " duplicate " + what + " id(s)");
+				out.push_back(std::to_string(c) + " 个重复的" + what + " id");
 			}
 		};
 		{
@@ -717,26 +717,26 @@ namespace ess
 			for (const auto& i : instances) {
 				v.push_back(i.id);
 			}
-			dups("script instance", v);
-			dups("script instance data", instanceDataOrder);
+			dups("脚本实例", v);
+			dups("脚本实例数据", instanceDataOrder);
 			v.clear();
 			for (const auto& x : references) {
 				v.push_back(x.id);
 			}
-			dups("reference", v);
-			dups("reference data", referenceDataOrder);
+			dups("引用", v);
+			dups("引用数据", referenceDataOrder);
 			v.clear();
 			for (const auto& a : arrays) {
 				v.push_back(a.id);
 			}
-			dups("array", v);
-			dups("array data", arrayDataOrder);
+			dups("数组", v);
+			dups("数组数据", arrayDataOrder);
 			std::vector<ThreadID> t;
 			for (const auto& a : activeScripts) {
 				t.push_back(a.id);
 			}
-			dups("thread", t);
-			dups("thread data", activeDataOrder);
+			dups("线程", t);
+			dups("线程数据", activeDataOrder);
 		}
 		std::size_t noData = 0;
 		for (const auto& i : instances) {
@@ -752,7 +752,7 @@ namespace ess
 			noData += a.data ? 0 : 1;
 		}
 		if (noData) {
-			out.push_back(std::to_string(noData) + " element(s) listed without their saved data");
+			out.push_back(std::to_string(noData) + " 个元素在列表里却没有对应的存档数据");
 		}
 		return out;
 	}

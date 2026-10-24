@@ -1,0 +1,153 @@
+name: Release
+
+# 打一个 v* 标签（例如 v19.6）就会：跑单元测试 → 编译 GUI + CLI → 打成 7z → 建一个 GitHub Release。
+# 也可以在 Actions 页面手动 Run workflow（会重新发布当前标签）。
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 版本号（来自 CMakeLists.txt）
+        id: ver
+        shell: pwsh
+        run: |
+          $m = Select-String -Path CMakeLists.txt -Pattern 'project\(ReSaverPP VERSION ([0-9.]+)'
+          if (-not $m) { throw "CMakeLists.txt 里找不到 project(ReSaverPP VERSION ...)" }
+          $v = $m.Matches[0].Groups[1].Value
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "version = $v"
+
+      - name: 标签和版本号对得上吗
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}" -replace '^v', ''
+          if ($tag -ne "${{ steps.ver.outputs.version }}") {
+            throw "标签是 ${{ github.ref_name }}，但 CMakeLists.txt 写的是 ${{ steps.ver.outputs.version }}"
+          }
+
+      - name: 单元测试
+        shell: pwsh
+        run: |
+          cmake -S . -B build-test -G Ninja -DCMAKE_BUILD_TYPE=Release -DRESAVERPP_TESTS=ON -DRESAVERPP_GUI=OFF
+          cmake --build build-test
+          ctest --test-dir build-test --output-on-failure
+
+      - name: 编译（GUI + CLI）
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DRESAVERPP_TESTS=OFF
+          cmake --build build
+
+      - name: 打包
+        id: pack
+        shell: pwsh
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          $stage = "package"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item build/ReSaverPP.exe, build/resaverpp-cli.exe $stage
+          Copy-Item LICENSE, NOTICE.md, THIRD-PARTY-NOTICES.md, README.zh-CN.md $stage
+
+          $gui = (Get-FileHash "$stage/ReSaverPP.exe" -Algorithm SHA256).Hash
+          $cli = (Get-FileHash "$stage/resaverpp-cli.exe" -Algorithm SHA256).Hash
+          $guiLen = (Get-Item "$stage/ReSaverPP.exe").Length
+          $cliLen = (Get-Item "$stage/resaverpp-cli.exe").Length
+          $built = (Get-Date).ToString("yyyy-MM-dd")
+
+          $lines = @(
+            "ReSaver++ 简体中文版 v$v",
+            "========================================",
+            "",
+            "对应上游：Tonycubed2/ResaverPP v$v",
+            "构建日期：$built",
+            "构建方式：MSVC（GitHub Actions，windows-latest）Release，静态链接运行库（/MT）",
+            "汉化分支：https://github.com/blnkxin/ResaverPP-zh",
+            "",
+            "文件                    大小（字节）    SHA256",
+            ("ReSaverPP.exe            {0}        {1}" -f $guiLen, $gui),
+            ("resaverpp-cli.exe        {0}        {1}" -f $cliLen, $cli),
+            "",
+            "校验：certutil -hashfile ReSaverPP.exe SHA256",
+            "     或 PowerShell: Get-FileHash .\ReSaverPP.exe -Algorithm SHA256",
+            "",
+            "第一次运行被 Windows 拦住（提示「打开这些文件可能会对你的计算机有害」）怎么办：",
+            "  1. 解压之前：右键这个 .7z → 属性 → 勾「解除锁定」→ 确定，再解压；",
+            "  2. 或者解压之后：右键 ReSaverPP.exe → 属性 → 勾「解除锁定」；",
+            "     或在 PowerShell 里执行 Unblock-File .\ReSaverPP.exe；",
+            "  3. 直接点「确定」也能运行——那只是「文件来自网络」的提示，不是拦截。",
+            "",
+            "两个 exe 都没有数字签名，所以每次重新编译后 Windows 都会再提示一次。",
+            "发布包不包含 ReSaverHelper.dll（上游的可选 SKSE 插件）。"
+          )
+          $lines -join "`r`n" | Set-Content "$stage/版本与哈希.txt" -Encoding utf8
+
+          $seven = Join-Path $env:ProgramFiles "7-Zip\7z.exe"
+          if (-not (Test-Path $seven)) { $seven = "7z" }
+          $archive = "ReSaverPP-zh-CN-v$v.7z"
+          if (Test-Path $archive) { Remove-Item $archive -Force }
+          & $seven a -t7z -mx=9 -m0=lzma2 $archive (Join-Path $stage "*") | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "7z 打包失败（exit $LASTEXITCODE）" }
+
+          $zipHash = (Get-FileHash $archive -Algorithm SHA256).Hash
+          "archive=$archive" >> $env:GITHUB_OUTPUT
+          "gui=$gui" >> $env:GITHUB_OUTPUT
+          "cli=$cli" >> $env:GITHUB_OUTPUT
+          "ziphash=$zipHash" >> $env:GITHUB_OUTPUT
+          "built=$built" >> $env:GITHUB_OUTPUT
+          Get-ChildItem $stage | Format-Table Name, Length
+          Write-Host "archive SHA256: $zipHash"
+
+      - name: 上传构建产物（创建 Release 失败时也能下载）
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReSaverPP-zh-CN-v${{ steps.ver.outputs.version }}
+          path: ReSaverPP-zh-CN-v${{ steps.ver.outputs.version }}.7z
+
+      - name: 创建 / 更新 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', steps.ver.outputs.version) }}
+          name: ReSaver++ 简体中文版 v${{ steps.ver.outputs.version }}
+          body: |
+            **ReSaver++（上古卷轴 5 存档编辑器）简体中文版**，对应上游 **v${{ steps.ver.outputs.version }}**。
+            界面、分析结论、报告、任务页（含实时游戏）都是中文。
+
+            ## 下载
+
+            `ReSaverPP-zh-CN-v${{ steps.ver.outputs.version }}.7z` — 解压后直接运行 `ReSaverPP.exe`，免安装、不需要运行库。
+
+            | 文件 | SHA256 |
+            |---|---|
+            | `ReSaverPP.exe` | `${{ steps.pack.outputs.gui }}` |
+            | `resaverpp-cli.exe` | `${{ steps.pack.outputs.cli }}` |
+            | 压缩包 | `${{ steps.pack.outputs.ziphash }}` |
+
+            ## 第一次运行被 Windows 拦住？
+
+            提示「打开这些文件可能会对你的计算机有害」时：
+
+            1. **解压之前**：右键 `.7z` → 属性 → 勾「解除锁定」→ 确定，再解压；
+            2. 或者解压后：右键 `ReSaverPP.exe` → 属性 → 勾「解除锁定」，或 `Unblock-File .\ReSaverPP.exe`；
+            3. 直接点「确定」也能运行——它只是「文件来自网络」的提示。
+
+            exe 没有数字签名，每次重新编译后 Windows 都会再提示一次。
+
+            ## 说明
+
+            - 实时游戏（在游戏里完成任务 / 刷新任务日志）需要可选的 SKSE 插件 `ReSaverHelper.dll`，**这个包里没有**；
+              没装时相关按钮是灰的，其它功能不受影响。
+            - 游戏里的提示是中文，前提是装了中文汉化包（自带中文字体）。
+            - 本包由 GitHub Actions 用 VS2022 构建，内容和 Nexus 版一致，只是哈希不同。
+          files: ReSaverPP-zh-CN-v${{ steps.ver.outputs.version }}.7z
+          fail_on_unmatched_files: true
+          generate_release_notes: false

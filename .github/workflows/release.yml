@@ -47,7 +47,16 @@ jobs:
         shell: pwsh
         run: |
           cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DRESAVERPP_TESTS=OFF
-          cmake --build build --config Release --target ReSaverPP resaverpp-cli
+          if ($LASTEXITCODE -ne 0) {
+            "::error title=configure::CMake 配置失败（退出码 $LASTEXITCODE）"
+            exit 1
+          }
+          # 把构建输出也记进日志；失败时把最后几行做成注释，方便在页面上直接看到错误
+          cmake --build build --config Release --target ReSaverPP resaverpp-cli 2>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content build.log -Tail 30 | ForEach-Object { "::error title=build::$($_)" }
+            exit 1
+          }
 
       - name: 打包
         id: pack

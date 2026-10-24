@@ -16,6 +16,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: 环境信息
+        shell: pwsh
+        run: |
+          cmake --version
+          Get-ChildItem "${env:ProgramFiles}\Microsoft Visual Studio" -ErrorAction SilentlyContinue | Select-Object Name
+
       - name: 版本号（来自 CMakeLists.txt）
         id: ver
         shell: pwsh
@@ -38,20 +44,29 @@ jobs:
       - name: 单元测试
         shell: pwsh
         run: |
-          # Visual Studio 生成器：runner 上默认没有 vcvars 环境，Ninja 会找不到 cl.exe
-          cmake -S . -B build-test -G "Visual Studio 17 2022" -A x64 -DRESAVERPP_TESTS=ON -DRESAVERPP_GUI=OFF
-          cmake --build build-test --config Release
+          # 不写 -G：用 runner 上装的那个 Visual Studio 生成器（写死 "Visual Studio 17 2022" 在
+          # 没有 VS2022 的镜像上会直接 "could not find any instance of Visual Studio"）
+          cmake -S . -B build-test -A x64 -DRESAVERPP_TESTS=ON -DRESAVERPP_GUI=OFF 2>&1 | Tee-Object -FilePath configure-test.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content configure-test.log -Tail 40 | ForEach-Object { "::error title=configure-tests::$($_)" }
+            exit 1
+          }
+          cmake --build build-test --config Release 2>&1 | Tee-Object -FilePath build-test.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content build-test.log -Tail 30 | ForEach-Object { "::error title=build-tests::$($_)" }
+            exit 1
+          }
           ctest --test-dir build-test -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { "::error title=tests::单元测试失败"; exit 1 }
 
       - name: 编译（GUI + CLI）
         shell: pwsh
         run: |
-          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DRESAVERPP_TESTS=OFF 2>&1 | Tee-Object -FilePath configure.log
+          cmake -S . -B build -A x64 -DRESAVERPP_TESTS=OFF 2>&1 | Tee-Object -FilePath configure.log
           if ($LASTEXITCODE -ne 0) {
             Get-Content configure.log -Tail 40 | ForEach-Object { "::error title=configure::$($_)" }
             exit 1
           }
-          # 把构建输出也记进日志；失败时把最后几行做成注释，方便在页面上直接看到错误
           cmake --build build --config Release --target ReSaverPP resaverpp-cli 2>&1 | Tee-Object -FilePath build.log
           if ($LASTEXITCODE -ne 0) {
             Get-Content build.log -Tail 30 | ForEach-Object { "::error title=build::$($_)" }
@@ -65,7 +80,11 @@ jobs:
           $v = "${{ steps.ver.outputs.version }}"
           $stage = "package"
           New-Item -ItemType Directory -Force $stage | Out-Null
-          Copy-Item build/Release/ReSaverPP.exe, build/Release/resaverpp-cli.exe $stage
+          Copy-Item build/Release/ReSaverPP.exe, build/Release/resaverpp-cli.exe $stage -ErrorAction SilentlyContinue
+          if (-not (Test-Path "$stage/ReSaverPP.exe")) {
+            # 有的生成器把产物放在 build/ 根下
+            Copy-Item build/ReSaverPP.exe, build/resaverpp-cli.exe $stage
+          }
           Copy-Item LICENSE, NOTICE.md, THIRD-PARTY-NOTICES.md, README.zh-CN.md $stage
 
           $gui = (Get-FileHash "$stage/ReSaverPP.exe" -Algorithm SHA256).Hash
@@ -94,7 +113,7 @@ jobs:
             "  1. 解压之前：右键这个 .7z → 属性 → 勾「解除锁定」→ 确定，再解压；",
             "  2. 或者解压之后：右键 ReSaverPP.exe → 属性 → 勾「解除锁定」；",
             "     或在 PowerShell 里执行 Unblock-File .\ReSaverPP.exe；",
-            "  3. 直接点「确定」也能运行——那只是「文件来自网络」的提示，不是拦截。",
+            "  3. 直接点「确定」也能运行——它只是「文件来自网络」的提示，不是拦截。",
             "",
             "两个 exe 都没有数字签名，所以每次重新编译后 Windows 都会再提示一次。",
             "发布包不包含 ReSaverHelper.dll（上游的可选 SKSE 插件）。"
@@ -157,7 +176,7 @@ jobs:
             - 实时游戏（在游戏里完成任务 / 刷新任务日志）需要可选的 SKSE 插件 `ReSaverHelper.dll`，**这个包里没有**；
               没装时相关按钮是灰的，其它功能不受影响。
             - 游戏里的提示是中文，前提是装了中文汉化包（自带中文字体）。
-            - 本包由 GitHub Actions 用 VS2022 构建，内容和 Nexus 版一致，只是哈希不同。
+            - 本包由 GitHub Actions 构建，内容和 Nexus 版一致，只是哈希不同。
           files: ReSaverPP-zh-CN-v${{ steps.ver.outputs.version }}.7z
           fail_on_unmatched_files: true
           generate_release_notes: false

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(ReSaverPP VERSION 16 LANGUAGES C CXX)
+project(ReSaverPP VERSION 19 LANGUAGES C CXX)
 
 # ReSaver++ : C++ port of ReSaver (FallrimTools) by Mark Fairchild. Apache License 2.0.
 
@@ -65,6 +65,36 @@ if (RESAVERPP_TESTS)
 	target_link_libraries(rs_decomp_test PRIVATE rs_core)
 	add_executable(rs_psc_test tests/psc_test.cpp)
 	target_link_libraries(rs_psc_test PRIVATE rs_core)
+	add_executable(rs_unit tests/unit_test.cpp)
+	target_link_libraries(rs_unit PRIVATE rs_core)
+	add_executable(rs_save_test tests/save_test.cpp)
+	target_link_libraries(rs_save_test PRIVATE rs_core)
+
+	# ---- CTest ------------------------------------------------------------------------------
+	enable_testing()
+	# needs nothing: regression tests built from data made in memory
+	add_test(NAME unit COMMAND rs_unit)
+	# real saves: -DRESAVERPP_TEST_SAVES=<folder with .ess files>. Each is loaded, written back and
+	# compared, backups checked. A folder given without saves in it fails the run (fixtures missing).
+	set(RESAVERPP_TEST_SAVES "" CACHE PATH "Folder of .ess saves for the fixture tests")
+	if (RESAVERPP_TEST_SAVES)
+		file(GLOB RS_TEST_SAVES "${RESAVERPP_TEST_SAVES}/*.ess")
+		if (NOT RS_TEST_SAVES)
+			message(FATAL_ERROR "RESAVERPP_TEST_SAVES=${RESAVERPP_TEST_SAVES} has no .ess files (fixtures missing)")
+		endif()
+		set(n 0)
+		foreach (save ${RS_TEST_SAVES})
+			math(EXPR n "${n} + 1")
+			get_filename_component(name "${save}" NAME_WE)
+			add_test(NAME "save_${n}" COMMAND rs_save_test "${save}" "${CMAKE_BINARY_DIR}/save_test_${n}")
+			add_test(NAME "edit_${n}" COMMAND rs_edit_test "${save}" "${CMAKE_BINARY_DIR}/edit_test_${n}.ess")
+			add_test(NAME "roundtrip_${n}" COMMAND rs_roundtrip "${save}")
+			set_tests_properties("roundtrip_${n}" PROPERTIES FAIL_REGULAR_EXPRESSION "MISMATCH")
+		endforeach()
+	else()
+		add_test(NAME fixtures COMMAND ${CMAKE_COMMAND} -E echo "No real saves configured (-DRESAVERPP_TEST_SAVES=<folder>): fixture tests skipped")
+		set_tests_properties(fixtures PROPERTIES SKIP_REGULAR_EXPRESSION "skipped")
+	endif()
 endif()
 
 # ---- GUI --------------------------------------------------------------------------------

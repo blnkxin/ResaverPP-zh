@@ -42,6 +42,7 @@ namespace
 		case App::Cat::kMessages: return "函数消息";
 		case App::Cat::kSuspended: return "挂起堆栈";
 		case App::Cat::kUnbinds: return "排队解绑";
+		case App::Cat::kQuests: return "任务";
 		default: return "?";
 		}
 	}
@@ -151,6 +152,18 @@ void App::open(const std::filesystem::path& a_path)
 		// known when the scan of the mods is done; that can take a while inside Mod Organizer)
 		checkMissingPlugins();
 		_status = "已加载 " + platform::ToUtf8(a_path.filename());
+		// a save whose structure does not add up may not be written back faithfully: look, don't save
+		_readOnly = !_save->problems.empty();
+		if (_readOnly) {
+			std::string list;
+			for (const auto& pr : _save->problems) {
+				list += "\n  - " + pr;
+			}
+			_error = "这个存档已损坏，或采用了 ReSaver++ 还不能完全理解的布局：\n" + list +
+					 "\n\n它已按只读方式打开：所有内容都能查看，但无法从 ReSaver++ 保存（写回可能丢失数据，也可能凭空造出数据）。"
+					 "请在游戏中读取一个更早的存档，或带上这个文件反馈问题。";
+			_status += "  -  只读（存档损坏）";
+		}
 		if (!_report->warnings.empty()) {
 			_status += Fmt("  -  %zu 个问题：见 工具 > 分析", _report->warnings.size());
 		}
@@ -164,29 +177,17 @@ void App::doSave(const std::filesystem::path& a_path)
 	if (!_save) {
 		return;
 	}
+	if (_readOnly) {
+		_error = "这个存档因为损坏而以只读方式打开（打开时有提示）；无法从 ReSaver++ 保存。";
+		return;
+	}
 	try {
-		std::error_code ec;
-		if (std::filesystem::exists(a_path, ec)) {
-			// keep the previous file next to it: name.ess.bak, name.ess.bak2, ...
-			auto bak = a_path;
-			bak += ".bak";
-			for (int n = 2; std::filesystem::exists(bak, ec); ++n) {
-				bak = a_path;
-				bak += ".bak" + std::to_string(n);
-			}
-			std::filesystem::copy_file(a_path, bak, ec);
-			auto co = a_path;
-			co.replace_extension(".skse");
-			if (std::filesystem::exists(co, ec)) {
-				auto cobak = bak;
-				cobak.replace_extension(".skse.bak");
-				std::filesystem::copy_file(co, cobak, std::filesystem::copy_options::overwrite_existing, ec);
-			}
-		}
 		if (_saveCompression >= 0) {
 			_save->header.compression = static_cast<Compression>(_saveCompression);
 		}
-		_save->save(a_path);
+		// staged, read back, previous files kept as name.ess.bak + name.skse.bak (one generation each),
+		// rolled back if the co-save cannot be written
+		const auto wr = _save->write(a_path, true);
 		// read it straight back: a save we cannot read is never left silently behind
 		auto check = SaveFile::load(a_path);
 		if (!check->papyrus()) {
@@ -195,7 +196,9 @@ void App::doSave(const std::filesystem::path& a_path)
 		_path = a_path;
 		_save->path = a_path;
 		_dirty = false;
-		_status = "已保存并通过校验 " + platform::ToUtf8(a_path.filename());
+		_status = "已保存并通过校验 " + platform::ToUtf8(a_path.filename()) +
+				  (wr.backup.empty() ? std::string() : "  （原文件保留为 " + platform::ToUtf8(wr.backup.filename()) +
+													   (wr.cosaveBackup.empty() ? "" : " + " + platform::ToUtf8(wr.cosaveBackup.filename())) + "）");
 	} catch (const std::exception& e) {
 		_error = std::string("保存失败：\n\n") + e.what();
 	}
@@ -762,6 +765,9 @@ void App::draw()
 	if (!_settingsLoaded) {
 		loadSettings();
 	}
+	_live.setEnabled(_liveEnabled);
+	_live.start();
+	_live.poll();
 	pollScan();
 	pollNames();
 	pollWatch();
@@ -799,6 +805,8 @@ void App::draw()
 			ImGui::BeginChild("##list", ImVec2(listW, 0), ImGuiChildFlags_Borders);
 			if (_cat == Cat::kMods) {
 				drawModsList();
+			} else if (_cat == Cat::kQuests) {
+				drawQuestsList();
 			} else {
 				drawList();
 			}
@@ -811,6 +819,8 @@ void App::draw()
 				} else {
 					ImGui::TextDisabled("点击一个模组查看其脚本。");
 				}
+			} else if (_cat == Cat::kQuests) {
+				drawQuestDetail();
 			} else {
 				drawDetail();
 			}
@@ -944,6 +954,20 @@ void App::drawMenu()
 			confirm("终止未定义线程", "终止所有正在运行已不再安装的脚本的线程？",
 				[this, p] { markEdited(Fmt("已终止 %zu 个未定义线程", ops::TerminateUndefinedThreads(*p))); });
 		}
+		{
+			const bool any = !_missing.empty() || !_missingScripts.empty() || !_unfoundScripts.empty();
+			if (ImGui::MenuItem("已不再安装的模组与脚本…", nullptr, false, any)) {
+				_missingDismissed = false;  // the banner comes back too
+				for (auto& m : _missing) {
+					m.planned = false;
+				}
+				_missingOpen = true;
+			}
+			if (!any && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+				ImGui::SetTooltip(_installKnown ? "没有可移除的项：这个存档里的每个模组都在你的加载顺序中，每个脚本也都找到了。"
+												: "你的模组还没有扫描完成（或正在扫描）。");
+			}
+		}
 		if (ImGui::MenuItem("移除位于缺失生成对象上的实例…")) {
 			openOrphans();
 		}
@@ -1058,6 +1082,16 @@ void App::drawCategories()
 			}
 		}
 		item(Cat::kMods, withScripts);
+	}
+	{
+		std::size_t inJournal = 0, stale = 0;
+		for (const auto& q : questStates()) {
+			if (q.shownObjectives()) {
+				++inJournal;
+				stale += (q.completed() || !q.running()) ? 1 : 0;
+			}
+		}
+		item(Cat::kQuests, inJournal, stale > 0);
 	}
 	ImGui::SeparatorText("存档");
 	item(Cat::kPlugins, _save->plugins.full.size() + _save->plugins.lite.size());
@@ -2033,7 +2067,7 @@ void App::drawModals()
 		_showAbout = false;
 	}
 	if (ImGui::BeginPopupModal("关于 ReSaver++", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-		ImGui::TextUnformatted("ReSaver++ 版本 16  -  Skyrim SE/AE 存档编辑器");
+		ImGui::TextUnformatted("ReSaver++ 版本 19  -  Skyrim SE/AE 存档编辑器");
 		ImGui::Spacing();
 		ImGui::TextUnformatted("ReSaver（FallrimTools，作者 Mark Fairchild）的 C++ 移植版。");
 		ImGui::TextUnformatted("与原版一样，按 Apache License 2.0 授权。");
@@ -2051,10 +2085,12 @@ void App::drawStatus()
 	ImGui::Separator();
 	const bool  busy = (scanning() && _scanProgress) || (namesLoading() && _dbProgress);
 	const float winW = ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x;
-	// the status text and the progress bar share one line: keep them apart, the Chinese status
-	// lines are long enough to run under the bar otherwise
+	// the status text shares one line with the progress bar and, when idle, with the watcher hint
+	// and the live-game status: keep the Chinese status lines clear of them
 	const float progW = busy ? std::min(520.0f, winW * 0.42f) : 0.0f;
-	const float textW = busy ? std::max(140.0f, winW - progW - 24.0f) : winW;
+	const float liveW = 330.0f;  // drawLiveStatus() draws right-aligned in this width
+	const float sideW = busy ? progW : (_watch ? 160.0f : 0.0f) + liveW;
+	const float textW = std::max(140.0f, winW - sideW - 24.0f);
 	const ImVec2 at = ImGui::GetCursorScreenPos();
 	ImGui::PushClipRect(ImVec2(at.x, at.y - 2), ImVec2(at.x + textW, at.y + ImGui::GetTextLineHeight() + 4), true);
 	if (_dirty) {
@@ -2066,9 +2102,15 @@ void App::drawStatus()
 	if (busy) {
 		ImGui::SameLine(ImGui::GetWindowWidth() - progW - ImGui::GetStyle().WindowPadding.x);
 		drawBackgroundProgress(progW);
-	} else if (_watch) {
-		ImGui::SameLine(ImGui::GetWindowWidth() - 170);
-		TextColored(theme::Good(), "正在监视存档");
+	} else {
+		float right = 0;
+		if (_watch) {
+			right = 160;
+			ImGui::SameLine(ImGui::GetWindowWidth() - right);
+			TextColored(theme::Good(), "正在监视存档");
+		}
+		ImGui::SameLine(ImGui::GetWindowWidth() - right - liveW);
+		drawLiveStatus();
 	}
 }
 
@@ -2204,6 +2246,10 @@ void App::loadSettings()
 			_autoNames = line.substr(6) != "0";
 		} else if (line.rfind("watch=", 0) == 0 && line.substr(6) == "1") {
 			_watch = true;
+		} else if (line.rfind("live=", 0) == 0) {
+			_liveEnabled = line.substr(5) != "0";
+		} else if (line.rfind("live_notify=", 0) == 0) {
+			_liveNotify = std::clamp(std::atoi(line.substr(12).c_str()), 0, 2);
 		} else if (line.rfind("theme=", 0) == 0) {
 			const int k = std::clamp(std::atoi(line.c_str() + 6), 0, 2);
 			theme::Apply(static_cast<theme::Kind>(k));
@@ -2265,6 +2311,8 @@ void App::saveSettings()
 	f << "game=" << se.gamePath << "\n";
 	f << "codepage=" << text::CodePage() << "\n";
 	f << "theme=" << static_cast<int>(theme::Current()) << "\n";
+	f << "live=" << (_liveEnabled ? 1 : 0) << "\n";
+	f << "live_notify=" << _liveNotify << "\n";
 	f << "decompile_always=" << (_decompileAlways ? 1 : 0) << "\n";
 	f << "compiler=" << _compilerSetting << "\n";
 	f << "compile_out_mode=" << _compileOutMode << "\n";

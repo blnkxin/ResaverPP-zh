@@ -75,6 +75,13 @@ jobs:
           done
           exit 1
 
+      # the regression tests (no save files needed) must pass before anything is built for release
+      - name: Run tests
+        run: |
+          cmake -S . -B build-test -G Ninja -DCMAKE_BUILD_TYPE=Release -DRESAVERPP_GUI=OFF -DRESAVERPP_TESTS=ON
+          cmake --build build-test -j4
+          ctest --test-dir build-test --output-on-failure
+
       - name: Build
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64.cmake -DCMAKE_BUILD_TYPE=Release -DRESAVERPP_TESTS=OFF

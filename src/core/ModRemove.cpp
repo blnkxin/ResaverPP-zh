@@ -52,17 +52,48 @@ namespace ess::modremove
 			return 0;
 		}
 
-		bool IsVanillaPlugin(const std::string& lower)
+		bool IsBaseGamePlugin(const std::string& lower)
 		{
-			static const char* v[] = { "skyrim.esm", "update.esm", "dawnguard.esm", "hearthfires.esm", "dragonborn.esm" };
+			static const char* v[] = { "skyrim.esm", "update.esm", "dawnguard.esm", "hearthfires.esm", "dragonborn.esm", "skyrimvr.esm" };
 			for (const char* n : v) {
 				if (lower == n) {
 					return true;
 				}
 			}
-			return lower.rfind("cc", 0) == 0;  // Creation Club content never depends on mods
+			return false;
 		}
+
+		// Official Creation Club content: "cc" + a 3-4 letter creator code + "sse" + 3 digits, e.g.
+		// ccbgssse001-fish.esm, ccqdrsse001-survivalmode.esl. Not just any name starting with "cc".
+		bool IsCreationClub(const std::string& lower)
+		{
+			if (lower.size() < 11 || lower.rfind("cc", 0) != 0) {
+				return false;
+			}
+			for (std::size_t letters : { std::size_t(3), std::size_t(4) }) {
+				const std::size_t s = 2 + letters;
+				if (lower.size() < s + 6) {
+					continue;
+				}
+				bool ok = true;
+				for (std::size_t i = 2; i < s; ++i) {
+					ok = ok && std::isalpha(static_cast<unsigned char>(lower[i]));
+				}
+				ok = ok && lower.compare(s, 3, "sse") == 0;
+				for (std::size_t i = s + 3; i < s + 6; ++i) {
+					ok = ok && std::isdigit(static_cast<unsigned char>(lower[i]));
+				}
+				if (ok) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		bool IsVanillaPlugin(const std::string& lower) { return IsBaseGamePlugin(lower) || IsCreationClub(lower); }
 	}
+
+	bool IsCreationClubPlugin(const std::string& a_lower) { return IsCreationClub(a_lower); }
 
 	std::vector<std::string> ReadMasters(const std::filesystem::path& a_plugin)
 	{
@@ -331,17 +362,52 @@ namespace ess::modremove
 				scanRemaining(r.data->vars, p->str(r.script));
 			}
 		}
+		// every element that stays and can hold a reference: running threads (owner and variables),
+		// suspended calls and queued calls (their receiver and arguments)
+		std::vector<Variable> one(1);
 		for (const auto& a : p->activeScripts) {
 			if (!plan.threads.contains(a.id) && a.data) {
 				for (const auto& f : a.data->frames) {
 					scanRemaining(f.vars, p->str(f.scriptName) + "（运行中）");
+					one[0] = f.owner;
+					scanRemaining(one, p->str(f.scriptName) + "（运行中）");
 				}
 			}
+		}
+		for (const auto* list : { &p->suspended1, &p->suspended2 }) {
+			for (const auto& st : *list) {
+				if (!plan.stacks.contains(st.id) && !plan.threads.contains(st.id) && st.data) {
+					scanRemaining(st.data->vars, p->str(st.data->scriptName) + "（等待中的调用）");
+					one[0] = st.data->unknownVar;
+					scanRemaining(one, p->str(st.data->scriptName) + "（等待中的调用）");
+				}
+			}
+		}
+		for (std::size_t i = 0; i < p->functionMessages.size(); ++i) {
+			const auto& m = p->functionMessages[i];
+			if (!plan.messages.contains(i) && m.data) {
+				scanRemaining(m.data->vars, p->str(m.data->scriptName) + "（排队中的调用）");
+				one[0] = m.data->unknownVar;
+				scanRemaining(one, p->str(m.data->scriptName) + "（排队中的调用）");
+			}
+		}
+		// an element that stays but whose data could not be read might hold any of them: keep them all
+		bool uncertain = false;
+		for (const auto& a : p->activeScripts) {
+			uncertain |= !plan.threads.contains(a.id) && !a.data;
+		}
+		for (const auto* list : { &p->suspended1, &p->suspended2 }) {
+			for (const auto& st : *list) {
+				uncertain |= !plan.stacks.contains(st.id) && !plan.threads.contains(st.id) && !st.data;
+			}
+		}
+		if (uncertain && !candidates.empty()) {
+			plan.notes.push_back("有些保留下来的脚本数据读不出来，所以不删除任何数组（它们可能还在使用中）。");
 		}
 		// arrays that stay: if they hold one of our arrays (not possible in Papyrus) or instances
 		std::unordered_set<EID> removedArrays;
 		for (auto id : candidates) {
-			if (!keepArrays.contains(id)) {
+			if (!uncertain && !keepArrays.contains(id)) {
 				removedArrays.insert(id);
 			}
 		}
@@ -394,7 +460,9 @@ namespace ess::modremove
 				for (const auto* list : { &a_save.plugins.full, &a_save.plugins.lite }) {
 					for (const auto& pl : *list) {
 						const auto low = Lower(pl);
-						if (low == lowerName || IsVanillaPlugin(low)) {
+						// every other plugin's masters are read (only the base game's own masters, which
+						// never depend on mods, are skipped)
+						if (low == lowerName || IsBaseGamePlugin(low)) {
 							continue;
 						}
 						const auto path = a_src->pluginPath(pl);

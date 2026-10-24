@@ -1,6 +1,8 @@
 // ReSaver++ - C++ port of ReSaver (FallrimTools) by Mark Fairchild, Apache License 2.0.
 #include "Papyrus.h"
 
+#include <algorithm>
+
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -616,6 +618,143 @@ namespace ess
 
 		saveFileVersion = r.u16();
 		tail = r.bytes(r.remaining());
+	}
+
+	std::vector<std::string> Papyrus::check() const
+	{
+		std::vector<std::string> out;
+		std::size_t              badStr = 0;
+		auto                     str = [&](TStr t) {
+            if (t >= strings.size()) {
+                ++badStr;
+            }
+		};
+		auto vars = [&](const std::vector<Variable>& vs) {
+			for (const auto& v : vs) {
+				const Variable* x = &v;
+				if (x->type == VType::kVariant && x->inner) {
+					x = x->inner.get();
+				}
+				if (IsRefType(x->type)) {
+					str(x->refType);
+				}
+				if (x->type == VType::kString) {
+					str(static_cast<TStr>(x->value));
+				}
+			}
+		};
+		for (const auto& sc : scripts) {
+			str(sc.name);
+			str(sc.parent);
+			for (const auto& m : sc.members) {
+				str(m.name);
+				str(m.type);
+			}
+		}
+		for (const auto& i : instances) {
+			str(i.script);
+			if (i.data) {
+				str(i.data->state);
+				vars(i.data->vars);
+			}
+		}
+		for (const auto& x : references) {
+			str(x.script);
+			if (x.data) {
+				vars(x.data->vars);
+			}
+		}
+		for (const auto& a : arrays) {
+			if (IsRefType(a.type)) {
+				str(a.refType);
+			}
+			vars(a.vars);
+		}
+		for (const auto& a : activeScripts) {
+			if (!a.data) {
+				continue;
+			}
+			for (const auto& f : a.data->frames) {
+				str(f.scriptName);
+				str(f.baseName);
+				str(f.event);
+				vars(f.vars);
+			}
+		}
+		auto fm = [&](const std::optional<FunctionMessageData>& d) {
+			if (d) {
+				str(d->scriptName);
+				str(d->event);
+				vars(d->vars);
+			}
+		};
+		for (const auto& m : functionMessages) {
+			fm(m.data);
+		}
+		for (const auto* list : { &suspended1, &suspended2 }) {
+			for (const auto& st : *list) {
+				fm(st.data);
+			}
+		}
+		if (badStr) {
+			out.push_back(std::to_string(badStr) + " string reference(s) point past the end of the string table (" + std::to_string(strings.size()) +
+						  " strings)");
+		}
+
+		auto dups = [&](const char* what, auto ids) {
+			std::sort(ids.begin(), ids.end());
+			const auto n = static_cast<std::size_t>(std::adjacent_find(ids.begin(), ids.end()) != ids.end());
+			if (n) {
+				std::size_t c = 0;
+				for (std::size_t i = 1; i < ids.size(); ++i) {
+					c += ids[i] == ids[i - 1] ? 1 : 0;
+				}
+				out.push_back(std::to_string(c) + " duplicate " + what + " id(s)");
+			}
+		};
+		{
+			std::vector<EID> v;
+			for (const auto& i : instances) {
+				v.push_back(i.id);
+			}
+			dups("script instance", v);
+			dups("script instance data", instanceDataOrder);
+			v.clear();
+			for (const auto& x : references) {
+				v.push_back(x.id);
+			}
+			dups("reference", v);
+			dups("reference data", referenceDataOrder);
+			v.clear();
+			for (const auto& a : arrays) {
+				v.push_back(a.id);
+			}
+			dups("array", v);
+			dups("array data", arrayDataOrder);
+			std::vector<ThreadID> t;
+			for (const auto& a : activeScripts) {
+				t.push_back(a.id);
+			}
+			dups("thread", t);
+			dups("thread data", activeDataOrder);
+		}
+		std::size_t noData = 0;
+		for (const auto& i : instances) {
+			noData += i.data ? 0 : 1;
+		}
+		for (const auto& x : references) {
+			noData += x.data ? 0 : 1;
+		}
+		for (const auto& a : arrays) {
+			noData += a.hasData ? 0 : 1;
+		}
+		for (const auto& a : activeScripts) {
+			noData += a.data ? 0 : 1;
+		}
+		if (noData) {
+			out.push_back(std::to_string(noData) + " element(s) listed without their saved data");
+		}
+		return out;
 	}
 
 	void Papyrus::write(Writer& w) const

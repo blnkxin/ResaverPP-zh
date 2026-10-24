@@ -101,5 +101,8 @@ namespace ess::pex
 	// a_sources (optional) returns the .psc text of a script by name; it is used to give functions
 	// that override a parent's the same parameter defaults (a .pex does not store defaults).
 	using SourceLookup = std::function<std::string(const std::string& a_script)>;
+	// A float as Papyrus source text: no exponent (Papyrus has none), and it reads back as the same float.
+	std::string FloatLiteral(float a_value);
+
 	std::vector<std::string> Decompile(const File& a_file, std::vector<std::string>* a_warnings = nullptr, const SourceLookup& a_sources = {});
 }

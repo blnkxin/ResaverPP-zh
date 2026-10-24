@@ -75,28 +75,7 @@ namespace ess::pex
 			return s;
 		}
 
-		std::string FloatText(float f)
-		{
-			char buf[64];
-			for (int prec = 6; prec <= 9; ++prec) {
-				std::snprintf(buf, sizeof(buf), "%.*g", prec, f);
-				if (std::strtof(buf, nullptr) == f) {
-					break;
-				}
-			}
-			std::string s = buf;
-			if (s.find_first_of(".eEn") == std::string::npos) {
-				s += ".0";
-			}
-			if (s.find('e') != std::string::npos || s.find('E') != std::string::npos) {
-				std::snprintf(buf, sizeof(buf), "%.9f", f);  // Papyrus has no exponent syntax
-				s = buf;
-				while (s.size() > 2 && s.back() == '0' && s[s.size() - 2] != '.') {
-					s.pop_back();
-				}
-			}
-			return s;
-		}
+		std::string FloatText(float f) { return FloatLiteral(f); }
 
 		std::string StringText(const std::string& s)
 		{
@@ -1092,5 +1071,40 @@ namespace ess::pex
 			}
 		}
 		return L;
+	}
+}
+
+namespace ess::pex
+{
+std::string FloatLiteral(float f)
+	{
+		char buf[64];
+		for (int prec = 6; prec <= 9; ++prec) {
+			std::snprintf(buf, sizeof(buf), "%.*g", prec, f);
+			if (std::strtof(buf, nullptr) == f) {
+				break;
+			}
+		}
+		std::string s = buf;
+		if (s.find_first_of(".eEn") == std::string::npos) {
+			s += ".0";
+		}
+		if (s.find('e') != std::string::npos || s.find('E') != std::string::npos) {
+			// Papyrus has no exponent syntax: write it out in plain decimals, with as many digits after
+			// the point as it takes to read back as the very same float (a tiny value like 1e-10 needs
+			// ten; a fixed precision would round it to 0.0)
+			char big[400];
+			for (int prec = 1; prec <= 160; ++prec) {
+				std::snprintf(big, sizeof(big), "%.*f", prec, f);
+				if (std::strtof(big, nullptr) == f) {
+					break;
+				}
+			}
+			s = big;
+			while (s.size() > 2 && s.back() == '0' && s[s.size() - 2] != '.') {
+				s.pop_back();
+			}
+		}
+		return s;
 	}
 }

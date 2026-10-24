@@ -37,10 +37,30 @@ namespace ess::loadorder
 
 	std::filesystem::path GamePluginsTxt(bool a_vr)
 	{
-		if (const char* la = std::getenv("LOCALAPPDATA")) {
-			return std::filesystem::path(la) / (a_vr ? "Skyrim VR" : "Skyrim Special Edition") / "plugins.txt";
+		const char* la = std::getenv("LOCALAPPDATA");
+		if (!la) {
+			return {};
 		}
-		return {};
+		const std::filesystem::path base(la);
+		if (a_vr) {
+			return base / "Skyrim VR" / "plugins.txt";
+		}
+		// Steam, GOG, Epic and Microsoft Store editions each keep their own folder; with more than one,
+		// the plugins.txt written last is the one in use
+		std::filesystem::path           best = base / "Skyrim Special Edition" / "plugins.txt";
+		std::filesystem::file_time_type bestTime{};
+		bool                            found = false;
+		for (const char* d : { "Skyrim Special Edition", "Skyrim Special Edition GOG", "Skyrim Special Edition EPIC", "Skyrim Special Edition MS" }) {
+			std::error_code ec;
+			const auto      f = base / d / "plugins.txt";
+			const auto      t = std::filesystem::last_write_time(f, ec);
+			if (!ec && (!found || t > bestTime)) {
+				best = f;
+				bestTime = t;
+				found = true;
+			}
+		}
+		return best;
 	}
 
 	Active Read(const std::filesystem::path& a_pluginsTxt, const std::filesystem::path& a_gameFolder, bool a_vr)

@@ -150,12 +150,14 @@ namespace ess::orphans
 				const auto it = std::find_if(prov->begin(), prov->end(), [](const ScriptProvider& x) { return x.enabled; });
 				status = it != prov->end() ? Status::kInstalled : Status::kDisabled;
 				mod = it != prov->end() ? it->mod : prov->front().mod;
-			} else if (undefined || (scanned && a_sources->gameDataScanned)) {
+			} else if (undefined) {
+				// the save shows the game could not load the script either
 				status = Status::kNotInstalled;
 				mod = "（找不到脚本文件）";
 			} else {
+				// the game had it when it saved: only the scan says it is gone, which may be the scan's fault
 				status = Status::kUnknown;
-				mod = scanned ? "（不在已扫描的模组里）" : "（未扫描模组）";
+				mod = scanned ? "（扫描未找到，但游戏当时已加载）" : "（未扫描模组）";
 			}
 			auto& g = groups[{ Rank(status), Lower(mod) }];
 			g.mod = mod;

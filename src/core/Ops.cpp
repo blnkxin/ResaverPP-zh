@@ -382,26 +382,38 @@ namespace ess::ops
 			}
 		}
 		// suspended calls: belonging to those threads, of the script itself, called on one of its
-		// instances, or (when the instances go) passing one of them as an argument
-		for (const auto* list : { &p->suspended1, &p->suspended2 }) {
-			for (const auto& st : *list) {
-				if (threads.contains(st.id)) {
-					continue;
-				}
-				if (st.data && (matches(st.data->scriptName) || VarHitsAny(st.data->unknownVar, insts) ||
-								   (!a_keepInstances && VarsHitAny(st.data->vars, insts)))) {
-					threads.insert(st.id);
+		// instances, or (when the instances go) passing one of them as an argument. Queued calls the
+		// same way. A thread whose pending or queued call goes is removed with it (it would wait
+		// forever), and its own pending and queued calls with it: repeated until nothing changes.
+		std::set<std::size_t> msgs;
+		for (bool changed = true; changed;) {
+			changed = false;
+			for (const auto* list : { &p->suspended1, &p->suspended2 }) {
+				for (const auto& st : *list) {
+					if (threads.contains(st.id)) {
+						continue;
+					}
+					if (st.data && (matches(st.data->scriptName) || VarHitsAny(st.data->unknownVar, insts) ||
+									   (!a_keepInstances && VarsHitAny(st.data->vars, insts)))) {
+						threads.insert(st.id);
+						changed = true;
+					}
 				}
 			}
-		}
-
-		std::set<std::size_t> msgs;
-		for (std::size_t i = 0; i < p->functionMessages.size(); ++i) {
-			const auto& m = p->functionMessages[i];
-			if ((m.id && threads.contains(*m.id)) ||
-				(m.data && (matches(m.data->scriptName) || VarHitsAny(m.data->unknownVar, insts) ||
-							   (!a_keepInstances && VarsHitAny(m.data->vars, insts))))) {
-				msgs.insert(i);
+			for (std::size_t i = 0; i < p->functionMessages.size(); ++i) {
+				if (msgs.contains(i)) {
+					continue;
+				}
+				const auto& m = p->functionMessages[i];
+				if ((m.id && threads.contains(*m.id)) ||
+					(m.data && (matches(m.data->scriptName) || VarHitsAny(m.data->unknownVar, insts) ||
+								   (!a_keepInstances && VarsHitAny(m.data->vars, insts))))) {
+					msgs.insert(i);
+					if (m.id && !threads.contains(*m.id)) {
+						threads.insert(*m.id);
+						changed = true;
+					}
+				}
 			}
 		}
 

@@ -56,6 +56,9 @@ namespace ess::modremove
 		std::string summary() const;  // multi-line, plain language
 	};
 
+	// Official Creation Club plugin names ("cc" + creator code + "sse" + 3 digits); lowercase input.
+	bool IsCreationClubPlugin(const std::string& a_lower);
+
 	Plan MakePlan(SaveFile& a_save, const std::string& a_mod, const ScriptSources* a_sources, const Options& a_opt);
 
 	struct Result

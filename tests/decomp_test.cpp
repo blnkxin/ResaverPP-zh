@@ -8,6 +8,7 @@
 
 #include <cctype>
 #include <cstdio>
+#include <cstring>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -328,8 +329,11 @@ namespace
                     case 3: t = std::to_string(v.i); break;
                     case 4:
                         {
-                            char b[32];
-                            std::snprintf(b, sizeof(b), "%g", v.f);
+                            // exact bits: "%g" would make distinct floats look equal
+                            char          b[32];
+                            std::uint32_t bits;
+                            std::memcpy(&bits, &v.f, 4);
+                            std::snprintf(b, sizeof(b), "f%08X", bits);
                             t = b;
                             break;
                         }

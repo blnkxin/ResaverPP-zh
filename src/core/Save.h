@@ -88,6 +88,22 @@ namespace ess
 		static std::unique_ptr<SaveFile> load(const std::filesystem::path& a_path);
 		void save(const std::filesystem::path& a_path) const;  // also writes the .skse co-save next to it
 
+		// Writes the save (and its .skse co-save) safely:
+		//  1. both files are written to temporary files and the new save is read back (a save that cannot
+		//     be read is never put in place);
+		//  2. with a_backup, the files already there are copied to a matching backup generation first
+		//     (name.ess.bak + name.skse.bak, name.ess.bak2 + name.skse.bak2, ...); a failed copy stops
+		//     everything before anything is replaced;
+		//  3. the save is put in place, then the co-save; if the co-save cannot be, the save is rolled
+		//     back to the previous file (or removed, if there was none).
+		// Throws std::runtime_error on any failure; then nothing but the temporary files was changed.
+		struct WriteResult
+		{
+			std::filesystem::path backup, cosaveBackup;  // empty when none was made
+		};
+		WriteResult write(const std::filesystem::path& a_path, bool a_backup) const;
+		std::vector<std::uint8_t> serialize() const;  // the whole .ess file
+
 		std::vector<std::uint8_t> buildBody() const;  // uncompressed body, offsets recomputed
 
 		std::filesystem::path     path;
@@ -102,6 +118,9 @@ namespace ess
 		std::vector<std::uint8_t> unknown3;
 		std::vector<std::uint8_t> cosave;  // .skse file contents (empty if none)
 		std::size_t               originalBodySize = 0;
+		// Structural problems found while reading (layout that does not add up, bad string indices,
+		// duplicate ids...). A save with problems may not be written back faithfully: open it read-only.
+		std::vector<std::string>  problems;
 
 		Papyrus*       papyrus();
 		const Papyrus* papyrus() const { return const_cast<SaveFile*>(this)->papyrus(); }

@@ -4,6 +4,7 @@
 // name, record type, and the base object of placed references the save mentions.
 #pragma once
 
+#include "Quests.h"
 #include "ScriptSources.h"
 
 #include <atomic>
@@ -62,6 +63,15 @@ namespace ess
 		// match too.
 		std::vector<std::uint32_t> search(const std::string& a_text, std::size_t a_max) const;
 
+		// QUST records (the last override of each), with stages, journal entries, objectives and
+		// stage scripts: what the Quests view shows
+		const quests::QuestDef* quest(std::uint32_t a_formID) const
+		{
+			auto it = _quests.find(a_formID);
+			return it == _quests.end() ? nullptr : &it->second;
+		}
+		const std::unordered_map<std::uint32_t, quests::QuestDef>& questDefs() const { return _quests; }
+
 		std::vector<std::string> missing;  // plugins of the save whose file was not found
 		std::vector<std::string> errors;
 		std::size_t              pluginsRead = 0, recordsRead = 0;
@@ -71,6 +81,7 @@ namespace ess
 		std::uint32_t addString(const std::string& s);
 
 		std::unordered_map<std::uint32_t, Form> _forms;
+		std::unordered_map<std::uint32_t, quests::QuestDef> _quests;
 		std::vector<char>                       _pool;
 		std::vector<std::string>                _plugins;
 	};

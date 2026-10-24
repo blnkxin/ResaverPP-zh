@@ -278,6 +278,9 @@ namespace ess
 			const auto uncompressed = hr.u32();
 			const auto compressed = hr.u32();
 			hr.need(compressed);
+			if (hr.remaining() > compressed) {
+				save->problems.push_back(std::to_string(hr.remaining() - compressed) + " byte(s) after the compressed data");
+			}
 			if (save->header.compression == Compression::kLZ4) {
 				bodyStore = DecompressLZ4(hr.here(), compressed, uncompressed);
 			} else if (save->header.compression == Compression::kZlib) {
@@ -287,6 +290,9 @@ namespace ess
 			}
 			body = bodyStore.data();
 			bodyLen = bodyStore.size();
+			if (bodyLen != uncompressed) {
+				save->problems.push_back("the data unpacks to " + std::to_string(bodyLen) + " bytes, the header says " + std::to_string(uncompressed));
+			}
 		}
 		save->originalBodySize = bodyLen;
 
@@ -343,20 +349,33 @@ namespace ess
 			save->formIDs.push_back(r.u32());
 		}
 
+		// each section must end exactly where the file location table says the next one starts:
+		// otherwise bytes in between would be lost (or invented) when the save is written again
+		auto expect = [&](std::uint32_t a_fileOffset, const char* a_what) {
+			if (a_fileOffset >= base && r.pos() != a_fileOffset - base) {
+				save->problems.push_back(std::string(a_what) + " does not start where the previous section ends (" +
+										 std::to_string(static_cast<long long>(a_fileOffset - base) - static_cast<long long>(r.pos())) +
+										 " byte(s) unaccounted for)");
+			}
+		};
 		at(t.table1Offset);
 		for (std::uint32_t i = 0; i < t.table1Count; ++i) {
 			save->table1.push_back(ReadGlobal(r));
 		}
+		expect(t.table2Offset, "global data table 2");
 		for (std::uint32_t i = 0; i < t.table2Count; ++i) {
 			save->table2.push_back(ReadGlobal(r));
 		}
+		expect(t.changeFormsOffset, "the change forms");
 		save->changeForms.reserve(t.changeFormCount);
 		for (std::uint32_t i = 0; i < t.changeFormCount; ++i) {
 			save->changeForms.push_back(ReadChangeForm(r));
 		}
+		expect(t.table3Offset, "global data table 3");
 		for (std::uint32_t i = 0; i < t.table3Count; ++i) {
 			save->table3.push_back(ReadGlobal(r));
 		}
+		expect(t.formIDArrayCountOffset, "the form ID array");
 
 		r.seek(t.formIDArrayCountOffset - base + 4 + 4 * static_cast<std::size_t>(formIDCount));
 		const auto wsCount = r.u32();
@@ -374,6 +393,9 @@ namespace ess
 		save->reindexChangeForms();
 		if (auto* p = save->papyrus()) {
 			p->reindex();
+			for (auto& msg : p->check()) {
+				save->problems.push_back("Papyrus: " + msg);
+			}
 		}
 		return save;
 	}
@@ -445,7 +467,7 @@ namespace ess
 		return std::move(w.buf);
 	}
 
-	void SaveFile::save(const std::filesystem::path& a_path) const
+	std::vector<std::uint8_t> SaveFile::serialize() const
 	{
 		const auto body = buildBody();
 		Writer     out;
@@ -471,15 +493,97 @@ namespace ess
 				break;
 			}
 		}
+		return std::move(out.buf);
+	}
 
-		// write to a temp file first so a failure never leaves a half-written save
-		auto tmp = a_path;
+	void SaveFile::save(const std::filesystem::path& a_path) const { write(a_path, false); }
+
+	SaveFile::WriteResult SaveFile::write(const std::filesystem::path& a_path, bool a_backup) const
+	{
+		WriteResult     res;
+		std::error_code ec;
+		const auto      co = CosavePath(a_path);
+		auto            tmp = a_path;
 		tmp += ".tmp";
-		WriteFile(tmp, out.buf);
-		std::filesystem::rename(tmp, a_path);
-		if (!cosave.empty()) {
-			WriteFile(CosavePath(a_path), cosave);
+		auto tmpCo = co;
+		tmpCo += ".tmp";
+		auto cleanup = [&] {
+			std::error_code e;
+			std::filesystem::remove(tmp, e);
+			std::filesystem::remove(tmpCo, e);
+		};
+
+		// 1. stage both files and check the new save reads back
+		try {
+			WriteFile(tmp, serialize());
+			if (!cosave.empty()) {
+				WriteFile(tmpCo, cosave);
+			}
+			auto check = SaveFile::load(tmp);
+			if (!check->papyrus()) {
+				throw std::runtime_error("the written save has no Papyrus section");
+			}
+		} catch (const std::exception& e) {
+			cleanup();
+			throw std::runtime_error(std::string("could not write the new save (nothing was changed): ") + e.what());
 		}
+
+		// 2. back up what is there, as one generation for both files
+		const bool hadEss = std::filesystem::exists(a_path, ec);
+		const bool hadCo = std::filesystem::exists(co, ec);
+		if (a_backup && (hadEss || hadCo)) {
+			std::string suffix = ".bak";
+			for (int n = 2;; ++n) {
+				auto b1 = a_path;
+				b1 += suffix;
+				auto b2 = co;
+				b2 += suffix;
+				if (!std::filesystem::exists(b1, ec) && !std::filesystem::exists(b2, ec)) {
+					break;
+				}
+				suffix = ".bak" + std::to_string(n);
+			}
+			if (hadEss) {
+				res.backup = a_path;
+				res.backup += suffix;
+				if (!std::filesystem::copy_file(a_path, res.backup, ec) || ec) {
+					cleanup();
+					throw std::runtime_error("could not back up " + a_path.filename().string() + " (" + ec.message() + "); nothing was changed");
+				}
+			}
+			if (hadCo) {
+				res.cosaveBackup = co;
+				res.cosaveBackup += suffix;
+				if (!std::filesystem::copy_file(co, res.cosaveBackup, ec) || ec) {
+					cleanup();
+					throw std::runtime_error("could not back up " + co.filename().string() + " (" + ec.message() + "); nothing was changed");
+				}
+			}
+		}
+
+		// 3. put them in place: the save, then the co-save; roll the save back if the co-save fails
+		std::filesystem::rename(tmp, a_path, ec);
+		if (ec) {
+			cleanup();
+			throw std::runtime_error("could not replace " + a_path.filename().string() + " (" + ec.message() + "); nothing was changed");
+		}
+		if (!cosave.empty()) {
+			std::filesystem::rename(tmpCo, co, ec);
+			if (ec) {
+				const auto      why = ec.message();
+				std::error_code e2;
+				bool            restored = false;
+				if (!res.backup.empty()) {
+					restored = std::filesystem::copy_file(res.backup, a_path, std::filesystem::copy_options::overwrite_existing, e2) && !e2;
+				} else if (!hadEss) {
+					restored = std::filesystem::remove(a_path, e2) && !e2;
+				}
+				cleanup();
+				throw std::runtime_error("could not write the co-save " + co.filename().string() + " (" + why + "); " +
+										 (restored ? "the save was put back as it was" : "the save could not be put back: restore it from its .bak copy"));
+			}
+		}
+		return res;
 	}
 
 	Papyrus* SaveFile::papyrus()

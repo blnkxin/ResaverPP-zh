@@ -92,6 +92,39 @@ namespace ess
 		}
 	}
 
+	namespace
+	{
+		// a .dlstrings / .ilstrings table: id -> text, each entry stored as u32 length + text
+		std::unordered_map<std::uint32_t, std::string> ReadLengthStrings(const std::vector<std::uint8_t>& d)
+		{
+			std::unordered_map<std::uint32_t, std::string> out;
+			if (d.size() < 8) {
+				return out;
+			}
+			const auto        count = U32(d.data()), size = U32(d.data() + 4);
+			const std::size_t dataStart = 8 + std::size_t(count) * 8;
+			if (dataStart > d.size()) {
+				return out;
+			}
+			out.reserve(count);
+			for (std::uint32_t i = 0; i < count; ++i) {
+				const auto  id = U32(d.data() + 8 + i * 8), off = U32(d.data() + 12 + i * 8);
+				std::size_t p = dataStart + off;
+				if (off >= size || p + 4 > d.size()) {
+					continue;
+				}
+				const auto len = U32(d.data() + p);
+				p += 4;
+				if (p + len > d.size()) {
+					continue;
+				}
+				const auto* s = reinterpret_cast<const char*>(d.data() + p);
+				out.emplace(id, std::string(s, strnlen(s, len)));
+			}
+			return out;
+		}
+	}
+
 	std::string GameTextToUtf8(const std::string& a_text) { return text::ToUtf8(a_text); }
 
 
@@ -128,6 +161,7 @@ namespace ess
 	void PluginDB::load(const Input& a_in, Progress& a_progress)
 	{
 		_forms.clear();
+		_quests.clear();
 		_pool.clear();
 		_plugins.clear();
 		missing.clear();
@@ -205,12 +239,12 @@ namespace ess
 						r.seek(r.pos() + len);
 					}
 				}
-				// ---- localized names
-				std::unordered_map<std::uint32_t, std::string> strings;
-				if (localized) {
-					const auto stem = Lower(U8(std::filesystem::path(std::u8string(pluginName.begin(), pluginName.end())).stem()));
+				// ---- localized names (.strings); journal text comes from .dlstrings, read only when needed
+				const auto stem = Lower(U8(std::filesystem::path(std::u8string(pluginName.begin(), pluginName.end())).stem()));
+				auto loadStrings = [&](const char* a_ext) {
+					std::unordered_map<std::uint32_t, std::string> table;
 					for (const auto& lang : { Lower(a_in.language), std::string("english") }) {
-						auto it = a_in.sources.stringsFiles.find(stem + "_" + lang + ".strings");
+						auto it = a_in.sources.stringsFiles.find(stem + "_" + lang + a_ext);
 						if (it == a_in.sources.stringsFiles.end()) {
 							continue;
 						}
@@ -224,15 +258,40 @@ namespace ess
 									data = bsa.extract(*e);
 								}
 							}
-							strings = ReadStrings(data);
+							// .dlstrings / .ilstrings entries carry a 4-byte length before the text
+							if (std::strcmp(a_ext, ".strings") != 0) {
+								table = ReadLengthStrings(data);
+							} else {
+								table = ReadStrings(data);
+							}
 						} catch (const std::exception& e) {
-							errors.push_back(pluginName + " 字符串： " + e.what());
+							errors.push_back(pluginName + " " + a_ext + "： " + e.what());
 						}
-						if (!strings.empty()) {
+						if (!table.empty()) {
 							break;
 						}
 					}
+					return table;
+				};
+				std::unordered_map<std::uint32_t, std::string> strings;
+				if (localized) {
+					strings = loadStrings(".strings");
 				}
+				// quests of this plugin whose journal text is a .dlstrings id: (quest, stage index, log index, id)
+				struct PendingText
+				{
+					std::uint32_t quest;
+					std::size_t   stage, log;
+					std::uint32_t id;
+				};
+				std::vector<PendingText> pendingLogs;
+				struct PendingObj
+				{
+					std::uint32_t quest;
+					std::size_t   obj;
+					std::uint32_t id;
+				};
+				std::vector<PendingObj> pendingObjs;
 
 				auto toRuntime = [&](std::uint32_t raw, std::uint32_t& out) {
 					const auto m = raw >> 24;
@@ -288,6 +347,8 @@ namespace ess
 					std::string   edid, full;
 					std::uint32_t base = 0;
 					std::uint32_t big = 0;
+					const bool     isQuest = Is(h, "QUST");
+					quests::QuestDef qd;
 					for (std::size_t p = 0; p + 6 <= n;) {
 						const auto* st = d + p;
 						std::uint32_t len;
@@ -316,6 +377,56 @@ namespace ess
 							if (toRuntime(U32(d + p), b)) {
 								base = b;
 							}
+						} else if (isQuest) {
+							auto text = [&](std::uint32_t& a_id) {
+								if (localized && len == 4) {
+									a_id = U32(d + p);
+									return std::string();
+								}
+								a_id = 0;
+								return GameTextToUtf8(std::string(reinterpret_cast<const char*>(d + p), strnlen(reinterpret_cast<const char*>(d + p), len)));
+							};
+							if (Is(st, "DNAM") && len >= 8) {
+								std::memcpy(&qd.flags, d + p, 2);
+								qd.priority = d[p + 2];
+								qd.type = d[p + 7];
+							} else if (Is(st, "INDX") && len >= 3) {
+								quests::Stage sg;
+								std::memcpy(&sg.index, d + p, 2);
+								sg.flags = d[p + 2];
+								qd.stages.push_back(std::move(sg));
+							} else if (Is(st, "QSDT") && len >= 1 && !qd.stages.empty()) {
+								quests::LogEntry le;
+								le.flags = d[p];
+								qd.stages.back().logs.push_back(std::move(le));
+							} else if (Is(st, "CNAM") && !qd.stages.empty() && !qd.stages.back().logs.empty()) {
+								std::uint32_t tid = 0;
+								qd.stages.back().logs.back().text = text(tid);
+								if (tid) {
+									pendingLogs.push_back({ 0, qd.stages.size() - 1, qd.stages.back().logs.size() - 1, tid });
+								}
+							} else if (Is(st, "NAM0") && len == 4 && !qd.stages.empty() && !qd.stages.back().logs.empty()) {
+								std::uint32_t nq = 0;
+								if (toRuntime(U32(d + p), nq)) {
+									qd.stages.back().logs.back().nextQuest = nq;
+								}
+							} else if (Is(st, "QOBJ") && len >= 2) {
+								quests::Objective o;
+								std::memcpy(&o.index, d + p, 2);
+								qd.objectives.push_back(std::move(o));
+							} else if (Is(st, "NNAM") && !qd.objectives.empty()) {
+								std::uint32_t tid = 0;
+								qd.objectives.back().text = text(tid);
+								if (tid) {
+									if (auto it = strings.find(tid); it != strings.end()) {
+										qd.objectives.back().text = GameTextToUtf8(it->second);
+									} else {
+										pendingObjs.push_back({ 0, qd.objectives.size() - 1, tid });
+									}
+								}
+							} else if (Is(st, "VMAD")) {
+								quests::ParseQuestVMAD(d + p, len, toRuntime, qd);
+							}
 						}
 						p += len;
 					}
@@ -331,7 +442,44 @@ namespace ess
 					if (base) {
 						f.base = base;
 					}
+					if (isQuest) {
+						qd.edid = GameTextToUtf8(edid);
+						qd.name = GameTextToUtf8(full);
+						qd.plugin = plugIdx;
+						for (auto it = pendingLogs.rbegin(); it != pendingLogs.rend() && it->quest == 0; ++it) {
+							it->quest = id;
+						}
+						for (auto it = pendingObjs.rbegin(); it != pendingObjs.rend() && it->quest == 0; ++it) {
+							it->quest = id;
+						}
+						_quests[id] = std::move(qd);
+					}
 					++recordsRead;
+				}
+				// journal entries (and objective texts not in .strings) of localized plugins
+				if (!pendingLogs.empty() || !pendingObjs.empty()) {
+					const auto dl = loadStrings(".dlstrings");
+					auto       lookup = [&](std::uint32_t a_id) -> std::string {
+                        if (auto it = dl.find(a_id); it != dl.end()) {
+                            return GameTextToUtf8(it->second);
+                        }
+                        if (auto it = strings.find(a_id); it != strings.end()) {
+                            return GameTextToUtf8(it->second);
+                        }
+                        return {};
+					};
+					for (const auto& pl : pendingLogs) {
+						auto q = _quests.find(pl.quest);
+						if (q != _quests.end() && pl.stage < q->second.stages.size() && pl.log < q->second.stages[pl.stage].logs.size()) {
+							q->second.stages[pl.stage].logs[pl.log].text = lookup(pl.id);
+						}
+					}
+					for (const auto& po : pendingObjs) {
+						auto q = _quests.find(po.quest);
+						if (q != _quests.end() && po.obj < q->second.objectives.size()) {
+							q->second.objectives[po.obj].text = lookup(po.id);
+						}
+					}
 				}
 				++pluginsRead;
 			} catch (const std::exception& e) {

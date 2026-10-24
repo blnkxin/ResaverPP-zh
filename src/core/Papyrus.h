@@ -250,6 +250,9 @@ namespace ess
 	public:
 		void read(Reader& r);
 		void write(Writer& w) const;
+		// Structural problems a read can pass but a write would not reproduce faithfully: string indices
+		// out of range, duplicate ids, saved data missing or given twice. Empty for a sound section.
+		std::vector<std::string> check() const;
 
 		std::uint16_t                header = 0;
 		std::vector<std::string>     strings;

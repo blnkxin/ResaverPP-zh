@@ -645,6 +645,21 @@ void App::drawSettings()
 		_saveCompression = c - 1;
 		ch = true;
 	}
+	ImGui::SeparatorText("Live game (ReSaverHelper.dll)");
+	ImGui::TextDisabled("With the optional ReSaverHelper.dll in the game, the Quests page can complete quests, set stages and\n"
+						"refresh the journal in the running game.");
+	if (ImGui::Checkbox("Connect to the running game", &_liveEnabled)) {
+		ch = true;
+	}
+	{
+		const char* modes[] = { "Top-left notification", "Message box", "No message" };
+		ImGui::SetNextItemWidth(260);
+		if (ImGui::Combo("How the game confirms what it did", &_liveNotify, modes, 3)) {
+			ch = true;
+		}
+	}
+	drawRefreshJournal(true);
+	drawLiveStatus();
 	ImGui::SeparatorText("其他");
 	bool watch = _watch;
 	{

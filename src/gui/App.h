@@ -9,10 +9,12 @@
 #include "core/Orphans.h"
 #include "core/Pex.h"
 #include "core/PluginDB.h"
+#include "core/Quests.h"
 #include "core/Report.h"
 #include "core/Mods.h"
 #include "core/Ops.h"
 #include "core/ScriptSources.h"
+#include "Live.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -52,6 +54,7 @@ public:
 		kMessages,
 		kSuspended,
 		kUnbinds,
+		kQuests,
 		kCount
 	};
 
@@ -107,6 +110,10 @@ public:
 			viewScript(f[0], f[1], f[2], f[3].empty() ? -1 : std::atoi(f[3].c_str()));
 		} else if (w == "rowview") {
 			_testRowView = true;
+		} else if (w.rfind("quest:", 0) == 0) {
+			_cat = Cat::kQuests;
+			_questShow = 3;
+			_questSel = static_cast<std::uint32_t>(std::strtoul(w.substr(6).c_str(), nullptr, 16));
 		} else if (w == "orphans") {
 			_orphansOpenWhenReady = true;
 		} else if (w == "missing") {
@@ -239,6 +246,58 @@ private:
 	bool                    _installKnown = false, _missingOpenWhenReady = false;  // the mods were scanned: "installed" can be told
 	std::vector<std::pair<std::string, std::size_t>> _missingScripts;  // scripts with no file anywhere -> instances + threads
 	bool                    _removeMissingScripts = true;
+	// scripts the game loaded when it saved but whose file the scan did not find (uninstalled since, or the
+	// scan missed it): listed apart, never removed unless the player ticks them
+	std::vector<std::pair<std::string, std::size_t>> _unfoundScripts;
+	bool                    _removeUnfoundScripts = false;
+	// sanity checks: the load order or the mods scan does not match this save (wrong profile, stale
+	// plugins.txt, wrong mods folder). Then nothing is ticked and a warning says why.
+	bool                    _orderSuspect = false, _scanSuspect = false;
+	std::size_t             _activeInSave = 0, _activeFound = 0, _activeChecked = 0;
+	std::filesystem::path   _missingFile;
+
+	// Quests page and the live link to the running game (AppQuests.cpp)
+	void                                  drawQuestsList();
+	void                                  drawQuestDetail();
+	void                                  drawLiveStatus();
+	void                                  drawRefreshJournal(bool a_compact);
+	const std::vector<ess::quests::QuestState>& questStates();
+	struct QuestPreview
+	{
+		bool                                  done = false;
+		std::string                           error;
+		std::vector<std::pair<std::uint16_t, std::vector<std::string>>> bodies;  // completion stage -> script lines
+	};
+	const QuestPreview&                   questPreview(std::uint32_t a_formID);
+	void                                  liveQuest(std::uint32_t a_formID);  // asks the game for the quest's live state
+	void                                  liveSetStage(std::uint32_t a_formID, std::uint16_t a_stage, const std::string& a_what);
+	std::string                           liveNotifyMode() const;
+	LiveLink                              _live;
+	bool                                  _liveEnabled = true;
+	int                                   _liveNotify = 0;  // 0 notification, 1 message box, 2 none
+	std::vector<ess::quests::QuestState>  _questStates;
+	std::uint64_t                         _questGen = UINT64_MAX;
+	char                                  _questFilter[128] = "";
+	int                                   _questShow = 0;  // 0 in the journal, 1 running, 2 completed, 3 all
+	std::uint32_t                         _questSel = 0;
+	std::map<std::uint32_t, QuestPreview> _questPreviews;
+	struct LiveQuest
+	{
+		bool        valid = false;
+		std::string error, editorID;
+		int         stage = 0;
+		bool        running = false, completed = false;
+	};
+	std::map<std::uint32_t, LiveQuest>    _liveQuests;
+	int                                   _setStageIdx = 0;
+	struct LiveRefresh
+	{
+		bool        running = false;
+		std::size_t done = 0, total = 0;
+		double      nextPoll = 0;
+	} _liveRefresh;
+	int                                   _liveAutoRefresh = -1;  // helper's bRefreshJournalOnLoad: -1 unknown, 0, 1
+	bool                                  _liveOptionAsked = false;
 
 	// enchanted / charged items in inventories, per mod, with a fix for ones that cannot be recharged (AppCharges.cpp)
 	void                               drawModCharged(const std::string& a_plugin);
@@ -246,6 +305,7 @@ private:
 	std::vector<ess::cf::ChargedItem>  _charged;
 	std::uint64_t                      _chargedGen = UINT64_MAX, _editGen = 0;
 	int                                _chargeFixValue = 3000;
+	bool                               _readOnly = false;  // the open save has structural problems: it is never written
 
 	// Clean > Remove instances on missing spawned objects, grouped by mod (AppOrphans.cpp)
 	void                             buildOrphans();

@@ -12,6 +12,7 @@
 #include "core/Ops.h"
 #include "core/ScriptSources.h"
 #include "core/Orphans.h"
+#include "core/Quests.h"
 
 #include <algorithm>
 #include <fstream>
@@ -27,7 +28,7 @@ using namespace ess;
 static void Usage()
 {
 	std::puts(
-		"ReSaver++ version 16 command line (Skyrim SE/AE/VR saves)\n"
+		"ReSaver++ version 19 command line (Skyrim SE/AE/VR saves)\n"
 		"usage: resaverpp-cli <save.ess> [actions] [-o <out.ess>]\n"
 		"       resaverpp-cli <script.pex>       disassemble a compiled script\n"
 		"       resaverpp-cli <script.pex> --psc decompile it to Papyrus source\n"
@@ -49,6 +50,9 @@ static void Usage()
 		"                            --report-anomalies limit it to one part. Uses --sources if given.\n"
 		"  --fix-mcm                 fix a SkyUI MCM registration jam (stuck OnConfigManagerReady/RegisterMod work)\n"
 		"  --remove-nonexistent      Clean > Remove instances on non-existent created forms (all of them)\n"
+		"  --quests [text]           list the quests in the save (state, stage, journal objectives); with text,\n"
+		"                            details of the matching ones. Uses --sources to read the plugins.\n"
+		"  --allow-damaged           edit and write a save even though it has structural problems (risky)\n"
 		"  --charged                 list enchanted / charged items in inventories (max charge, charge)\n"
 		"  --fix-charges <max>       give enchanted items with max charge 0 this max charge (so they can be\n"
 		"                            recharged), and lower charges above the max\n"
@@ -109,8 +113,10 @@ int main(int argc, char** argv)
 	std::string              sources, profile, removeMod, game, findText;
 	bool                     names = false, havok = false, purify = false, batchAll = false, repMods = false, repAnom = false;
 	std::string              batchFile, compareWith, reportFile;
-	bool                     dryRun = false, spawned = false, spawnedGone = false, charged = false;
+	bool                     dryRun = false, spawned = false, spawnedGone = false, charged = false, allowDamaged = false;
 	int                      fixCharges = 0;
+	bool                     questsView = false;
+	std::string              questFilter;
 	modremove::Options       removeOpt;
 	for (int i = 2; i < argc; ++i) {
 		const std::string a = argv[i];
@@ -137,6 +143,13 @@ int main(int argc, char** argv)
 			termUndef = true;
 		} else if (a == "--remove-nonexistent") {
 			nonexist = true;
+		} else if (a == "--quests") {
+			questsView = true;
+			if (i + 1 < argc && argv[i + 1][0] != '-') {
+				questFilter = argv[++i];
+			}
+		} else if (a == "--allow-damaged") {
+			allowDamaged = true;
 		} else if (a == "--charged") {
 			charged = true;
 		} else if (a == "--fix-charges") {
@@ -196,9 +209,19 @@ int main(int argc, char** argv)
 	try {
 		auto save = SaveFile::load(in);
 		auto* p = save->papyrus();
+		if (!save->problems.empty()) {
+			std::fprintf(stderr, "warning: this save has structural problems; it may not be written back faithfully:\n");
+			for (const auto& pr : save->problems) {
+				std::fprintf(stderr, "  - %s\n", pr.c_str());
+			}
+		}
 		const bool edits = !purge.empty() || unattached || undefined || termUndef || nonexist || !removeMod.empty() || fixMcm || havok || purify || !batchFile.empty() || spawnedGone || fixCharges > 0;
+		if (edits && !save->problems.empty() && !allowDamaged) {
+			std::fprintf(stderr, "error: not editing a damaged save (use --allow-damaged to write it anyway, at your own risk)\n");
+			return 3;
+		}
 		ScriptSources src;
-		if (!sources.empty() && (modsView || !removeMod.empty() || names || !reportFile.empty() || spawned || spawnedGone)) {
+		if (!sources.empty() && (modsView || !removeMod.empty() || names || !reportFile.empty() || spawned || spawnedGone || questsView)) {
 			std::filesystem::path profDir = profile, overwrite, gameData;
 			if (auto mo2 = FindMo2Instance(sources)) {
 				if (profDir.empty()) {
@@ -294,6 +317,115 @@ int main(int argc, char** argv)
 				report::WriteText(rp, lines);
 			}
 			std::printf("report written: %s (%zu lines)\n", reportFile.c_str(), lines.size());
+			return 0;
+		}
+		if (questsView) {
+			std::unique_ptr<PluginDB> db;
+			if (!src.empty()) {
+				PluginDB::Input in2;
+				PrepareInput(*save, in2);
+				in2.sources = src;
+				PluginDB::Progress prog;
+				db = std::make_unique<PluginDB>();
+				db->load(in2, prog);
+				std::printf("plugins read %zu, quests defined %zu\n", db->pluginsRead, db->questDefs().size());
+			}
+			const auto  states = quests::ReadStates(*save);
+			std::size_t running = 0, shown = 0;
+			for (const auto& q : states) {
+				running += q.running() && !q.completed() ? 1 : 0;
+				shown += q.shownObjectives();
+			}
+			std::printf("%zu quests in the save, %zu running, %zu objectives shown in the journal\n", states.size(), running, shown);
+			auto lower = [](std::string x) {
+				for (auto& c : x) {
+					c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+				}
+				return x;
+			};
+			const auto needle = lower(questFilter);
+			std::size_t listed = 0;
+			for (const auto& q : states) {
+				const auto* def = db ? db->quest(q.formID) : nullptr;
+				const std::string edid = def ? def->edid : "", name = def ? def->name : "";
+				if (!needle.empty() && lower(edid).find(needle) == std::string::npos && lower(name).find(needle) == std::string::npos) {
+					continue;
+				}
+				if (needle.empty() && !(q.running() && !q.completed())) {
+					continue;
+				}
+				if (++listed > top && needle.empty()) {
+					continue;
+				}
+				std::printf("%08X  %-32s %-30s %-24s stage %d  shown %zu", q.formID, edid.c_str(), name.c_str(), q.statusText(), q.highestDoneStage(),
+					q.shownObjectives());
+				if (def) {
+					std::string cs;
+					for (auto st : def->completionStages()) {
+						cs += (cs.empty() ? "" : ",") + std::to_string(st);
+					}
+					std::printf("  completes at %s", cs.empty() ? "-" : cs.c_str());
+				}
+				std::printf("\n");
+				if (!needle.empty() && def) {
+					std::printf("    plugin %s, fragment script %s (%zu fragments, %zu properties)\n", db->plugins()[def->plugin].c_str(),
+						def->fragmentScript.c_str(), def->fragments.size(), def->properties.size());
+					for (const auto& sg : def->stages) {
+						bool done = false;
+						for (const auto& [st, d] : q.stages) {
+							done |= st == sg.index && d;
+						}
+						const auto* fr = def->fragmentFor(sg.index);
+						std::printf("    stage %4u %s%s%s%s\n", sg.index, done ? "[done] " : "", sg.completes() ? "[COMPLETES] " : "", sg.fails() ? "[FAILS] " : "",
+							fr ? fr->function.c_str() : "");
+						for (const auto& l : sg.logs) {
+							if (!l.text.empty()) {
+								std::printf("        \"%s\"\n", l.text.substr(0, 140).c_str());
+							}
+						}
+					}
+					for (const auto& o : def->objectives) {
+						int state = 0;
+						for (const auto& os : q.objectives) {
+							if (os.index == o.index) {
+								state = os.state;
+							}
+						}
+						std::printf("    objective %u (%s): %s\n", o.index, quests::ObjectiveStateText(state), o.text.c_str());
+					}
+					for (const auto& pr : def->properties) {
+						std::printf("    property %s = %s\n", pr.name.c_str(), pr.type == 1 ? db->describe(pr.form).c_str() : pr.text.c_str());
+					}
+					// what the completion stage's script does
+					if (!def->fragmentScript.empty()) {
+						try {
+							if (auto px = src.findPex(def->fragmentScript)) {
+								const auto file = pex::Read(ScriptSources::readPex(*px));
+								const auto code = pex::Decompile(file);
+								for (auto st : def->completionStages()) {
+									const auto* fr = def->fragmentFor(st);
+									if (!fr) {
+										continue;
+									}
+									std::printf("    stage %u script (%s):\n", st, fr->function.c_str());
+									const auto body = quests::FunctionBody(code, fr->function);
+									for (const auto& l : body) {
+										std::printf("        %s\n", l.c_str());
+									}
+									for (const auto& e : quests::ScanEffects(body)) {
+										std::printf("      %s: %s\n", e.kind == quests::Effect::Kind::kReward ? "REWARD" : e.kind == quests::Effect::Kind::kQuest ? "QUEST" : "CALLS",
+											e.line.c_str());
+									}
+								}
+							} else {
+								std::printf("    (fragment script %s not found)\n", def->fragmentScript.c_str());
+							}
+						} catch (const std::exception& e) {
+							std::printf("    (fragment script: %s)\n", e.what());
+						}
+					}
+				}
+			}
 			return 0;
 		}
 		if (names) {
@@ -453,7 +585,14 @@ int main(int argc, char** argv)
 			}
 			std::printf("removed instances on missing spawned objects of mods no longer installed: %zu\n", orphans::Remove(*save, ids));
 		}
-		save->save(out);
+		{
+			std::error_code ec;
+			const auto      wr = save->write(out, std::filesystem::exists(out, ec));
+			if (!wr.backup.empty()) {
+				std::printf("previous file kept as %s%s\n", wr.backup.filename().string().c_str(),
+					wr.cosaveBackup.empty() ? "" : (" + " + wr.cosaveBackup.filename().string()).c_str());
+			}
+		}
 		// verify by reading it back
 		auto check = SaveFile::load(out);
 		std::printf("written %s and verified (re-read OK: %zu instances, %zu threads)\n", out.c_str(), check->papyrus()->instances.size(),

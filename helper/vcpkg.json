@@ -1,0 +1,16 @@
+{
+    "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+    "name": "resaverhelper",
+    "version-string": "1",
+    "dependencies": [
+        "directxmath",
+        "directxtk",
+        "fmt",
+        "nlohmann-json",
+        "rapidcsv",
+        "simpleini",
+        "spdlog",
+        "toml11",
+        "xbyak"
+    ]
+}

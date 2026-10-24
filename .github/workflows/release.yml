@@ -46,9 +46,9 @@ jobs:
       - name: 编译（GUI + CLI）
         shell: pwsh
         run: |
-          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DRESAVERPP_TESTS=OFF
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DRESAVERPP_TESTS=OFF 2>&1 | Tee-Object -FilePath configure.log
           if ($LASTEXITCODE -ne 0) {
-            "::error title=configure::CMake 配置失败（退出码 $LASTEXITCODE）"
+            Get-Content configure.log -Tail 40 | ForEach-Object { "::error title=configure::$($_)" }
             exit 1
           }
           # 把构建输出也记进日志；失败时把最后几行做成注释，方便在页面上直接看到错误

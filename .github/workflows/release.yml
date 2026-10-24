@@ -38,15 +38,16 @@ jobs:
       - name: 单元测试
         shell: pwsh
         run: |
-          cmake -S . -B build-test -G Ninja -DCMAKE_BUILD_TYPE=Release -DRESAVERPP_TESTS=ON -DRESAVERPP_GUI=OFF
-          cmake --build build-test
-          ctest --test-dir build-test --output-on-failure
+          # Visual Studio 生成器：runner 上默认没有 vcvars 环境，Ninja 会找不到 cl.exe
+          cmake -S . -B build-test -G "Visual Studio 17 2022" -A x64 -DRESAVERPP_TESTS=ON -DRESAVERPP_GUI=OFF
+          cmake --build build-test --config Release
+          ctest --test-dir build-test -C Release --output-on-failure
 
       - name: 编译（GUI + CLI）
         shell: pwsh
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DRESAVERPP_TESTS=OFF
-          cmake --build build
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DRESAVERPP_TESTS=OFF
+          cmake --build build --config Release --target ReSaverPP resaverpp-cli
 
       - name: 打包
         id: pack
@@ -55,7 +56,7 @@ jobs:
           $v = "${{ steps.ver.outputs.version }}"
           $stage = "package"
           New-Item -ItemType Directory -Force $stage | Out-Null
-          Copy-Item build/ReSaverPP.exe, build/resaverpp-cli.exe $stage
+          Copy-Item build/Release/ReSaverPP.exe, build/Release/resaverpp-cli.exe $stage
           Copy-Item LICENSE, NOTICE.md, THIRD-PARTY-NOTICES.md, README.zh-CN.md $stage
 
           $gui = (Get-FileHash "$stage/ReSaverPP.exe" -Algorithm SHA256).Hash

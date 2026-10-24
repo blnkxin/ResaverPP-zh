@@ -671,17 +671,29 @@ void App::drawSettings()
 		_saveCompression = c - 1;
 		ch = true;
 	}
-	ImGui::SeparatorText("Live game (ReSaverHelper.dll)");
-	ImGui::TextDisabled("With the optional ReSaverHelper.dll in the game, the Quests page can complete quests, set stages and\n"
-						"refresh the journal in the running game.");
-	if (ImGui::Checkbox("Connect to the running game", &_liveEnabled)) {
+	ImGui::SeparatorText("实时游戏（ReSaverHelper.dll）");
+	ImGui::TextDisabled("游戏里装上可选的 ReSaverHelper.dll 后，任务页就能在运行中的游戏里完成任务、设置阶段、\n"
+						"刷新任务日志。没装也不影响其它功能。");
+	if (ImGui::Checkbox("连接到正在运行的游戏", &_liveEnabled)) {
 		ch = true;
 	}
 	{
-		const char* modes[] = { "Top-left notification", "Message box", "No message" };
+		const char* modes[] = { "左上角通知", "消息框", "不提示" };
 		ImGui::SetNextItemWidth(260);
-		if (ImGui::Combo("How the game confirms what it did", &_liveNotify, modes, 3)) {
+		if (ImGui::Combo("游戏用什么方式告诉你结果", &_liveNotify, modes, 3)) {
 			ch = true;
+		}
+	}
+	{
+		// ReSaverHelper's own messages are English, so they are silenced and ReSaver++ sends its own (Chinese).
+		bool helperText = !_liveSilentRefresh;
+		if (ImGui::Checkbox("读档自动刷新时也提示（英文）", &helperText)) {
+			_liveSilentRefresh = !helperText;
+			ch = true;
+		}
+		if (ImGui::IsItemHovered()) {
+			ImGui::SetTooltip("默认关：ReSaverHelper 自己的提示是英文，关掉后游戏里的提示都由 ReSaver++ 发（中文）。\n"
+							  "勾上会保留它自己的英文提示（主要是读档后自动刷新的那几句）。");
 		}
 	}
 	drawRefreshJournal(true);

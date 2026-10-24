@@ -270,6 +270,8 @@ private:
 	};
 	const QuestPreview&                   questPreview(std::uint32_t a_formID);
 	void                                  liveQuest(std::uint32_t a_formID);  // asks the game for the quest's live state
+	// our own in-game notification (the helper's texts are English and are silenced with "none")
+	void                                  liveNotify(const std::string& a_text);
 	void                                  liveSetStage(std::uint32_t a_formID, std::uint16_t a_stage, const std::string& a_what,
 		                                      std::function<void(bool)> a_then = {});
 	// earlier quests of a quest line: quests whose journal names this one as the next quest, or whose
@@ -321,6 +323,8 @@ private:
 	} _liveRefresh;
 	int                                   _liveAutoRefresh = -1;  // helper's bRefreshJournalOnLoad: -1 unknown, 0, 1
 	bool                                  _liveOptionAsked = false;
+	bool                                  _liveSilentRefresh = true;  // keep the helper's own (English) refresh messages quiet
+	int                                   _liveIniNotifyApplied = -1;  // sNotify we last wrote to ReSaverHelper.ini
 
 	// enchanted / charged items in inventories, per mod, with a fix for ones that cannot be recharged (AppCharges.cpp)
 	void                               drawModCharged(const std::string& a_plugin);

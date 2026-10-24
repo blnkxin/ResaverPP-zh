@@ -2278,6 +2278,8 @@ void App::loadSettings()
 			_liveEnabled = line.substr(5) != "0";
 		} else if (line.rfind("live_notify=", 0) == 0) {
 			_liveNotify = std::clamp(std::atoi(line.substr(12).c_str()), 0, 2);
+		} else if (line.rfind("live_silent=", 0) == 0) {
+			_liveSilentRefresh = line.substr(12) != "0";
 		} else if (line.rfind("theme=", 0) == 0) {
 			const int k = std::clamp(std::atoi(line.c_str() + 6), 0, 2);
 			theme::Apply(static_cast<theme::Kind>(k));
@@ -2353,6 +2355,7 @@ void App::saveSettings()
 	f << "theme=" << static_cast<int>(theme::Current()) << "\n";
 	f << "live=" << (_liveEnabled ? 1 : 0) << "\n";
 	f << "live_notify=" << _liveNotify << "\n";
+	f << "live_silent=" << (_liveSilentRefresh ? 1 : 0) << "\n";
 	f << "decompile_always=" << (_decompileAlways ? 1 : 0) << "\n";
 	f << "compiler=" << _compilerSetting << "\n";
 	f << "compile_out_mode=" << _compileOutMode << "\n";

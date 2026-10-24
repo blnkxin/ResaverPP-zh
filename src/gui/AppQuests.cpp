@@ -43,12 +43,46 @@ namespace
 
 	void Dim(const std::string& s) { TextColored(theme::Dim(), s); }
 
+	// The helper answers in English; those answers end up in our status bar, so the known ones get Chinese.
+	std::string LiveErrorText(const std::string& a_error)
+	{
+		static const std::pair<const char*, const char*> kKnown[] = {
+			{ "the game is not running with ReSaverHelper.dll", "游戏没在运行（或者没装 ReSaverHelper.dll）" },
+			{ "the connection to the game was lost", "和游戏的连接断了" },
+			{ "no reply", "游戏没有回应" },
+			{ "no game loaded yet (load a save first)", "游戏里还没读档（请先读一个存档）" },
+			{ "the game did not answer in time", "游戏没有及时回应" },
+			{ "the game is busy (it did not answer within 30 seconds)", "游戏正忙（30 秒内没有回应）" },
+			{ "the game is busy (it did not answer within 30 seconds); the refresh starts when it can",
+			  "游戏正忙（30 秒内没有回应），能处理时会开始刷新" },
+			{ "bad quest or stage", "任务或阶段参数不对" },
+			{ "bad quest", "任务参数不对" },
+			{ "unknown command ", "不认识的命令：" },
+			{ "invalid option or value: ", "设置项或值不对：" },
+			{ "unknown option ", "不认识的设置项：" },
+			{ "could not write ", "写入失败：" },
+		};
+		for (const auto& [en, zh] : kKnown) {
+			const std::string key = en;
+			if (a_error == key) {
+				return zh;
+			}
+			if (key.back() == ' ' && a_error.rfind(key, 0) == 0) {
+				return std::string(zh) + a_error.substr(key.size());
+			}
+		}
+		if (a_error.rfind("no quest ", 0) == 0) {
+			return "游戏里没有这个任务（" + a_error.substr(9) + "）";
+		}
+		return a_error;
+	}
+
 	// "needs the running game" hint on a disabled button
 	void LiveHint(const LiveLink::Info& a_info)
 	{
 		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-			ImGui::SetTooltip("%s", !a_info.connected ? "Start Skyrim with ReSaverHelper.dll installed to use this (optional download on the ReSaver Plus page)."
-														: "Load a save in the game first.");
+			ImGui::SetTooltip("%s", !a_info.connected ? "安装 ReSaverHelper.dll 并用 SKSE 启动游戏后才能用（Nexus 上的可选下载）。"
+														: "请先在游戏里读一个存档。");
 		}
 	}
 }
@@ -144,12 +178,13 @@ void App::liveQuest(std::uint32_t a_formID)
 
 void App::liveSetStage(std::uint32_t a_formID, std::uint16_t a_stage, const std::string& a_what, std::function<void(bool)> a_then)
 {
-	const auto msg = "ReSaver++: " + a_what;
-	_status = "Asking the game: " + a_what + "...";
-	_live.request({ "SETSTAGE", Fmt("%08X", a_formID), std::to_string(a_stage), liveNotifyMode(), msg },
+	// The helper's own texts are English: asking it with "none" silences them, and liveNotify() below sends our
+	// own text instead, so what the game shows is Chinese as well.
+	_status = "正在请求游戏：" + a_what + "…";
+	_live.request({ "SETSTAGE", Fmt("%08X", a_formID), std::to_string(a_stage), "none", "" },
 		[this, a_formID, a_what, a_then](const LiveLink::Reply& r) {
 			if (!LiveLink::Ok(r)) {
-				_status = "The game could not do it: " + LiveLink::Error(r);
+				_status = "游戏没能执行：" + LiveErrorText(LiveLink::Error(r));
 				if (a_then) {
 					a_then(false);
 				}
@@ -161,17 +196,26 @@ void App::liveSetStage(std::uint32_t a_formID, std::uint16_t a_stage, const std:
 				// helper 3 also tells where the quest stands after the refusal
 				const auto running = LiveLink::Field(r, 1), completed = LiveLink::Field(r, 2), stage = LiveLink::Field(r, 3);
 				if (completed == "1") {
-					why = " The quest is already completed in the game.";
+					why = " 这个任务在游戏里已经完成了。";
 				} else if (running == "0") {
-					why = " The quest could not start: the game could not find the people, places or items it needs (they are set up by "
-						  "the quest's normal beginning). \"Mark completed\" can still mark it done in the journal.";
+					why = " 任务没能启动：游戏找不到它需要的人、地点或物品（这些由任务正常开始时的剧情设置）。"
+						  "可以用「标记为完成」在日志里把它标成完成。";
 				} else if (!stage.empty()) {
-					why = " The quest is running at stage " + stage + "; that stage's conditions were not met. \"Mark completed\" can still mark it done.";
+					why = " 任务停在阶段 " + stage + "，那个阶段的条件没有满足。可以用「标记为完成」在日志里把它标成完成。";
 				}
 			}
-			_status = f == "1" ? "Done in game: " + a_what + ". Save in the game to keep it." :
-			          f == "?" ? "The game is still running that stage's script: " + a_what + "." :
-			                     "The game refused that stage: " + a_what + "." + why;
+			_status = f == "1" ? "游戏里已完成：" + a_what + "。记得在游戏里存档。" :
+			          f == "?" ? "游戏还在运行那个阶段的脚本：" + a_what + "。" :
+			                     "游戏拒绝了那个阶段：" + a_what + "。" + why;
+			if (_chainRun.empty()) {
+				if (f == "1") {
+					liveNotify("完成：" + a_what);
+				} else if (f == "?") {
+					liveNotify("游戏还在执行：" + a_what);
+				} else {
+					liveNotify("游戏拒绝了：" + a_what);
+				}
+			}
 			liveQuest(a_formID);
 			if (a_then) {
 				a_then(f != "0");
@@ -187,19 +231,32 @@ bool App::helperAtLeast(int a_version) const
 
 void App::liveComplete(std::uint32_t a_formID, const std::string& a_name)
 {
-	const std::string what = "marked \"" + a_name + "\" completed";
-	_status = "Asking the game: " + what + "...";
-	_live.request({ "COMPLETE", Fmt("%08X", a_formID), liveNotifyMode(), "ReSaver++: " + what }, [this, a_formID, what](const LiveLink::Reply& r) {
+	const std::string what = "「" + a_name + "」";
+	_status = "正在请求游戏：把 " + what + " 标记为完成…";
+	_live.request({ "COMPLETE", Fmt("%08X", a_formID), "none", "" }, [this, a_formID, what](const LiveLink::Reply& r) {
 		if (!LiveLink::Ok(r)) {
-			_status = "The game could not do it: " + LiveLink::Error(r);
+			_status = "游戏没能执行：" + LiveErrorText(LiveLink::Error(r));
 			return;
 		}
 		const auto f = LiveLink::Field(r, 0);
-		_status = f == "1" ? "Done in game: " + what + ". Save in the game to keep it." :
-		          f == "?" ? "The game is busy; it does it as soon as it can: " + what + "." :
-		                     "The game did not mark it completed: " + what + ".";
+		_status = f == "1" ? "游戏里已把 " + what + " 标记为完成。记得在游戏里存档。" :
+		          f == "?" ? "游戏正忙，稍后就会处理：" + what + "。" :
+		                     "游戏没能把 " + what + " 标成完成。";
+		if (f == "1") {
+			liveNotify("已标记完成：" + what);
+		}
 		liveQuest(a_formID);
 	});
+}
+
+// The game shows what we send here: the helper's own English messages are silenced with "none", and the mode
+// (notification / message box / nothing) is still the user's choice.
+void App::liveNotify(const std::string& a_text)
+{
+	if (_liveNotify == 2 || a_text.empty() || !_live.info().connected) {
+		return;
+	}
+	_live.request({ "NOTIFY", liveNotifyMode(), "ReSaver++：" + a_text }, [](const LiveLink::Reply&) {});
 }
 
 std::vector<App::ChainItem>& App::questChain(std::uint32_t a_formID)
@@ -269,16 +326,17 @@ std::vector<App::ChainItem>& App::questChain(std::uint32_t a_formID)
 void App::runChain()
 {
 	if (_chainPos >= _chainRun.size()) {
-		_status = Fmt("Quest line done in game (%zu quest(s)). Save in the game to keep it.", _chainRun.size());
+		_status = Fmt("任务线在游戏里已完成（%zu 个任务）。记得在游戏里存档。", _chainRun.size());
+		liveNotify(Fmt("任务线已完成：%zu 个任务", _chainRun.size()));
 		_chainRun.clear();
 		_chainPos = 0;
 		return;
 	}
 	const auto c = _chainRun[_chainPos];
-	liveSetStage(c.formID, c.stage, Fmt("completed \"%s\" (stage %u, %zu of %zu)", c.name.c_str(), c.stage, _chainPos + 1, _chainRun.size()),
+	liveSetStage(c.formID, c.stage, Fmt("完成「%s」（阶段 %u，第 %zu / %zu 个）", c.name.c_str(), c.stage, _chainPos + 1, _chainRun.size()),
 		[this](bool ok) {
 			if (!ok) {
-				_status += "  Stopped the quest line here.";
+				_status += "  任务线在这里停下了。";
 				_chainRun.clear();
 				_chainPos = 0;
 				return;
@@ -290,13 +348,13 @@ void App::runChain()
 
 void App::drawQuestNotifyChoice()
 {
-	const char* modes[] = { "Top-left notification", "Message box", "No message" };
-	ImGui::SetNextItemWidth(240);
+	const char* modes[] = { "左上角通知", "消息框", "不提示" };
+	ImGui::SetNextItemWidth(180);
 	if (ImGui::Combo("##qnotify", &_liveNotify, modes, 3)) {
 		saveSettings();
 	}
 	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("How the game tells you what ReSaver++ did (also in Options > Settings > Live game).");
+		ImGui::SetTooltip("游戏用什么方式告诉你结果（选项 > 设置里的「实时游戏」也能改）。");
 	}
 }
 
@@ -307,13 +365,13 @@ void App::drawLiveStatus()
 	_live.poll();
 	const auto info = _live.info();
 	if (!info.connected) {
-		ImGui::TextDisabled("Live game: not connected");
+		ImGui::TextDisabled("实时游戏：未连接");
 		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Start Skyrim with ReSaverHelper.dll installed to complete quests, set stages and refresh the journal from here.");
+			ImGui::SetTooltip("安装 ReSaverHelper.dll 并用 SKSE 启动游戏后，就能在这里完成任务、设置阶段、刷新任务日志。");
 		}
 		return;
 	}
-	TextColored(theme::Good(), Fmt("Live game: %s %s%s", info.runtime.c_str(), info.gameVersion.c_str(), info.inGame ? "" : " (main menu)"));
+	TextColored(theme::Good(), Fmt("实时游戏：%s %s%s", info.runtime.c_str(), info.gameVersion.c_str(), info.inGame ? "" : "（主菜单）"));
 }
 
 // ---- journal refresh (live) -----------------------------------------------------------------------
@@ -334,37 +392,49 @@ void App::drawRefreshJournal(bool a_compact)
 			_liveRefresh.total = std::strtoull(LiveLink::Field(r, 1).c_str(), nullptr, 10);
 			if (LiveLink::Field(r, 2) != "1") {
 				_liveRefresh.running = false;
-				_status = Fmt("Journal refreshed in game: %zu objective(s). Save in the game to keep it.", _liveRefresh.done);
+				_status = Fmt("游戏里已刷新任务日志：%zu 个目标。记得在游戏里存档。", _liveRefresh.done);
+				liveNotify(Fmt("任务日志已刷新：%zu 个目标", _liveRefresh.done));
 			}
 		});
 	}
 	ImGui::BeginDisabled(!can || _liveRefresh.running);
-	if (ImGui::Button("Refresh journal in game")) {
-		_live.request({ "REFRESH", liveNotifyMode() }, [this](const LiveLink::Reply& r) {
+	if (ImGui::Button("在游戏中刷新任务日志")) {
+		_live.request({ "REFRESH", "none" }, [this](const LiveLink::Reply& r) {
 			if (!LiveLink::Ok(r)) {
-				_status = "The game could not refresh the journal: " + LiveLink::Error(r);
+				_status = "游戏没能刷新任务日志：" + LiveErrorText(LiveLink::Error(r));
 				return;
 			}
 			const auto n = std::strtoull(LiveLink::Field(r, 0).c_str(), nullptr, 10);
 			if (n == 0) {
-				_status = "Nothing to refresh: no running quest shows an objective.";
+				_status = "没有可刷新的：没有进行中的任务显示目标。";
+				liveNotify("没有可刷新的任务目标");
 				return;
 			}
 			_liveRefresh = LiveRefresh{ true, 0, n, 0 };
+			liveNotify("正在刷新任务日志…");
 		});
 	}
 	ImGui::EndDisabled();
 	if (!can) {
 		LiveHint(info);
 	} else if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("For every running quest, each objective the journal shows is hidden and shown again (completed / failed\n"
-						  "put back), so the game rebuilds its list. Brings back quests and objectives the journal stopped showing\n"
-						  "(the same fix as Quest Journal Limit Bug Fixer).");
+		ImGui::SetTooltip("对每个进行中的任务，把日志里显示的目标先隐藏再显示（已完成/已失败的复原），让游戏重建列表。\n"
+						  "能把日志不再显示的任务和目标找回来（和 Quest Journal Limit Bug Fixer 是同一个修法）。");
 	}
 	if (_liveRefresh.running) {
 		ImGui::SameLine();
 		const float frac = _liveRefresh.total ? float(_liveRefresh.done) / float(_liveRefresh.total) : 0.0f;
 		ImGui::ProgressBar(frac, ImVec2(a_compact ? 160.0f : 240.0f, 0), Fmt("%zu / %zu", _liveRefresh.done, _liveRefresh.total).c_str());
+	}
+	// the helper's own refresh messages are English: keep them silent, our own notifications carry the news
+	if (info.connected) {
+		const int want = _liveSilentRefresh ? 0 : 1;
+		if (_liveIniNotifyApplied != want) {
+			_liveIniNotifyApplied = want;
+			_live.request({ "SETOPTION", "sNotify", want ? "hud" : "none" }, [](const LiveLink::Reply&) {});
+		}
+	} else {
+		_liveIniNotifyApplied = -1;
 	}
 	// the helper's own option: refresh after every save load
 	if (info.connected && !_liveOptionAsked) {
@@ -382,22 +452,22 @@ void App::drawRefreshJournal(bool a_compact)
 	}
 	bool autoOn = _liveAutoRefresh == 1;
 	ImGui::BeginDisabled(!info.connected || _liveAutoRefresh < 0);
-	if (ImGui::Checkbox("Refresh automatically after every save load", &autoOn)) {
+	if (ImGui::Checkbox("每次读档后自动刷新任务日志", &autoOn)) {
 		_live.request({ "SETOPTION", "bRefreshJournalOnLoad", autoOn ? "1" : "0" }, [this, autoOn](const LiveLink::Reply& r) {
 			if (LiveLink::Ok(r)) {
 				_liveAutoRefresh = autoOn ? 1 : 0;
-				_status = autoOn ? "ReSaverHelper will refresh the journal after every save load (saved in ReSaverHelper.ini)."
-				                 : "ReSaverHelper will no longer refresh the journal on load.";
+				_status = autoOn ? "ReSaverHelper 会在每次读档后刷新任务日志（已写进 ReSaverHelper.ini）。"
+				                 : "ReSaverHelper 不再在每次读档后刷新任务日志。";
 			} else {
-				_status = "Could not change the helper's setting: " + LiveLink::Error(r);
+				_status = "改不了 ReSaverHelper 的设置：" + LiveErrorText(LiveLink::Error(r));
 			}
 		});
 	}
 	ImGui::EndDisabled();
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-		ImGui::SetTooltip("%s", info.connected ? "Saved in ReSaverHelper.ini (bRefreshJournalOnLoad). The helper waits a few seconds after the load,\n"
-											   "then refreshes and tells you when it is done."
-											   : "Start the game with ReSaverHelper.dll to change this, or set bRefreshJournalOnLoad=1 in ReSaverHelper.ini.");
+		ImGui::SetTooltip("%s", info.connected ? "写在 ReSaverHelper.ini 的 bRefreshJournalOnLoad 里。读档后等几秒再刷新。\n"
+											   "游戏里的提示由 ReSaver++ 发，可以在设置里关掉。"
+											   : "装上 ReSaverHelper.dll 启动游戏才能改；也可以直接改 ReSaverHelper.ini 的 bRefreshJournalOnLoad=1。");
 	}
 }
 
@@ -630,13 +700,13 @@ void App::drawQuestDetail()
 	if (live) {
 		auto it = _liveQuests.find(q->formID);
 		if (it != _liveQuests.end() && it->second.valid) {
-			TextColored(theme::Good(), Fmt("In the running game: stage %d, %s", it->second.stage,
-										   it->second.completed ? "completed" : it->second.running ? "running" : "not running"));
+			TextColored(theme::Good(), Fmt("游戏里的状态：阶段 %d，%s", it->second.stage,
+										   it->second.completed ? "已完成" : it->second.running ? "进行中" : "没有运行"));
 		} else if (it != _liveQuests.end()) {
-			Dim("In the running game: " + it->second.error);
+			Dim("游戏里的状态：" + LiveErrorText(it->second.error));
 		}
 		ImGui::SameLine();
-		if (ImGui::SmallButton("Check in game")) {
+		if (ImGui::SmallButton("在游戏里查一下")) {
 			liveQuest(q->formID);
 		}
 	}
@@ -646,7 +716,7 @@ void App::drawQuestDetail()
 	const std::string name = def ? (def->name.empty() ? def->edid : def->name) : Fmt("%08X", q->formID);
 	ImGui::Spacing();
 	ImGui::BeginDisabled(!live || completion.empty());
-	if (ImGui::Button("Complete quest in game")) {
+	if (ImGui::Button("在游戏中完成该任务")) {
 		const auto st = completion.front();
 		const auto& pv = questPreview(q->formID);
 		std::string effects;
@@ -665,32 +735,31 @@ void App::drawQuestDetail()
 			}
 		}
 		if (!earlier.empty()) {
-			earlier = "\n\nEarlier quests of this quest line are not completed:" + earlier +
-					  "\nThis button completes only this quest. To complete them too, use \"Complete ... earlier quest(s) and this one\" below.";
+			earlier = "\n\n这条任务线里前面的任务还没完成：" + earlier +
+					  "\n这个按钮只完成当前任务。要连它们一起完成，用下面的「在游戏中完成前面的 N 个任务和这一个」。";
 		}
-		confirm("Complete quest",
-			Fmt("Set \"%s\" to its completion stage %u in the running game?\n\nThe game runs that stage's own script, so its rewards are given and "
-				"follow-up quests start the normal way.%s\n\nSkipping a quest's earlier stages can leave things unfinished (items not "
-				"collected, people not met). Make a save in the game first.%s",
-				name.c_str(), st, effects.empty() ? "" : ("\n\nWhat the stage script does:" + effects).c_str(),
+		confirm("完成该任务",
+			Fmt("把「%s」在游戏里设到它的完成阶段 %u？\n\n游戏会运行那个阶段自己的脚本，所以奖励会正常发放，后续任务也会正常开始。%s\n\n"
+				"跳过任务前面的阶段可能留下没做完的事（东西没拿到、人没见过）。请先在游戏里存个档。%s",
+				name.c_str(), st, effects.empty() ? "" : ("\n\n这个阶段的脚本会做：" + effects).c_str(),
 				q->hasFlags ? "" :
-				              "\n\nThis quest has not started in this save: setting the stage starts it and completes it at once. Its people and "
-				              "places are not set up yet, so parts of its script may do nothing, and quests that come after it may still start.") + earlier,
-			[this, fid = q->formID, st, name] { liveSetStage(fid, st, Fmt("completed \"%s\" (stage %u)", name.c_str(), st)); });
+				              "\n\n这个任务在本存档里还没开始：设阶段会立刻启动并完成它。但它的人和地点还没设置好，"
+				              "脚本的部分内容可能不起作用，后续任务也可能仍然会启动。") + earlier,
+			[this, fid = q->formID, st, name] { liveSetStage(fid, st, Fmt("完成「%s」（阶段 %u）", name.c_str(), st)); });
 	}
 	ImGui::EndDisabled();
 	if (!live) {
 		LiveHint(info);
 	} else if (completion.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-		ImGui::SetTooltip("No stage of this quest is marked as completing it.");
+		ImGui::SetTooltip("这个任务没有任何阶段被标记为完成它。");
 	}
 	ImGui::SameLine();
 	ImGui::BeginDisabled(!live || !helperAtLeast(3));
-	if (ImGui::Button("Mark completed")) {
-		confirm("Mark completed",
-			Fmt("Mark \"%s\" as completed in the running game, without running its stage script?\n\nIts objectives are completed and it moves to "
-				"the completed quests in the journal. Unlike \"Complete quest in game\", no rewards are given and quests that normally "
-				"follow it are NOT started. Use it when the game refuses the completion stage. Make a save in the game first.",
+	if (ImGui::Button("标记为完成")) {
+		confirm("标记为完成",
+			Fmt("在游戏里把「%s」标成完成，但不运行它的阶段脚本？\n\n它的目标会被完成，并移动到日志的已完成列表。"
+				"和「在游戏中完成该任务」不同：不会给奖励，也不会启动本来会跟着来的任务。\n"
+				"游戏拒绝执行完成阶段时可以用这个。请先在游戏里存个档。",
 				name.c_str()),
 			[this, fid = q->formID, name] { liveComplete(fid, name); });
 	}
@@ -698,9 +767,10 @@ void App::drawQuestDetail()
 	if (!live) {
 		LiveHint(info);
 	} else if (!helperAtLeast(3) && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-		ImGui::SetTooltip("Needs ReSaverHelper version 3 (you have version %s).", info.helperVersion.c_str());
+		ImGui::SetTooltip("需要 ReSaverHelper 3 或更新的版本（你的是 %s）。", info.helperVersion.c_str());
 	}
-	ImGui::SameLine();
+	// the Chinese labels are wider than the English ones: the stage controls start a new line
+	ImGui::NewLine();
 	// set any stage
 	std::vector<std::uint16_t> stageList;
 	if (def) {
@@ -722,10 +792,10 @@ void App::drawQuestDetail()
 	ImGui::EndDisabled();
 	ImGui::SameLine();
 	ImGui::BeginDisabled(!live || stageList.empty());
-	if (ImGui::Button("Set stage in game") && !stageList.empty()) {
+	if (ImGui::Button("在游戏中设置阶段") && !stageList.empty()) {
 		const auto st = stageList[_setStageIdx];
-		confirm("Set stage", Fmt("Set \"%s\" to stage %u in the running game? The stage's script runs. Make a save in the game first.", name.c_str(), st),
-			[this, fid = q->formID, st, name] { liveSetStage(fid, st, Fmt("\"%s\" set to stage %u", name.c_str(), st)); });
+		confirm("设置阶段", Fmt("在游戏里把「%s」设到阶段 %u？该阶段的脚本会运行。请先在游戏里存个档。", name.c_str(), st),
+			[this, fid = q->formID, st, name] { liveSetStage(fid, st, Fmt("把「%s」设到阶段 %u", name.c_str(), st)); });
 	}
 	ImGui::EndDisabled();
 	if (!live) {
@@ -742,7 +812,7 @@ void App::drawQuestDetail()
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
 		ImGui::SetTooltip("复制能完成该任务的控制台命令（用它的完成阶段），或设置左侧选中的阶段。");
 	}
-	ImGui::TextDisabled("The game confirms with:");
+	ImGui::TextDisabled("游戏如何告知结果：");
 	ImGui::SameLine();
 	drawQuestNotifyChoice();
 
@@ -760,10 +830,10 @@ void App::drawQuestDetail()
 			open += c.done ? 0 : 1;
 		}
 		if (open) {
-			ImGui::SeparatorText(Fmt("Earlier quests in this quest line (%zu not completed)", open).c_str());
-			Dim("These quests lead to this one: their journal names it as the next quest, or their last stage starts it. Ticked ones are "
-				"completed first, oldest first, then this quest. Quests that are one of several ways to get here (two factions, two "
-				"endings) are not ticked: tick the one you want.");
+			ImGui::SeparatorText(Fmt("这条任务线里前面的任务（%zu 个未完成）", open).c_str());
+			Dim("这些任务通向当前任务：它们的日志把当前任务列为下一个，或它们的最后一个阶段会启动当前任务。"
+				"勾选的会按从早到晚的顺序先完成，然后是当前任务。如果到达当前任务有几条路（两个阵营、两个结局），"
+				"那几条不会自动勾选——请自己勾想要的那条。");
 			for (auto& c : chain) {
 				if (c.done) {
 					continue;
@@ -771,7 +841,7 @@ void App::drawQuestDetail()
 				ImGui::PushID(static_cast<int>(c.formID));
 				ImGui::Checkbox(c.name.c_str(), &c.tick);
 				ImGui::SameLine();
-				ImGui::TextDisabled("stage %u%s", c.stage, c.alternative ? "   (one of several ways here)" : "");
+				ImGui::TextDisabled("阶段 %u%s", c.stage, c.alternative ? "   （此处有多种达成方式之一）" : "");
 				ImGui::PopID();
 			}
 			std::vector<ChainItem> run;
@@ -786,15 +856,15 @@ void App::drawQuestDetail()
 			self.name = name;
 			run.push_back(self);
 			ImGui::BeginDisabled(!live || run.size() < 2 || !_chainRun.empty());
-			if (ImGui::Button(Fmt("Complete %zu earlier quest(s) and this one in game", run.size() - 1).c_str())) {
+			if (ImGui::Button(Fmt("在游戏中完成前面的 %zu 个任务和这一个", run.size() - 1).c_str())) {
 				std::string list;
 				for (const auto& c : run) {
 					list += Fmt("\n    %s (stage %u)", c.name.c_str(), c.stage);
 				}
-				confirm("Complete quest line",
-					"Complete these quests in the running game, one after the other, in this order?" + list +
-						"\n\nEach stage's own script runs (rewards, follow-up quests). If the game refuses a stage, it stops there. "
-						"Skipping quests can leave things unfinished. Make a save in the game first.",
+				confirm("完成整条任务线",
+					"在游戏里按下面的顺序，一个接一个完成这些任务？" + list +
+						"\n\n每个阶段的脚本都会运行（奖励、后续任务）。如果游戏拒绝了某个阶段，就在那里停下。"
+						"跳过任务可能留下没做完的事。请先在游戏里存个档。",
 					[this, run] {
 						_chainRun = run;
 						_chainPos = 0;
@@ -807,10 +877,10 @@ void App::drawQuestDetail()
 			}
 			if (!_chainRun.empty()) {
 				ImGui::SameLine();
-				ImGui::TextDisabled("working: %zu of %zu", _chainPos + 1, _chainRun.size());
+				ImGui::TextDisabled("正在执行：%zu / %zu", _chainPos + 1, _chainRun.size());
 			}
 		} else if (_previewPending) {
-			Dim("Looking for earlier quests of this quest line (your mods' scripts are still being read)...");
+			Dim("正在查找这条任务线里更早的任务（你的模组脚本还在读取）…");
 		}
 	}
 

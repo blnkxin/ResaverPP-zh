@@ -122,10 +122,16 @@ jobs:
 
           $seven = Join-Path $env:ProgramFiles "7-Zip\7z.exe"
           if (-not (Test-Path $seven)) { $seven = "7z" }
-          $archive = "ReSaverPP-zh-CN-v$v.7z"
+          $archive = Join-Path $PWD "ReSaverPP-zh-CN-v$v.7z"
           if (Test-Path $archive) { Remove-Item $archive -Force }
-          & $seven a -t7z -mx=9 -m0=lzma2 $archive (Join-Path $stage "*") | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw "7z 打包失败（exit $LASTEXITCODE）" }
+          # 进到打包目录里再压，否则 7z 会把 "package\" 这一层也存进包里
+          Push-Location $stage
+          try {
+            & $seven a -t7z -mx=9 -m0=lzma2 $archive * | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "7z 打包失败（exit $LASTEXITCODE）" }
+          } finally {
+            Pop-Location
+          }
 
           $zipHash = (Get-FileHash $archive -Algorithm SHA256).Hash
           "archive=$archive" >> $env:GITHUB_OUTPUT

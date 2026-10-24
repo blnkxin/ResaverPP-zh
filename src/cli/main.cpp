@@ -13,6 +13,9 @@
 #include "core/ScriptSources.h"
 #include "core/Orphans.h"
 #include "core/Quests.h"
+#include <functional>
+#include <map>
+#include <set>
 
 #include <algorithm>
 #include <fstream>
@@ -28,7 +31,7 @@ using namespace ess;
 static void Usage()
 {
 	std::puts(
-		"ReSaver++ version 19 command line (Skyrim SE/AE/VR saves)\n"
+		"ReSaver++ version " RESAVERPP_VERSION " command line (Skyrim SE/AE/VR saves)\n"
 		"usage: resaverpp-cli <save.ess> [actions] [-o <out.ess>]\n"
 		"       resaverpp-cli <script.pex>       disassemble a compiled script\n"
 		"       resaverpp-cli <script.pex> --psc decompile it to Papyrus source\n"
@@ -330,7 +333,21 @@ int main(int argc, char** argv)
 				db->load(in2, prog);
 				std::printf("plugins read %zu, quests defined %zu\n", db->pluginsRead, db->questDefs().size());
 			}
-			const auto  states = quests::ReadStates(*save);
+			auto        states = quests::ReadStates(*save);
+			if (db && !questFilter.empty()) {
+				// with a search text, quests of the load order that this save never started are included
+				std::set<std::uint32_t> have;
+				for (const auto& q : states) {
+					have.insert(q.formID);
+				}
+				for (const auto& [id, d] : db->questDefs()) {
+					if (!have.contains(id)) {
+						quests::QuestState q;
+						q.formID = id;
+						states.push_back(q);
+					}
+				}
+			}
 			std::size_t running = 0, shown = 0;
 			for (const auto& q : states) {
 				running += q.running() && !q.completed() ? 1 : 0;
@@ -395,6 +412,56 @@ int main(int argc, char** argv)
 					}
 					for (const auto& pr : def->properties) {
 						std::printf("    property %s = %s\n", pr.name.c_str(), pr.type == 1 ? db->describe(pr.form).c_str() : pr.text.c_str());
+					}
+					// earlier quests of its quest line
+					{
+						std::map<std::uint32_t, std::vector<std::pair<std::uint16_t, std::vector<std::string>>>> cache;
+						auto bodies = [&](std::uint32_t qid) {
+							auto it = cache.find(qid);
+							if (it != cache.end()) {
+								return it->second;
+							}
+							std::vector<std::pair<std::uint16_t, std::vector<std::string>>> out;
+							const auto* d = db->quest(qid);
+							try {
+								if (d && !d->fragmentScript.empty()) {
+									if (auto px = src.findPex(d->fragmentScript)) {
+										const auto code = pex::Decompile(pex::Read(ScriptSources::readPex(*px)));
+										for (auto st : d->completionStages()) {
+											if (const auto* fr = d->fragmentFor(st)) {
+												out.push_back({ st, quests::FunctionBody(code, fr->function) });
+											}
+										}
+									}
+								}
+							} catch (...) {
+							}
+							cache[qid] = out;
+							return out;
+						};
+						std::set<std::uint32_t> seen{ q.formID };
+						std::function<void(std::uint32_t, int)> walk = [&](std::uint32_t t, int depth) {
+							if (depth > 12) {
+								return;
+							}
+							const auto pre = quests::LeadsInto(t, db->questDefs(), bodies);
+							for (auto id : pre) {
+								if (!seen.insert(id).second) {
+									continue;
+								}
+								bool done = false;
+								for (const auto& s2 : states) {
+									done |= s2.formID == id && s2.completed();
+								}
+								const auto* d = db->quest(id);
+								std::printf("    %*sleads here: %08X %s '%s' %s%s\n", depth * 2, "", id, d->edid.c_str(), d->name.c_str(), done ? "[completed]" : "",
+									pre.size() > 1 ? " (one of several)" : "");
+								if (!done) {
+									walk(id, depth + 1);
+								}
+							}
+						};
+						walk(q.formID, 0);
 					}
 					// what the completion stage's script does
 					if (!def->fragmentScript.empty()) {

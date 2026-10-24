@@ -11,6 +11,9 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <set>
+#include <unordered_map>
+#include <functional>
 
 using namespace ess;
 
@@ -58,20 +61,34 @@ const std::vector<quests::QuestState>& App::questStates()
 		_questStates = _save ? quests::ReadStates(*_save) : std::vector<quests::QuestState>{};
 		_questGen = _editGen;
 		_questPreviews.clear();
+		_chains.clear();
 	}
 	return _questStates;
 }
 
 const App::QuestPreview& App::questPreview(std::uint32_t a_formID)
 {
-	auto& pv = _questPreviews[a_formID];
-	if (pv.done) {
-		return pv;
+	if (auto it = _questPreviews.find(a_formID); it != _questPreviews.end()) {
+		return it->second;
 	}
+	// not ready yet: answer without keeping the answer, so it is read again once the plugins and scripts are in
+	if (!_db) {
+		_previewPending = true;
+		_previewTmp = QuestPreview{};
+		_previewTmp.error = namesLoading() ? "正在读取插件…" : "插件还没有读取（选项 > 设置：模组文件夹，之后会自动读取名称）。";
+		return _previewTmp;
+	}
+	if (!ensureSourcesScanned()) {
+		_previewPending = true;
+		_previewTmp = QuestPreview{};
+		_previewTmp.error = "正在后台读取你的模组脚本…";
+		return _previewTmp;
+	}
+	auto& pv = _questPreviews[a_formID];
 	pv.done = true;
-	const auto* def = _db ? _db->quest(a_formID) : nullptr;
+	const auto* def = _db->quest(a_formID);
 	if (!def) {
-		pv.error = "插件还没有读取（选项 > 设置：模组文件夹，之后会自动读取名称）。";
+		pv.error = "这个任务不在你的插件里。";
 		return pv;
 	}
 	if (def->fragmentScript.empty()) {
@@ -125,22 +142,162 @@ void App::liveQuest(std::uint32_t a_formID)
 	});
 }
 
-void App::liveSetStage(std::uint32_t a_formID, std::uint16_t a_stage, const std::string& a_what)
+void App::liveSetStage(std::uint32_t a_formID, std::uint16_t a_stage, const std::string& a_what, std::function<void(bool)> a_then)
 {
 	const auto msg = "ReSaver++: " + a_what;
 	_status = "Asking the game: " + a_what + "...";
 	_live.request({ "SETSTAGE", Fmt("%08X", a_formID), std::to_string(a_stage), liveNotifyMode(), msg },
-		[this, a_formID, a_what](const LiveLink::Reply& r) {
+		[this, a_formID, a_what, a_then](const LiveLink::Reply& r) {
 			if (!LiveLink::Ok(r)) {
 				_status = "The game could not do it: " + LiveLink::Error(r);
+				if (a_then) {
+					a_then(false);
+				}
 				return;
 			}
 			const auto f = LiveLink::Field(r, 0);
+			std::string why;
+			if (f == "0") {
+				// helper 3 also tells where the quest stands after the refusal
+				const auto running = LiveLink::Field(r, 1), completed = LiveLink::Field(r, 2), stage = LiveLink::Field(r, 3);
+				if (completed == "1") {
+					why = " The quest is already completed in the game.";
+				} else if (running == "0") {
+					why = " The quest could not start: the game could not find the people, places or items it needs (they are set up by "
+						  "the quest's normal beginning). \"Mark completed\" can still mark it done in the journal.";
+				} else if (!stage.empty()) {
+					why = " The quest is running at stage " + stage + "; that stage's conditions were not met. \"Mark completed\" can still mark it done.";
+				}
+			}
 			_status = f == "1" ? "Done in game: " + a_what + ". Save in the game to keep it." :
 			          f == "?" ? "The game is still running that stage's script: " + a_what + "." :
-			                     "The game refused that stage (its conditions were not met): " + a_what + ".";
+			                     "The game refused that stage: " + a_what + "." + why;
 			liveQuest(a_formID);
+			if (a_then) {
+				a_then(f != "0");
+			}
 		});
+}
+
+bool App::helperAtLeast(int a_version) const
+{
+	const auto info = _live.info();
+	return info.connected && std::atoi(info.helperVersion.c_str()) >= a_version;
+}
+
+void App::liveComplete(std::uint32_t a_formID, const std::string& a_name)
+{
+	const std::string what = "marked \"" + a_name + "\" completed";
+	_status = "Asking the game: " + what + "...";
+	_live.request({ "COMPLETE", Fmt("%08X", a_formID), liveNotifyMode(), "ReSaver++: " + what }, [this, a_formID, what](const LiveLink::Reply& r) {
+		if (!LiveLink::Ok(r)) {
+			_status = "The game could not do it: " + LiveLink::Error(r);
+			return;
+		}
+		const auto f = LiveLink::Field(r, 0);
+		_status = f == "1" ? "Done in game: " + what + ". Save in the game to keep it." :
+		          f == "?" ? "The game is busy; it does it as soon as it can: " + what + "." :
+		                     "The game did not mark it completed: " + what + ".";
+		liveQuest(a_formID);
+	});
+}
+
+std::vector<App::ChainItem>& App::questChain(std::uint32_t a_formID)
+{
+	if (auto it = _chains.find(a_formID); it != _chains.end()) {
+		return it->second;
+	}
+	if (!_db) {
+		static std::vector<ChainItem> none;
+		none.clear();
+		return none;  // not cached: the plugins are read later
+	}
+	std::vector<ChainItem> out;
+	_previewPending = false;
+	const auto& defs = _db->questDefs();
+	std::unordered_map<std::uint32_t, const quests::QuestState*> state;
+	for (const auto& q : questStates()) {
+		state[q.formID] = &q;
+	}
+	auto nameOf = [&](std::uint32_t id) {
+		const auto* d = _db->quest(id);
+		return d ? (d->name.empty() ? d->edid : d->name + " (" + d->edid + ")") : Fmt("%08X", id);
+	};
+	auto predecessors = [&](std::uint32_t a_target) {
+		return quests::LeadsInto(a_target, defs, [this](std::uint32_t id) { return questPreview(id).bodies; });
+	};
+	// walk back, oldest first; stop at quests already completed
+	std::set<std::uint32_t> seen{ a_formID };
+	std::function<void(std::uint32_t, int)> walk = [&](std::uint32_t a_target, int a_depth) {
+		if (a_depth > 12) {
+			return;
+		}
+		std::vector<std::uint32_t> pre;
+		for (auto id : predecessors(a_target)) {
+			if (!seen.contains(id)) {
+				pre.push_back(id);  // quests already on the list (reached another way) do not count as alternatives
+			}
+		}
+		for (auto id : pre) {
+			if (!seen.insert(id).second) {
+				continue;
+			}
+			auto       it = state.find(id);
+			const bool done = it != state.end() && it->second->completed();
+			if (!done) {
+				walk(id, a_depth + 1);  // its own earlier quests come first
+			}
+			ChainItem c;
+			c.formID = id;
+			c.stage = _db->quest(id)->completionStages().front();
+			c.name = nameOf(id);
+			c.done = done;
+			c.alternative = pre.size() > 1;
+			c.tick = !done && !c.alternative;
+			out.push_back(std::move(c));
+		}
+	};
+	walk(a_formID, 0);
+	if (_previewPending) {
+		// some stage scripts could not be read yet: show what is known, look again next frame
+		_chainPending = std::move(out);
+		return _chainPending;
+	}
+	return _chains[a_formID] = std::move(out);
+}
+
+void App::runChain()
+{
+	if (_chainPos >= _chainRun.size()) {
+		_status = Fmt("Quest line done in game (%zu quest(s)). Save in the game to keep it.", _chainRun.size());
+		_chainRun.clear();
+		_chainPos = 0;
+		return;
+	}
+	const auto c = _chainRun[_chainPos];
+	liveSetStage(c.formID, c.stage, Fmt("completed \"%s\" (stage %u, %zu of %zu)", c.name.c_str(), c.stage, _chainPos + 1, _chainRun.size()),
+		[this](bool ok) {
+			if (!ok) {
+				_status += "  Stopped the quest line here.";
+				_chainRun.clear();
+				_chainPos = 0;
+				return;
+			}
+			++_chainPos;
+			runChain();
+		});
+}
+
+void App::drawQuestNotifyChoice()
+{
+	const char* modes[] = { "Top-left notification", "Message box", "No message" };
+	ImGui::SetNextItemWidth(240);
+	if (ImGui::Combo("##qnotify", &_liveNotify, modes, 3)) {
+		saveSettings();
+	}
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip("How the game tells you what ReSaver++ did (also in Options > Settings > Live game).");
+	}
 }
 
 // ---- live status (status bar) -------------------------------------------------------------------
@@ -269,61 +426,139 @@ void App::drawQuestsList()
 	}
 	ImGui::Separator();
 
-	ImGui::SetNextItemWidth(-220);
-	ImGui::InputTextWithHint("##qfilter", "按名称、编辑器 ID 或 Form ID 过滤", _questFilter, sizeof(_questFilter));
+	ImGui::AlignTextToFramePadding();
+	ImGui::TextUnformatted("显示");
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(-1);
-	const char* shows[] = { "在日志中", "进行中", "已完成", "全部" };
-	ImGui::Combo("##qshow", &_questShow, shows, 4);
+	const char* shows[] = { "在日志中", "进行中", "已完成", "本存档全部", "游戏中的全部任务" };
+	ImGui::Combo("##qshow", &_questShow, shows, 5);
+	ImGui::AlignTextToFramePadding();
+	ImGui::TextUnformatted("查找");
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(_questFilter[0] ? -60.0f : -1.0f);
+	ImGui::InputTextWithHint("##qfilter", "任务名称里的任意词、编辑器 ID 或 Form ID", _questFilter, sizeof(_questFilter));
+	if (_questFilter[0]) {
+		ImGui::SameLine();
+		if (ImGui::Button("清空", ImVec2(-1, 0))) {
+			_questFilter[0] = 0;
+		}
+	}
+	if (_questShow == 4 && !_db) {
+		Dim("「游戏中的全部任务」来自你的插件：插件还没有读取。");
+	}
 
 	struct Row
 	{
-		const quests::QuestState* q;
-		const quests::QuestDef*   def;
-		std::string               label;
+		std::uint32_t             formID = 0;
+		const quests::QuestState* q = nullptr;  // null: never started in this save
+		const quests::QuestDef*   def = nullptr;
+		std::string               label, status;
+		int                       stage = -1;
+		std::size_t               shown = 0;
 	};
 	std::vector<Row> rows;
 	const auto       needle = Lower(_questFilter);
+	auto             add = [&](std::uint32_t a_formID, const quests::QuestState* q) {
+        const auto* def = _db ? _db->quest(a_formID) : nullptr;
+        if (q) {
+            switch (_questShow) {
+            case 0:
+                if (q->shownObjectives() == 0) {
+                    return;
+                }
+                break;
+            case 1:
+                if (!q->running() || q->completed()) {
+                    return;
+                }
+                break;
+            case 2:
+                if (!q->completed()) {
+                    return;
+                }
+                break;
+            default:
+                break;
+            }
+        }
+        // name and editor ID from the plugins; until they are read, the plugin the quest comes from
+        std::string label = def ? (def->name.empty() ? def->edid : def->name + "  (" + def->edid + ")") : "(" + _save->pluginOf(a_formID) + ")";
+        if (!needle.empty()) {
+            // every word typed must appear somewhere in the name, editor ID or form ID
+            const auto hay = Lower(label) + " " + Lower(Fmt("%08X", a_formID));
+            std::size_t pos = 0;
+            while (pos < needle.size()) {
+                const auto start = needle.find_first_not_of(' ', pos);
+                if (start == std::string::npos) {
+                    break;
+                }
+                const auto end = std::min(needle.find(' ', start), needle.size());
+                if (hay.find(needle.substr(start, end - start)) == std::string::npos) {
+                    return;
+                }
+                pos = end;
+            }
+        }
+        Row r;
+        r.formID = a_formID;
+        r.q = q;
+        r.def = def;
+        r.label = std::move(label);
+        r.status = q ? q->statusText() : "未开始（不在本存档中）";
+        r.stage = q ? q->highestDoneStage() : -1;
+        r.shown = q ? q->shownObjectives() : 0;
+        rows.push_back(std::move(r));
+	};
+	std::unordered_map<std::uint32_t, const quests::QuestState*> byID;
 	for (const auto& q : states) {
-		const auto* def = _db ? _db->quest(q.formID) : nullptr;
-		switch (_questShow) {
-		case 0:
-			if (q.shownObjectives() == 0) {
-				continue;
-			}
-			break;
-		case 1:
-			if (!q.running() || q.completed()) {
-				continue;
-			}
-			break;
-		case 2:
-			if (!q.completed()) {
-				continue;
-			}
-			break;
-		default:
-			break;
-		}
-		// name and editor ID from the plugins; until they are read, the plugin the quest comes from
-		std::string label = def ? (def->name.empty() ? def->edid : def->name + "  (" + def->edid + ")") : "(" + _save->pluginOf(q.formID) + ")";
-		if (!needle.empty() && Lower(label).find(needle) == std::string::npos && Lower(Fmt("%08X", q.formID)).find(needle) == std::string::npos) {
-			continue;
-		}
-		rows.push_back({ &q, def, std::move(label) });
+		byID[q.formID] = &q;
 	}
-	std::sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) { return Lower(a.label) < Lower(b.label); });
+	if (_questShow == 4 && _db) {
+		// every QUST record of the load order, started or not
+		for (const auto& [id, def] : _db->questDefs()) {
+			auto it = byID.find(id);
+			add(id, it == byID.end() ? nullptr : it->second);
+		}
+	} else {
+		for (const auto& q : states) {
+			add(q.formID, &q);
+		}
+	}
 
 	if (ImGui::BeginTable("quests", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable |
-										   ImGuiTableFlags_SizingStretchProp)) {
+										   ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Sortable)) {
 		ImGui::TableSetupScrollFreeze(0, 1);
 		// the form ID is always 8 hex digits: a stretch weight squeezed it to 7 ("0003372...")
-		ImGui::TableSetupColumn("任务", ImGuiTableColumnFlags_WidthStretch, 3.4f);
-		ImGui::TableSetupColumn("Form ID", ImGuiTableColumnFlags_WidthFixed, 86.0f);
-		ImGui::TableSetupColumn("状态", ImGuiTableColumnFlags_WidthStretch, 1.5f);
-		ImGui::TableSetupColumn("阶段", ImGuiTableColumnFlags_WidthFixed, 64.0f);
-		ImGui::TableSetupColumn("显示", ImGuiTableColumnFlags_WidthFixed, 64.0f);
+		ImGui::TableSetupColumn("任务", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_DefaultSort, 2.6f, 0);
+		ImGui::TableSetupColumn("Form ID", ImGuiTableColumnFlags_WidthFixed, 110.0f, 1);
+		ImGui::TableSetupColumn("状态", ImGuiTableColumnFlags_WidthStretch, 1.4f, 2);
+		ImGui::TableSetupColumn("阶段", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending, 84.0f, 3);
+		ImGui::TableSetupColumn("显示", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending, 84.0f, 4);
 		ImGui::TableHeadersRow();
+		// click a column header to sort by it (again to reverse); ties keep the name order
+		int  col = 0;
+		bool asc = true;
+		if (const ImGuiTableSortSpecs* specs = ImGui::TableGetSortSpecs(); specs && specs->SpecsCount > 0) {
+			col = static_cast<int>(specs->Specs[0].ColumnUserID);
+			asc = specs->Specs[0].SortDirection == ImGuiSortDirection_Ascending;
+		}
+		std::stable_sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) { return Lower(a.label) < Lower(b.label); });
+		std::stable_sort(rows.begin(), rows.end(), [&](const Row& a, const Row& b) {
+			auto cmp = [&]() -> int {
+				switch (col) {
+				case 1: return a.formID < b.formID ? -1 : a.formID > b.formID ? 1 : 0;
+				case 2: return a.status < b.status ? -1 : a.status > b.status ? 1 : 0;
+				case 3: return a.stage < b.stage ? -1 : a.stage > b.stage ? 1 : 0;
+				case 4: return a.shown < b.shown ? -1 : a.shown > b.shown ? 1 : 0;
+				default:
+					{
+						const auto la = Lower(a.label), lb = Lower(b.label);
+						return la < lb ? -1 : la > lb ? 1 : 0;
+					}
+				}
+			}();
+			return asc ? cmp < 0 : cmp > 0;
+		});
 		ImGuiListClipper clip;
 		clip.Begin(static_cast<int>(rows.size()));
 		while (clip.Step()) {
@@ -331,9 +566,9 @@ void App::drawQuestsList()
 				const auto& r = rows[i];
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
-				ImGui::PushID(static_cast<int>(r.q->formID));
-				if (ImGui::Selectable(r.label.c_str(), _questSel == r.q->formID, ImGuiSelectableFlags_SpanAllColumns)) {
-					_questSel = r.q->formID;
+				ImGui::PushID(static_cast<int>(r.formID));
+				if (ImGui::Selectable(r.label.c_str(), _questSel == r.formID, ImGuiSelectableFlags_SpanAllColumns)) {
+					_questSel = r.formID;
 					_setStageIdx = 0;
 					if (_live.info().inGame) {
 						liveQuest(_questSel);
@@ -341,22 +576,23 @@ void App::drawQuestsList()
 				}
 				ImGui::PopID();
 				ImGui::TableNextColumn();
-				ImGui::TextDisabled("%08X", r.q->formID);
+				ImGui::TextDisabled("%08X", r.formID);
 				ImGui::TableNextColumn();
-				const bool odd = r.q->shownObjectives() && (r.q->completed() || !r.q->running());
+				const bool odd = r.q && r.shown && (r.q->completed() || !r.q->running());
 				if (odd) {
-					TextColored(theme::Warn(), r.q->statusText());
+					TextColored(theme::Warn(), r.status);
+				} else if (!r.q) {
+					ImGui::TextDisabled("%s", r.status.c_str());
 				} else {
-					ImGui::TextUnformatted(r.q->statusText());
+					ImGui::TextUnformatted(r.status.c_str());
 				}
 				ImGui::TableNextColumn();
-				const auto st = r.q->highestDoneStage();
-				if (st >= 0) {
-					ImGui::Text("%d", st);
+				if (r.stage >= 0) {
+					ImGui::Text("%d", r.stage);
 				}
 				ImGui::TableNextColumn();
-				if (const auto n = r.q->shownObjectives()) {
-					ImGui::Text("%zu", n);
+				if (r.shown) {
+					ImGui::Text("%zu", r.shown);
 				}
 			}
 		}
@@ -374,6 +610,11 @@ void App::drawQuestDetail()
 		if (s.formID == _questSel) {
 			q = &s;
 		}
+	}
+	quests::QuestState notStarted;  // a quest of the load order this save never touched
+	if (!q && _db && _db->quest(_questSel)) {
+		notStarted.formID = _questSel;
+		q = &notStarted;
 	}
 	if (!q) {
 		Dim("点击一个任务，查看它的阶段、日志条目和目标，以及完成它会带来什么。");
@@ -417,11 +658,24 @@ void App::drawQuestDetail()
 				effects += "\n    " + e.line;
 			}
 		}
+		std::string earlier;
+		for (const auto& c : questChain(q->formID)) {
+			if (!c.done) {
+				earlier += "\n    " + c.name;
+			}
+		}
+		if (!earlier.empty()) {
+			earlier = "\n\nEarlier quests of this quest line are not completed:" + earlier +
+					  "\nThis button completes only this quest. To complete them too, use \"Complete ... earlier quest(s) and this one\" below.";
+		}
 		confirm("Complete quest",
 			Fmt("Set \"%s\" to its completion stage %u in the running game?\n\nThe game runs that stage's own script, so its rewards are given and "
 				"follow-up quests start the normal way.%s\n\nSkipping a quest's earlier stages can leave things unfinished (items not "
-				"collected, people not met). Make a save in the game first.",
-				name.c_str(), st, effects.empty() ? "" : ("\n\nWhat the stage script does:" + effects).c_str()),
+				"collected, people not met). Make a save in the game first.%s",
+				name.c_str(), st, effects.empty() ? "" : ("\n\nWhat the stage script does:" + effects).c_str(),
+				q->hasFlags ? "" :
+				              "\n\nThis quest has not started in this save: setting the stage starts it and completes it at once. Its people and "
+				              "places are not set up yet, so parts of its script may do nothing, and quests that come after it may still start.") + earlier,
 			[this, fid = q->formID, st, name] { liveSetStage(fid, st, Fmt("completed \"%s\" (stage %u)", name.c_str(), st)); });
 	}
 	ImGui::EndDisabled();
@@ -429,6 +683,22 @@ void App::drawQuestDetail()
 		LiveHint(info);
 	} else if (completion.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
 		ImGui::SetTooltip("No stage of this quest is marked as completing it.");
+	}
+	ImGui::SameLine();
+	ImGui::BeginDisabled(!live || !helperAtLeast(3));
+	if (ImGui::Button("Mark completed")) {
+		confirm("Mark completed",
+			Fmt("Mark \"%s\" as completed in the running game, without running its stage script?\n\nIts objectives are completed and it moves to "
+				"the completed quests in the journal. Unlike \"Complete quest in game\", no rewards are given and quests that normally "
+				"follow it are NOT started. Use it when the game refuses the completion stage. Make a save in the game first.",
+				name.c_str()),
+			[this, fid = q->formID, name] { liveComplete(fid, name); });
+	}
+	ImGui::EndDisabled();
+	if (!live) {
+		LiveHint(info);
+	} else if (!helperAtLeast(3) && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+		ImGui::SetTooltip("Needs ReSaverHelper version 3 (you have version %s).", info.helperVersion.c_str());
 	}
 	ImGui::SameLine();
 	// set any stage
@@ -472,11 +742,76 @@ void App::drawQuestDetail()
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
 		ImGui::SetTooltip("复制能完成该任务的控制台命令（用它的完成阶段），或设置左侧选中的阶段。");
 	}
+	ImGui::TextDisabled("The game confirms with:");
+	ImGui::SameLine();
+	drawQuestNotifyChoice();
 
 	if (!def) {
 		ImGui::Spacing();
 		Dim("设置好模组文件夹后，阶段、日志条目和目标就从你的插件里读取。");
 		return;
+	}
+
+	// ---- earlier quests of the quest line
+	if (!completion.empty()) {
+		auto&       chain = questChain(q->formID);
+		std::size_t open = 0;
+		for (const auto& c : chain) {
+			open += c.done ? 0 : 1;
+		}
+		if (open) {
+			ImGui::SeparatorText(Fmt("Earlier quests in this quest line (%zu not completed)", open).c_str());
+			Dim("These quests lead to this one: their journal names it as the next quest, or their last stage starts it. Ticked ones are "
+				"completed first, oldest first, then this quest. Quests that are one of several ways to get here (two factions, two "
+				"endings) are not ticked: tick the one you want.");
+			for (auto& c : chain) {
+				if (c.done) {
+					continue;
+				}
+				ImGui::PushID(static_cast<int>(c.formID));
+				ImGui::Checkbox(c.name.c_str(), &c.tick);
+				ImGui::SameLine();
+				ImGui::TextDisabled("stage %u%s", c.stage, c.alternative ? "   (one of several ways here)" : "");
+				ImGui::PopID();
+			}
+			std::vector<ChainItem> run;
+			for (const auto& c : chain) {
+				if (c.tick && !c.done) {
+					run.push_back(c);
+				}
+			}
+			ChainItem self;
+			self.formID = q->formID;
+			self.stage = completion.front();
+			self.name = name;
+			run.push_back(self);
+			ImGui::BeginDisabled(!live || run.size() < 2 || !_chainRun.empty());
+			if (ImGui::Button(Fmt("Complete %zu earlier quest(s) and this one in game", run.size() - 1).c_str())) {
+				std::string list;
+				for (const auto& c : run) {
+					list += Fmt("\n    %s (stage %u)", c.name.c_str(), c.stage);
+				}
+				confirm("Complete quest line",
+					"Complete these quests in the running game, one after the other, in this order?" + list +
+						"\n\nEach stage's own script runs (rewards, follow-up quests). If the game refuses a stage, it stops there. "
+						"Skipping quests can leave things unfinished. Make a save in the game first.",
+					[this, run] {
+						_chainRun = run;
+						_chainPos = 0;
+						runChain();
+					});
+			}
+			ImGui::EndDisabled();
+			if (!live) {
+				LiveHint(info);
+			}
+			if (!_chainRun.empty()) {
+				ImGui::SameLine();
+				ImGui::TextDisabled("working: %zu of %zu", _chainPos + 1, _chainRun.size());
+			}
+		} else if (_previewPending) {
+			Dim("Looking for earlier quests of this quest line (your mods' scripts are still being read)...");
+		}
 	}
 
 	// ---- what completing it does

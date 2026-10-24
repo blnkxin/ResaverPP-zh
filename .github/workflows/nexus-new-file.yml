@@ -1,0 +1,113 @@
+name: Add a new file to Nexus Mods
+
+# Manual: Actions tab -> "Add a new file to Nexus Mods" -> Run workflow.
+# Uploads a zip that is already in this repository (e.g. helper/release/ReSaverHelper.zip) as an
+# entirely NEW file on the mod page (optional / main / miscellaneous). New versions of that file
+# afterwards: "Upload to Nexus Mods"-style update with its own File ID.
+#
+# Needs the NEXUSMODS_API_KEY secret in the "nexus" environment.
+
+on:
+  workflow_dispatch:
+    inputs:
+      zip:
+        description: "Path of the zip in this repository"
+        required: true
+        default: "helper/release/ReSaverHelper.zip"
+      name:
+        description: "File name shown on Nexus"
+        required: true
+        default: "ReSaverHelper"
+      version:
+        description: "File version"
+        required: true
+      category:
+        description: "main, optional or miscellaneous"
+        required: true
+        default: "optional"
+      description:
+        description: "File description shown on Nexus (plain text; ' | ' separates lines)"
+        required: false
+        default: ""
+      mod_manager:
+        description: "Allow mod manager downloads (false = manual download only)"
+        required: false
+        default: "true"
+      mod_id:
+        description: "Nexus Unique Mod ID (Files tab -> Advanced -> API)"
+        required: false
+        default: "7318624468677"
+
+permissions:
+  contents: read
+
+jobs:
+  create:
+    runs-on: ubuntu-24.04
+    environment: nexus
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Upload and create the file
+        env:
+          KEY: ${{ secrets.NEXUSMODS_API_KEY }}
+          ZIP: ${{ inputs.zip }}
+          NAME: ${{ inputs.name }}
+          VERSION: ${{ inputs.version }}
+          CATEGORY: ${{ inputs.category }}
+          DESC: ${{ inputs.description }}
+          MM: ${{ inputs.mod_manager }}
+          MOD_ID: ${{ inputs.mod_id }}
+        run: |
+          set -uo pipefail
+          # every failure is reported as an annotation (visible on the run page) with Nexus' answer
+          fail() { echo "::error::$1"; exit 1; }
+          api=https://api.nexusmods.com/v3
+          hdr=(-H "apikey: $KEY" -H "User-Agent: ReSaverPP-release")
+          [ -f "$ZIP" ] || fail "$ZIP is not in the repository"
+          size=$(stat -c %s "$ZIP")
+          fname=$(basename "$ZIP")
+          # 1-2. multipart upload, the same way as Nexus' own upload action
+          body=$(jq -n --argjson s "$size" --arg f "$fname" '{size_bytes: $s, filename: $f}') || fail "jq (upload body)"
+          code=$(curl -sS -o up.json -w '%{http_code}' -X POST "${hdr[@]}" -H "Content-Type: application/json" --data "$body" "$api/uploads/multipart") || fail "curl /uploads/multipart failed"
+          [ "${code:0:1}" = "2" ] || fail "upload session refused (HTTP $code): $(head -c 400 up.json)"
+          id=$(jq -r '.data.id // .id // empty' up.json)
+          psize=$(jq -r '.data.part_size_bytes // .part_size_bytes' up.json)
+          done_url=$(jq -r '.data.complete_presigned_url // .complete_presigned_url' up.json)
+          mapfile -t parts < <(jq -r '(.data.part_presigned_urls // .part_presigned_urls)[]' up.json)
+          [ -n "$id" ] && [ "${#parts[@]}" -gt 0 ] || fail "no upload id / part urls"
+          echo "::notice::upload session $id, ${#parts[@]} part(s)"
+          xml="<CompleteMultipartUpload>"
+          for n in "${!parts[@]}"; do
+            pn=$((n + 1))
+            dd if="$ZIP" of=part.bin bs="$psize" skip="$n" count=1 status=none
+            code=$(curl -sS -D hdr.txt -o put.txt -w '%{http_code}' -X PUT -H "Content-Type: application/octet-stream" --data-binary @part.bin "${parts[$n]}") || fail "curl PUT part $pn failed"
+            [ "${code:0:1}" = "2" ] || fail "part $pn upload failed (HTTP $code): $(head -c 300 put.txt)"
+            etag=$(grep -i '^etag:' hdr.txt | head -1 | cut -d: -f2- | tr -d ' "\r')
+            [ -n "$etag" ] || fail "no ETag for part $pn"
+            xml="$xml<Part><PartNumber>$pn</PartNumber><ETag>$etag</ETag></Part>"
+          done
+          xml="$xml</CompleteMultipartUpload>"
+          code=$(curl -sS -o cmp.txt -w '%{http_code}' -X POST -H "Content-Type: application/xml" --data "$xml" "$done_url") || fail "curl complete failed"
+          [ "${code:0:1}" = "2" ] || fail "completing the upload failed (HTTP $code): $(head -c 300 cmp.txt)"
+          # 3. finalise, then wait until it is available
+          code=$(curl -sS -o fin.json -w '%{http_code}' -X POST "${hdr[@]}" "$api/uploads/$id/finalise") || fail "curl finalise failed"
+          [ "${code:0:1}" = "2" ] || fail "finalise refused (HTTP $code): $(head -c 400 fin.json)"
+          state=""
+          for i in $(seq 1 60); do
+            state=$(curl -sS "${hdr[@]}" "$api/uploads/$id" | jq -r '.data.state // .state // empty')
+            [ "$state" = "available" ] && break
+            sleep 5
+          done
+          [ "$state" = "available" ] || fail "upload never became available (state: $state)"
+          # 4. the new file on the mod page
+          text=$(printf '%s' "$DESC" | sed 's/ | /\n/g')
+          body=$(jq -n --arg u "$id" --arg m "$MOD_ID" --arg n "$NAME" --arg v "$VERSION" --arg d "$text" --arg c "$CATEGORY" --argjson mm "$MM" \
+            '{upload_id: $u, mod_id: $m, name: $n, version: $v, description: $d, file_category: $c,
+              primary_mod_manager_download: false, allow_mod_manager_download: $mm, show_requirements_pop_up: false, update_mod_version: false}') || fail "jq (file body)"
+          code=$(curl -sS -o file.json -w '%{http_code}' -X POST "${hdr[@]}" -H "Content-Type: application/json" --data "$body" "$api/mod-files") || fail "curl /mod-files failed"
+          [ "${code:0:1}" = "2" ] || fail "Nexus refused the new file (HTTP $code): $(head -c 400 file.json)"
+          echo "::notice::New file created: $(jq -c '.data // .' file.json | head -c 400)"

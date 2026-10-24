@@ -549,7 +549,33 @@ void App::drawSettings()
 		std::error_code ec;
 		ImGui::TextDisabled("Papyrus 编译器：%s", !comp.empty() && std::filesystem::exists(comp, ec) ? platform::ToUtf8(comp).c_str()
 																										: "未找到（它随 Creation Kit 一起提供）");
-		ImGui::TextDisabled("存档：%s", platform::ToUtf8(savesFolder()).c_str());
+	}
+	{
+		auto& custom = savesDirSetting();
+		ImGui::TextWrapped("存档文件夹：%s", platform::ToUtf8(savesFolder()).c_str());
+		ImGui::SameLine();
+		if (ImGui::SmallButton("更改…##saves") && platform::HasNativeDialogs()) {
+			if (auto p = platform::PickFolderDialog("选择存放存档的文件夹（「文件 > 打开」会从这里开始）")) {
+				custom = platform::ToUtf8(*p);
+				ch = true;
+				if (_watch) {
+					setWatching(true);
+				}
+			}
+		}
+		if (!custom.empty()) {
+			ImGui::SameLine();
+			if (ImGui::SmallButton("自动查找##saves")) {
+				custom.clear();
+				ch = true;
+				if (_watch) {
+					setWatching(true);
+				}
+			}
+		}
+		ImGui::TextDisabled(custom.empty() ? "自动查找：上次打开存档所在的文件夹；否则是有最新存档的那个\n"
+											 "（Documents\\My Games、Skyrim.ini 的 sLocalSavePath、Mod Organizer 配置里的 saves）。"
+										   : "由你指定：「文件 > 打开」从这里开始，「监视存档文件夹」也监视它。");
 	}
 	// Mod Organizer instances installed for this user (%LOCALAPPDATA%\ModOrganizer\<instance>)
 	if (const char* la = std::getenv("LOCALAPPDATA")) {

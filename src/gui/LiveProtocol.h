@@ -8,7 +8,9 @@
 //
 //   HELLO                                 -> OK  ReSaverHelper  <helper version>  <game version>  <SE|AE|VR>  <in game 0|1>
 //   QUEST <formid hex>                    -> OK  <editor id>  <flags hex>  <current stage>  <running 0|1>  <completed 0|1>  <index:state,...>
-//   SETSTAGE <formid hex> <stage> <notify> <message>   -> OK <1 if the stage was set, 0 if the game refused>
+//   SETSTAGE <formid hex> <stage> <notify> <message>   -> OK <1 set, 0 refused, ? still running>  <running 0|1>  <completed 0|1>  <current stage>
+//   COMPLETE <formid hex> <notify> <message>           -> OK <1 if the quest is now completed, 0 if not, ? still running>
+//                                         (CompleteAllObjectives + CompleteQuest: no stage script runs; version 3)
 //   REFRESH <notify>                      -> OK  <objectives to refresh>        (runs in the background)
 //   PROGRESS                              -> OK  <done>  <total>  <running 0|1>
 //   GETOPTION <name>                      -> OK  <value>
@@ -21,7 +23,7 @@
 namespace proto
 {
 	inline constexpr const wchar_t* kPipeName = L"\\\\.\\pipe\\ReSaverHelper";
-	inline constexpr int            kHelperVersion = 1;
+	inline constexpr int            kHelperVersion = 3;
 
 	inline std::string Escape(const std::string& a_in)
 	{

@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace ess::quests
@@ -96,6 +97,12 @@ namespace ess::quests
 	// Lines of a stage script worth telling the player about. Rewards may also be given by other
 	// scripts the stage calls; those calls are listed as kOther.
 	std::vector<Effect> ScanEffects(const std::vector<std::string>& a_body);
+
+	// Quests that lead into a_target: a journal entry names it as the next quest, or a completion
+	// stage script starts it / sets its stage (through a property that is the quest). a_bodies gives the
+	// script lines of a quest's completion stages (empty if unknown).
+	using StageBodies = std::function<std::vector<std::pair<std::uint16_t, std::vector<std::string>>>(std::uint32_t a_quest)>;
+	std::vector<std::uint32_t> LeadsInto(std::uint32_t a_target, const std::unordered_map<std::uint32_t, QuestDef>& a_defs, const StageBodies& a_bodies);
 
 	// ---- from the save ---------------------------------------------------------------------------
 	struct ObjectiveState

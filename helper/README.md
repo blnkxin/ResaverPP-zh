@@ -7,6 +7,7 @@ refresh the quest journal (brings back quests and objectives the journal stopped
 - Talks to ReSaver++ over a local named pipe (`\\.\pipe\ReSaverHelper`). Only the Windows user running
   the game can open it; remote connections are refused. It understands a short fixed list of commands
   (see `src/Protocol.h`).
+- Mark a quest completed without its stage script, when the game refuses the completion stage (version 3).
 - Confirms every action in game: top-left notification or a message box (`sNotify` in ReSaverHelper.ini).
 - Optional: refresh the journal automatically after every save load (`bRefreshJournalOnLoad=1`).
 - SE 1.5.97, AE 1.6.x / 1.7.x and VR 1.4.15 from one DLL (CommonLibSSE-NG).

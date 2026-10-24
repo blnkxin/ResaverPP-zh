@@ -10,7 +10,7 @@ namespace Game
 	bool InGame();
 
 	// Runs a_fn on the main thread and waits for it, up to a_timeout. False on timeout.
-	bool RunOnMain(std::function<void()> a_fn, std::chrono::milliseconds a_timeout = 3s);
+	bool RunOnMain(std::function<void()> a_fn, std::chrono::milliseconds a_timeout = 30s);
 
 	// "hud", "box", "none" or "ini" (= the INI's sNotify). Safe from any thread.
 	void Notify(const std::string& a_mode, const std::string& a_text);
@@ -29,6 +29,11 @@ namespace Game
 	// Calls Quest.SetStage on the quest (main thread). a_done gets true if the game accepted the stage.
 	// Falls back to the console command when the quest has no script object.
 	void SetStage(std::uint32_t a_formID, std::uint16_t a_stage, std::function<void(bool)> a_done);
+
+	// Marks the quest completed without running a stage script: Quest.CompleteAllObjectives, then
+	// Quest.CompleteQuest; if the quest is still not completed, the console's CompleteQuest. a_done gets
+	// whether the quest is completed afterwards.
+	void Complete(std::uint32_t a_formID, std::function<void(bool)> a_done);
 
 	// Journal refresh: for every running quest, every objective the journal shows is hidden and shown
 	// again (its completed / failed state put back), so the game rebuilds its list of shown objectives.

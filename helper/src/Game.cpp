@@ -202,7 +202,13 @@ namespace Game
 		}
 		auto*      vm = VM::GetSingleton();
 		const auto handle = HandleOf(quest);
-		auto       cb = MakeCallback([a_done](const RE::BSScript::Variable& a_result) { a_done(a_result.IsBool() ? a_result.GetBool() : true); });
+		auto       cb = MakeCallback([a_done, a_formID, a_stage](const RE::BSScript::Variable& a_result) {
+            const bool ok = a_result.IsBool() ? a_result.GetBool() : true;
+            auto*      q = RE::TESForm::LookupByID<RE::TESQuest>(a_formID);
+            spdlog::info("SetStage {:08X} stage {}: {} (running {}, completed {}, current stage {})", a_formID, a_stage, ok ? "accepted" : "refused",
+                q && q->IsRunning(), q && q->IsCompleted(), q ? q->GetCurrentStageID() : 0);
+            a_done(ok);
+        });
 		if (vm && handle && vm->DispatchMethodCall(handle, "Quest", "SetStage", RE::MakeFunctionArguments(static_cast<std::int32_t>(a_stage)), cb)) {
 			spdlog::info("SetStage {:08X} ({}) stage {} dispatched", a_formID, quest->GetFormEditorID(), a_stage);
 			return;
@@ -215,6 +221,59 @@ namespace Game
 		}
 		Console(std::format("setstage {} {}", edid, a_stage));
 		a_done(quest->GetCurrentStageID() == a_stage);
+	}
+
+	void Complete(std::uint32_t a_formID, std::function<void(bool)> a_done)
+	{
+		auto* quest = RE::TESForm::LookupByID<RE::TESQuest>(a_formID);
+		if (!quest) {
+			a_done(false);
+			return;
+		}
+		spdlog::info("Complete {:08X} ({}): running {}, completed {}, current stage {}", a_formID, quest->GetFormEditorID(), quest->IsRunning(), quest->IsCompleted(),
+			quest->GetCurrentStageID());
+		// last resort, on the main thread: the console's CompleteQuest
+		auto viaConsole = [a_formID, a_done] {
+			auto* task = SKSE::GetTaskInterface();
+			if (!task) {
+				a_done(false);
+				return;
+			}
+			task->AddTask([a_formID, a_done] {
+				auto*      q = RE::TESForm::LookupByID<RE::TESQuest>(a_formID);
+				const auto edid = q && q->GetFormEditorID() ? std::string(q->GetFormEditorID()) : std::string();
+				if (!edid.empty()) {
+					Console("completequest " + edid);
+				}
+				const bool done = q && q->IsCompleted();
+				spdlog::info("Complete {:08X}: {} after the console command", a_formID, done ? "completed" : "still not completed");
+				a_done(done);
+			});
+		};
+		auto finish = [a_formID, a_done, viaConsole](const RE::BSScript::Variable&) {
+			auto* q = RE::TESForm::LookupByID<RE::TESQuest>(a_formID);
+			if (q && q->IsCompleted()) {
+				spdlog::info("Complete {:08X}: completed", a_formID);
+				a_done(true);
+				return;
+			}
+			viaConsole();
+		};
+		auto second = [a_formID, finish](const RE::BSScript::Variable&) {
+			auto*      q = RE::TESForm::LookupByID<RE::TESQuest>(a_formID);
+			auto*      vm2 = VM::GetSingleton();
+			const auto h = HandleOf(q);
+			auto       cb = MakeCallback(finish);
+			if (!q || !vm2 || !h || !vm2->DispatchMethodCall(h, "Quest", "CompleteQuest", RE::MakeFunctionArguments(), cb)) {
+				finish(RE::BSScript::Variable{});
+			}
+		};
+		auto*      vm = VM::GetSingleton();
+		const auto handle = HandleOf(quest);
+		auto       cb = MakeCallback(second);
+		if (!vm || !handle || !vm->DispatchMethodCall(handle, "Quest", "CompleteAllObjectives", RE::MakeFunctionArguments(), cb)) {
+			second(RE::BSScript::Variable{});
+		}
 	}
 
 	std::size_t StartRefresh(const std::string& a_notify)

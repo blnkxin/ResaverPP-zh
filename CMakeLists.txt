@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
-project(ReSaverPP VERSION 19 LANGUAGES C CXX)
+project(ReSaverPP VERSION 19.6 LANGUAGES C CXX)
+add_compile_definitions(RESAVERPP_VERSION="${PROJECT_VERSION}")
 
 # ReSaver++ : C++ port of ReSaver (FallrimTools) by Mark Fairchild. Apache License 2.0.
 
@@ -35,6 +36,10 @@ function(rs_add_version_info target name description)
 		set(RS_NAME "${name}")
 		set(RS_DESCRIPTION "${description}")
 		set(RS_MANIFEST "${CMAKE_SOURCE_DIR}/res/resaverpp.manifest")
+		set(RS_VERSION_MINOR "${PROJECT_VERSION_MINOR}")
+		if (RS_VERSION_MINOR STREQUAL "")
+			set(RS_VERSION_MINOR 0)  # whole-number versions (20) have no minor part
+		endif()
 		configure_file(${CMAKE_SOURCE_DIR}/res/version.rc.in ${CMAKE_BINARY_DIR}/${name}_version.rc @ONLY)
 		target_sources(${target} PRIVATE ${CMAKE_BINARY_DIR}/${name}_version.rc)
 		if (MSVC)
@@ -124,7 +129,7 @@ if (RESAVERPP_GUI AND EXISTS ${CMAKE_SOURCE_DIR}/src/gui/main.cpp)
 	target_link_libraries(ReSaverPP PRIVATE rs_core rs_imgui)
 	rs_add_version_info(ReSaverPP ReSaverPP "ReSaver++ - Skyrim save editor")
 	if (WIN32)
-		target_link_libraries(ReSaverPP PRIVATE comdlg32 shell32 ole32 advapi32)
+		target_link_libraries(ReSaverPP PRIVATE comdlg32 shell32 ole32 advapi32 winmm)
 		if (MSVC)
 			target_link_options(ReSaverPP PRIVATE /ENTRY:wWinMainCRTStartup)
 		else()

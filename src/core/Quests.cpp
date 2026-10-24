@@ -323,6 +323,48 @@ namespace ess::quests
 		return out;
 	}
 
+	std::vector<std::uint32_t> LeadsInto(std::uint32_t a_target, const std::unordered_map<std::uint32_t, QuestDef>& a_defs, const StageBodies& a_bodies)
+	{
+		std::vector<std::uint32_t> pre;
+		for (const auto& [id, d] : a_defs) {
+			if (id == a_target || d.completionStages().empty()) {
+				continue;
+			}
+			bool leads = false;
+			for (const auto& st : d.stages) {
+				for (const auto& l : st.logs) {
+					leads |= l.nextQuest == a_target;
+				}
+			}
+			if (!leads && a_bodies) {
+				std::vector<std::string> props;
+				for (const auto& p : d.properties) {
+					if (p.type == 1 && p.form == a_target && p.alias < 0) {
+						props.push_back(LowerStr(p.name));
+					}
+				}
+				if (!props.empty()) {
+					for (const auto& [stage, body] : a_bodies(id)) {
+						for (const auto& line : body) {
+							const auto l = LowerStr(line);
+							for (const auto& p : props) {
+								if (l.find(p + ".setstage(") != std::string::npos || l.find(p + ".start()") != std::string::npos ||
+									l.find(p + ".setcurrentstageid(") != std::string::npos) {
+									leads = true;
+								}
+							}
+						}
+					}
+				}
+			}
+			if (leads) {
+				pre.push_back(id);
+			}
+		}
+		std::sort(pre.begin(), pre.end());
+		return pre;
+	}
+
 	// ---- save ----------------------------------------------------------------------------------------
 
 	std::int32_t QuestState::highestDoneStage() const

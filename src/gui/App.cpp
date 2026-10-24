@@ -118,6 +118,10 @@ void App::open(const std::filesystem::path& a_path)
 		_cfFacts.clear();
 		_missingDismissed = false;
 		_path = a_path;
+		if (const auto dir = platform::ToUtf8(a_path.parent_path()); !dir.empty() && dir != lastOpenDir()) {
+			lastOpenDir() = dir;  // File > Open starts here next time
+			saveSettings();
+		}
 		_dirty = false;
 		_report.reset();
 		_selected.clear();
@@ -2067,7 +2071,7 @@ void App::drawModals()
 		_showAbout = false;
 	}
 	if (ImGui::BeginPopupModal("关于 ReSaver++", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-		ImGui::TextUnformatted("ReSaver++ 版本 19  -  Skyrim SE/AE 存档编辑器");
+		ImGui::TextUnformatted("ReSaver++ 版本 " RESAVERPP_VERSION "  -  Skyrim SE/AE 存档编辑器");
 		ImGui::Spacing();
 		ImGui::TextUnformatted("ReSaver（FallrimTools，作者 Mark Fairchild）的 C++ 移植版。");
 		ImGui::TextUnformatted("与原版一样，按 Apache License 2.0 授权。");
@@ -2099,6 +2103,30 @@ void App::drawStatus()
 	}
 	ImGui::TextUnformatted(_status.c_str());
 	ImGui::PopClipRect();
+	// the open save, centred: name and folder (the folder shortened from the left if it does not fit)
+	if (_save && !_path.empty()) {
+		const float afterStatus = ImGui::GetItemRectMax().x - ImGui::GetWindowPos().x + 30;
+		const float rightReserve = 360;
+		const float avail = ImGui::GetWindowWidth() - afterStatus - rightReserve;
+		const auto  name = platform::ToUtf8(_path.filename());
+		std::string folder = platform::ToUtf8(_path.parent_path());
+		auto        text = [&] { return name + "   " + folder; };
+		while (folder.size() > 8 && ImGui::CalcTextSize(text().c_str()).x > avail) {
+			folder = "..." + folder.substr(std::min<std::size_t>(folder.size(), 12));
+		}
+		const float w = ImGui::CalcTextSize(text().c_str()).x;
+		if (w <= avail) {
+			float x = (ImGui::GetWindowWidth() - w) * 0.5f;
+			x = std::max(x, afterStatus);
+			ImGui::SameLine(x);
+			ImGui::TextUnformatted(name.c_str());
+			ImGui::SameLine();
+			ImGui::TextDisabled("%s", folder.c_str());
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("%s", platform::ToUtf8(_path).c_str());
+			}
+		}
+	}
 	if (busy) {
 		ImGui::SameLine(ImGui::GetWindowWidth() - progW - ImGui::GetStyle().WindowPadding.x);
 		drawBackgroundProgress(progW);
@@ -2258,6 +2286,14 @@ void App::loadSettings()
 			text::SetCodePage(static_cast<unsigned>(std::strtoul(line.c_str() + 9, nullptr, 10)));
 		} else if (line.rfind("game=", 0) == 0) {
 			se.gamePath = line.substr(5);
+		} else if (line.rfind("saves_dir=", 0) == 0) {
+			_savesDirSe = line.substr(10);
+		} else if (line.rfind("saves_dir_vr=", 0) == 0) {
+			_savesDirVr = line.substr(13);
+		} else if (line.rfind("last_dir=", 0) == 0) {
+			_lastDirSe = line.substr(9);
+		} else if (line.rfind("last_dir_vr=", 0) == 0) {
+			_lastDirVr = line.substr(12);
 		} else if (line.rfind("decompile_always=", 0) == 0) {
 			_decompileAlways = line.substr(17) == "1";
 		} else if (line.rfind("editor_light=", 0) == 0) {
@@ -2309,6 +2345,10 @@ void App::saveSettings()
 	f << "compression=" << _saveCompression << "\n";
 	f << "watch=" << (_watch ? 1 : 0) << "\n";
 	f << "game=" << se.gamePath << "\n";
+	f << "saves_dir=" << _savesDirSe << "\n";
+	f << "saves_dir_vr=" << _savesDirVr << "\n";
+	f << "last_dir=" << _lastDirSe << "\n";
+	f << "last_dir_vr=" << _lastDirVr << "\n";
 	f << "codepage=" << text::CodePage() << "\n";
 	f << "theme=" << static_cast<int>(theme::Current()) << "\n";
 	f << "live=" << (_liveEnabled ? 1 : 0) << "\n";

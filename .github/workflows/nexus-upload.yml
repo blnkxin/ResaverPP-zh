@@ -26,10 +26,18 @@ on:
         description: "Nexus Unique Mod ID (same dialog), so the changelog is attached"
         required: false
         default: "7318624468677"
+      description:
+        description: "File description on the Files tab (optional; default: the changelog, cut to 250 characters)"
+        required: false
+        default: ""
       display_name:
         description: "File name shown on Nexus"
         required: false
         default: "ReSaverPP"
+      mod_manager:
+        description: "Allow mod manager downloads (false = manual download only)"
+        required: false
+        default: "false"
 
 permissions:
   contents: read
@@ -113,6 +121,17 @@ jobs:
             echo "CHANGELOG_EOF"
           } >> "$GITHUB_OUTPUT"
 
+      # The file's own description on the Files tab (Nexus keeps it short): what changed in this version.
+      - name: File description
+        id: desc
+        env:
+          TEXT: ${{ inputs.description || inputs.changelog }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          d="Version $VERSION: $(printf '%s' "$TEXT" | sed 's/ | /; /g')"
+          if [ ${#d} -gt 250 ]; then d="${d:0:246}..."; fi
+          echo "text=$d" >> "$GITHUB_OUTPUT"
+
       - name: Upload to Nexus Mods
         uses: Nexus-Mods/upload-action@main
         with:
@@ -120,8 +139,12 @@ jobs:
           file_id: ${{ inputs.file_id || vars.NEXUSMODS_FILE_ID }}
           filename: ReSaverPP.zip
           display_name: ${{ inputs.display_name }}
+          description: ${{ steps.desc.outputs.text }}
           version: ${{ inputs.version }}
           mod_id: ${{ inputs.mod_id || vars.NEXUSMODS_MOD_ID }}
+          category: main
+          allow_mod_manager_download: ${{ inputs.mod_manager }}
+          primary_mod_manager_download: false
           update_mod_version: true
 
       # The upload action does not attach the changelog (checked on version 14), so it is posted here,

@@ -270,7 +270,30 @@ private:
 	};
 	const QuestPreview&                   questPreview(std::uint32_t a_formID);
 	void                                  liveQuest(std::uint32_t a_formID);  // asks the game for the quest's live state
-	void                                  liveSetStage(std::uint32_t a_formID, std::uint16_t a_stage, const std::string& a_what);
+	void                                  liveSetStage(std::uint32_t a_formID, std::uint16_t a_stage, const std::string& a_what,
+		                                      std::function<void(bool)> a_then = {});
+	// earlier quests of a quest line: quests whose journal names this one as the next quest, or whose
+	// completion stage script starts it / sets its stage; followed back, oldest first, not yet completed
+	struct ChainItem
+	{
+		std::uint32_t formID = 0;
+		std::uint16_t stage = 0;  // its completion stage
+		std::string   name;
+		bool          tick = true;
+		bool          alternative = false;  // one of several quests that lead here (e.g. two factions): not ticked
+		bool          done = false;          // completed in this save
+	};
+	std::vector<ChainItem>&               questChain(std::uint32_t a_formID);
+	void                                  runChain();  // completes _chainRun one after the other
+	std::map<std::uint32_t, std::vector<ChainItem>> _chains;
+	std::vector<ChainItem>                _chainPending;           // shown while the scripts are still being read (not cached)
+	bool                                  _previewPending = false;  // a preview was asked for before the scripts could be read
+	QuestPreview                          _previewTmp;
+	void                                  drawQuestNotifyChoice();
+	void                                  liveComplete(std::uint32_t a_formID, const std::string& a_name);
+	bool                                  helperAtLeast(int a_version) const;
+	std::vector<ChainItem>                _chainRun;
+	std::size_t                           _chainPos = 0;
 	std::string                           liveNotifyMode() const;
 	LiveLink                              _live;
 	bool                                  _liveEnabled = true;
@@ -373,7 +396,7 @@ private:
 	bool drawBackgroundProgress(float a_width);
 	bool scanning() const { return _scanThread.joinable(); }
 	void autoDetectPaths(bool a_force);  // Mod Organizer, game folder (AppScripts.cpp)
-	std::filesystem::path savesFolder() const;  // where the newest saves are
+	std::filesystem::path savesFolder() const;  // where File > Open starts: the chosen saves folder, the last one used, or the one with the newest save
 	void fixMcmJam();
 	void killThreads(const std::set<ess::ThreadID>& a_threads, const std::set<ess::EID>& a_instances, const std::string& a_what, bool a_terminateOnly);
 
@@ -522,6 +545,13 @@ private:
 	};
 	GameSetup _otherGame;
 	void      setGame(bool a_vr);
+	// saves folder chosen in Settings (empty: found by itself) and the folder a save was last opened from, per game
+	std::string _savesDirSe, _savesDirVr, _lastDirSe, _lastDirVr;
+	std::string&       savesDirSetting() { return _vr ? _savesDirVr : _savesDirSe; }
+	const std::string& savesDirSetting() const { return _vr ? _savesDirVr : _savesDirSe; }
+	std::string&       lastOpenDir() { return _vr ? _lastDirVr : _lastDirSe; }
+	const std::string& lastOpenDir() const { return _vr ? _lastDirVr : _lastDirSe; }
+	std::vector<std::filesystem::path> iniSaveFolders() const;  // sLocalSavePath of the game's Skyrim.ini / SkyrimCustom.ini
 	const char* gameName() const { return _vr ? "Skyrim VR" : "Skyrim Special Edition"; }
 	std::string _compilerSetting, _compileOutDir, _compileFlags = "TESV_Papyrus_Flags.flg", _compileImports;
 	int         _compileOutMode = 0;  // 0 the script's mod, 1 MO2 overwrite, 2 custom folder

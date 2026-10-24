@@ -625,6 +625,72 @@ std::vector<std::filesystem::path> App::watchFolders() const
 	if (_mo2 && !_profile.empty()) {
 		v.push_back(_mo2->profilesDir / platform::FromUtf8(_profile) / "saves");  // MO2 profile-local saves
 	}
+	for (auto& d : iniSaveFolders()) {
+		v.push_back(std::move(d));
+	}
+	if (const auto& s = savesDirSetting(); !s.empty()) {
+		v.insert(v.begin(), platform::FromUtf8(s));  // chosen in Settings
+	}
+	// each folder once
+	std::vector<std::filesystem::path> out;
+	for (auto& p : v) {
+		const auto key = Lower(platform::ToUtf8(p.lexically_normal()));
+		if (std::none_of(out.begin(), out.end(), [&](const std::filesystem::path& o) { return Lower(platform::ToUtf8(o.lexically_normal())) == key; })) {
+			out.push_back(std::move(p));
+		}
+	}
+	return out;
+}
+
+std::vector<std::filesystem::path> App::iniSaveFolders() const
+{
+	// sLocalSavePath in Skyrim.ini / SkyrimCustom.ini moves the saves; it is relative to Documents\My Games\<game>
+	std::vector<std::filesystem::path> v;
+	const auto saves = platform::DefaultSavesFolder(_vr);
+	if (saves.empty()) {
+		return v;
+	}
+	const auto              myGames = saves.parent_path();
+	std::vector<std::filesystem::path> inis = { myGames / "Skyrim.ini", myGames / "SkyrimCustom.ini", myGames / "SkyrimVR.ini" };
+	if (_mo2 && !_profile.empty()) {  // Mod Organizer profile-specific game ini files
+		const auto prof = _mo2->profilesDir / platform::FromUtf8(_profile);
+		inis.push_back(prof / "Skyrim.ini");
+		inis.push_back(prof / "SkyrimCustom.ini");
+	}
+	std::error_code ec;
+	for (const auto& ini : inis) {
+		std::ifstream f(ini);
+		for (std::string line; std::getline(f, line);) {
+			const auto low = Lower(line);
+			const auto eq = low.find('=');
+			if (eq == std::string::npos) {
+				continue;
+			}
+			auto key = low.substr(0, eq);
+			key.erase(std::remove_if(key.begin(), key.end(), [](unsigned char c) { return std::isspace(c); }), key.end());
+			if (key != "slocalsavepath") {
+				continue;
+			}
+			auto val = line.substr(eq + 1);
+			while (!val.empty() && (std::isspace(static_cast<unsigned char>(val.back())) || val.back() == '\\' || val.back() == '/')) {
+				val.pop_back();
+			}
+			while (!val.empty() && std::isspace(static_cast<unsigned char>(val.front()))) {
+				val.erase(val.begin());
+			}
+			if (val.empty() || Lower(val).rfind("__mo_", 0) == 0) {  // Mod Organizer's own redirect: its profile saves are added already
+				continue;
+			}
+			auto p = platform::FromUtf8(val);
+			if (p.is_relative()) {
+				p = myGames / p;
+			}
+			p = p.lexically_normal();
+			if (std::filesystem::is_directory(p, ec)) {
+				v.push_back(p);
+			}
+		}
+	}
 	return v;
 }
 

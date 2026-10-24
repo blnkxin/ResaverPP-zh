@@ -5,8 +5,8 @@
 CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "@RS_MANIFEST@"
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     @PROJECT_VERSION_MAJOR@,0,0,0
-PRODUCTVERSION  @PROJECT_VERSION_MAJOR@,0,0,0
+FILEVERSION     @PROJECT_VERSION_MAJOR@,@RS_VERSION_MINOR@,0,0
+PRODUCTVERSION  @PROJECT_VERSION_MAJOR@,@RS_VERSION_MINOR@,0,0
 FILEFLAGSMASK   0x3fL
 FILEFLAGS       0x0L
 FILEOS          VOS_NT_WINDOWS32
@@ -19,12 +19,12 @@ BEGIN
 		BEGIN
 			VALUE "CompanyName", "tonycubed2"
 			VALUE "FileDescription", "@RS_DESCRIPTION@"
-			VALUE "FileVersion", "@PROJECT_VERSION_MAJOR@"
+			VALUE "FileVersion", "@PROJECT_VERSION@"
 			VALUE "InternalName", "@RS_NAME@"
 			VALUE "LegalCopyright", "Apache License 2.0. Port of ReSaver (FallrimTools) by Mark Fairchild."
 			VALUE "OriginalFilename", "@RS_NAME@.exe"
 			VALUE "ProductName", "ReSaver++"
-			VALUE "ProductVersion", "@PROJECT_VERSION_MAJOR@"
+			VALUE "ProductVersion", "@PROJECT_VERSION@"
 			VALUE "Comments", "Source code: https://github.com/Tonycubed2/ResaverPP"
 		END
 	END

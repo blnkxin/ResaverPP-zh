@@ -1436,7 +1436,7 @@ void App::autoDetectPaths(bool a_force)
 	if (!skyrim.empty()) {
 		// several instances: the one whose mod list was changed last
 		auto newest = [&](const Mo2Instance& m) {
-			std::filesystem::file_time_type t{};
+			std::filesystem::file_time_type t = std::filesystem::file_time_type::min();
 			const auto list = m.profilesDir / platform::FromUtf8(m.selectedProfile) / "modlist.txt";
 			if (std::filesystem::exists(list, ec)) {
 				t = std::filesystem::last_write_time(list, ec);
@@ -1483,10 +1483,16 @@ void App::autoDetectPaths(bool a_force)
 
 std::filesystem::path App::savesFolder() const
 {
-	// the folder with the newest save: Documents\My Games\Skyrim Special Edition\Saves, or the MO2 profile's own saves
+	// 1. the saves folder chosen in Settings; 2. the folder a save was last opened from; 3. the folder with the
+	// newest save: Documents\My Games\Skyrim Special Edition\Saves (or sLocalSavePath), or the MO2 profile's own saves
+	std::error_code ec;
+	for (const auto* s : { &savesDirSetting(), &lastOpenDir() }) {
+		if (!s->empty() && std::filesystem::is_directory(platform::FromUtf8(*s), ec)) {
+			return platform::FromUtf8(*s);
+		}
+	}
 	std::filesystem::path           best = platform::DefaultSavesFolder(_vr);
-	std::filesystem::file_time_type bestTime{};
-	std::error_code                 ec;
+	std::filesystem::file_time_type bestTime = std::filesystem::file_time_type::min();  // (not {}: with MinGW, file times before 2174 are negative)
 	for (const auto& dir : watchFolders()) {
 		for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
 			if (e.is_regular_file(ec) && Lower(platform::ToUtf8(e.path().extension())) == ".ess") {

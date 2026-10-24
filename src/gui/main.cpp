@@ -4,6 +4,7 @@
 #	include <windows.h>
 #	include <shellapi.h>
 #	include <objbase.h>
+#	include <timeapi.h>
 #endif
 
 #include "App.h"
@@ -204,6 +205,9 @@ int RunApp(int argc, char** argv)
 	}
 	glfwMakeContextCurrent(window);
 	glfwSwapInterval(1);
+#ifdef _WIN32
+	timeBeginPeriod(1);  // 1 ms timer resolution, so the frame cap below waits ~16 ms, not 31
+#endif
 	glfwSetDropCallback(window, OnDrop);
 
 	float xs = 1, ys = 1;
@@ -304,8 +308,29 @@ int RunApp(int argc, char** argv)
 			break;
 		}
 		glfwSwapBuffers(window);
+
+		// Frame cap of our own: some drivers ignore the swap interval (hybrid-GPU laptops, vsync forced off
+		// in the NVIDIA / AMD control panel), and the window would then draw thousands of frames a second
+		// and flood the desktop. 60 a second while the window has focus, 15 while it does not. Waiting for
+		// events rather than sleeping, so input is taken in while waiting.
+		{
+			static double next = glfwGetTime();
+			const double  fps = glfwGetWindowAttrib(window, GLFW_FOCUSED) ? 60.0 : 15.0;
+			next += 1.0 / fps;
+			double now = glfwGetTime();
+			if (next < now - 0.25) {
+				next = now;  // far behind (a long frame): do not try to catch up
+			}
+			while (now < next) {
+				glfwWaitEventsTimeout(next - now);
+				now = glfwGetTime();
+			}
+		}
 	}
 
+#ifdef _WIN32
+	timeEndPeriod(1);
+#endif
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();

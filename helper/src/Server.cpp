@@ -16,6 +16,9 @@ namespace Server
 			return REL::Module::IsAE() ? "AE" : "SE";
 		}
 
+		// how long a request waits for the game's main thread (a heavily modded game can stall for many seconds)
+		constexpr auto kWait = 30s;
+
 		std::uint32_t ParseHex(const std::string& s)
 		{
 			try {
@@ -60,17 +63,26 @@ namespace Server
 			if (!Game::InGame()) {
 				return err("no game loaded yet (load a save first)");
 			}
+			// Everything a main-thread task touches is owned by the task (values and shared_ptr copies),
+			// never by this function's stack: when the game is busy the task can run long after this
+			// request has given up waiting (version 1 crashed that way after a long stall).
 			if (cmd == "QUEST") {
-				Game::QuestInfo q;
-				if (!Game::RunOnMain([&] { q = Game::GetQuest(ParseHex(arg(0))); })) {
-					return err("the game did not answer in time");
+				struct State
+				{
+					Game::QuestInfo q;
+				};
+				auto       st = std::make_shared<State>();
+				const auto formID = ParseHex(arg(0));
+				if (!Game::RunOnMain([st, formID] { st->q = Game::GetQuest(formID); }, kWait)) {
+					return err("the game is busy (it did not answer within 30 seconds)");
 				}
+				const auto& q = st->q;
 				if (!q.found) {
 					return err("no quest " + arg(0) + " in this game");
 				}
 				std::string objs;
-				for (const auto& [i, s] : q.objectives) {
-					objs += (objs.empty() ? "" : ",") + std::to_string(i) + ":" + std::to_string(s);
+				for (const auto& [i, o] : q.objectives) {
+					objs += (objs.empty() ? "" : ",") + std::to_string(i) + ":" + std::to_string(o);
 				}
 				return { "OK", q.editorID, std::format("{:04X}", q.flags), std::to_string(q.currentStage), q.running ? "1" : "0",
 					q.completed ? "1" : "0", objs };
@@ -85,32 +97,73 @@ namespace Server
 				if (!formID || stage < 0 || stage > 0xFFFF) {
 					return err("bad quest or stage");
 				}
-				auto       result = std::make_shared<std::promise<bool>>();
+				struct Outcome
+				{
+					bool          ok = false, running = false, completed = false;
+					std::uint16_t stage = 0;
+				};
+				auto       result = std::make_shared<std::promise<Outcome>>();
 				auto       fut = result->get_future();
 				const auto notify = arg(2), message = arg(3);
-				if (!Game::RunOnMain([&] {
-						Game::SetStage(formID, static_cast<std::uint16_t>(stage), [result, notify, message](bool ok) {
+				const auto st16 = static_cast<std::uint16_t>(stage);
+				const bool ran = Game::RunOnMain(
+					[formID, st16, result, notify, message] {
+						Game::SetStage(formID, st16, [formID, result, notify, message](bool ok) {
 							Game::Notify(notify, ok ? (message.empty() ? "ReSaverHelper: quest stage set" : message) : "ReSaverHelper: the game refused that stage");
+							Outcome o;
+							o.ok = ok;
+							if (auto* q = RE::TESForm::LookupByID<RE::TESQuest>(formID)) {
+								o.running = q->IsRunning();
+								o.completed = q->IsCompleted();
+								o.stage = q->GetCurrentStageID();
+							}
+							try {
+								result->set_value(o);
+							} catch (...) {
+							}
+						});
+					},
+					kWait);
+				if (!ran) {
+					return { "OK", "?" };  // queued: the game is busy and does it as soon as it can
+				}
+				if (fut.wait_for(15s) != std::future_status::ready) {
+					return { "OK", "?" };  // still running (a long stage script): it continues in the game
+				}
+				const auto o = fut.get();
+				return { "OK", o.ok ? "1" : "0", o.running ? "1" : "0", o.completed ? "1" : "0", std::to_string(o.stage) };
+			}
+			if (cmd == "COMPLETE") {
+				const auto formID = ParseHex(arg(0));
+				if (!formID) {
+					return err("bad quest");
+				}
+				auto       result = std::make_shared<std::promise<bool>>();
+				auto       fut = result->get_future();
+				const auto notify = arg(1), message = arg(2);
+				const bool ran = Game::RunOnMain(
+					[formID, result, notify, message] {
+						Game::Complete(formID, [result, notify, message](bool ok) {
+							Game::Notify(notify, ok ? (message.empty() ? "ReSaverHelper: quest marked completed" : message) : "ReSaverHelper: the quest could not be marked completed");
 							try {
 								result->set_value(ok);
 							} catch (...) {
 							}
 						});
-					})) {
-					return err("the game did not answer in time");
-				}
-				if (fut.wait_for(15s) != std::future_status::ready) {
-					return { "OK", "?" };  // still running (a long stage script): it continues in the game
+					},
+					kWait);
+				if (!ran || fut.wait_for(15s) != std::future_status::ready) {
+					return { "OK", "?" };
 				}
 				return { "OK", fut.get() ? "1" : "0" };
 			}
 			if (cmd == "REFRESH") {
-				std::size_t n = 0;
-				const auto  notify = arg(0);
-				if (!Game::RunOnMain([&] { n = Game::StartRefresh(notify); })) {
-					return err("the game did not answer in time");
+				auto       n = std::make_shared<std::atomic<std::size_t>>(0);
+				const auto notify = arg(0);
+				if (!Game::RunOnMain([n, notify] { n->store(Game::StartRefresh(notify)); }, kWait)) {
+					return err("the game is busy (it did not answer within 30 seconds); the refresh starts when it can");
 				}
-				return { "OK", std::to_string(n) };
+				return { "OK", std::to_string(n->load()) };
 			}
 			return err("unknown command " + cmd);
 		}

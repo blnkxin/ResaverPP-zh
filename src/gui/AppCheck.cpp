@@ -46,10 +46,10 @@ namespace
 	const char* RiskWord(App::Risk r)
 	{
 		switch (r) {
-		case App::Risk::kSafe: return "SAFE";
-		case App::Risk::kCaution: return "CAUTION";
-		case App::Risk::kRisky: return "RISKY";
-		default: return "INFO";
+		case App::Risk::kSafe: return "安全";
+		case App::Risk::kCaution: return "谨慎";
+		case App::Risk::kRisky: return "危险";
+		default: return "提示";
 		}
 	}
 
@@ -95,14 +95,14 @@ std::vector<App::CheckItem> App::checkItems()
 	if (_readOnly) {
 		CheckItem it;
 		it.level = Risk::kRisky;
-		it.title = "This save is damaged: opened read-only";
+		it.title = "这个存档已损坏：以只读方式打开";
 		std::string list;
 		for (const auto& pr : _save->problems) {
 			list += "\n  - " + pr;
 		}
-		it.what = "Its structure does not add up, or it uses a layout ReSaver++ does not fully understand:" + list +
-				  "\nYou can look at everything, but ReSaver++ will not write it back (that could lose or invent data). "
-				  "Load an earlier save in the game, or report this with the file.";
+		it.what = "它的结构对不上，或采用了 ReSaver++ 还不能完全理解的布局：" + list +
+				  "\n所有内容都能查看，但 ReSaver++ 不会写回它（那可能丢失数据，也可能凭空造出数据）。"
+				  "请在游戏中读取一个更早的存档，或带上这个文件反馈问题。";
 		v.push_back(std::move(it));
 	}
 
@@ -115,34 +115,34 @@ std::vector<App::CheckItem> App::checkItems()
 		CheckItem it;
 		const bool suspect = _orderSuspect || _scanSuspect;
 		it.level = suspect ? Risk::kRisky : Risk::kCaution;
-		it.title = !_missing.empty() ? Fmt("%zu mod(s) in this save are not in your load order", _missing.size())
-									 : Fmt("%zu script(s) in this save are no longer installed", _missingScripts.size() + _unfoundScripts.size());
+		it.title = !_missing.empty() ? Fmt("本存档里有 %zu 个模组不在你的加载顺序中", _missing.size())
+									 : Fmt("本存档里有 %zu 个脚本已不再安装", _missingScripts.size() + _unfoundScripts.size());
 		std::string w;
 		if (!_missing.empty()) {
-			w = _installKnown ? Fmt("Not in %s: %zu no longer installed, %zu installed but not enabled. ", _missingSource.c_str(), gone, disabled)
-							  : Fmt("Not in %s. ", _missingSource.c_str());
+			w = _installKnown ? Fmt("%s 中不存在：%zu 个已卸载，%zu 个已安装但未启用。 ", _missingSource.c_str(), gone, disabled)
+							  : Fmt("%s 中不存在。 ", _missingSource.c_str());
 		}
 		if (!_missingScripts.empty()) {
-			w += Fmt("%zu script(s) the game could not load because their files are gone. ", _missingScripts.size());
+			w += Fmt("%zu 个脚本因文件已不存在而无法被游戏加载。 ", _missingScripts.size());
 		}
 		if (!_unfoundScripts.empty()) {
-			w += Fmt("%zu script(s) were not found in your mods, but the game still had them when it saved (probably fine). ", _unfoundScripts.size());
+			w += Fmt("%zu 个脚本在你的模组里找不到，但游戏存档时还带着它们（大概没问题）。 ", _unfoundScripts.size());
 		}
-		w += "Their scripts and saved data are leftovers the game no longer uses.";
+		w += "它们的脚本和存档数据是游戏已不再使用的残留。";
 		if (!_installKnown && scanning()) {
-			w += "\nStill scanning your mods: until it is done, uninstalled mods cannot be told from disabled ones.";
+			w += "\n仍在扫描你的模组：扫描完成之前，分不清哪些模组是已卸载、哪些只是已停用。";
 		}
 		if (suspect) {
-			w += "\nBUT the load order or the mods folder ReSaver++ read does not match this save (wrong MO2 profile, old plugins.txt, "
-				 "or archives that could not be read). Cleaning now could remove mods you still use. Check Options > Settings first.";
+			w += "\n但 ReSaver++ 读到的加载顺序或模组文件夹与本存档对不上（选错了 MO2 配置、plugins.txt 过期，"
+				 "或有些归档读不出来）。现在清理可能移除你仍在使用的模组。请先看“选项 > 设置”。";
 		}
 		it.what = w;
 		CheckOption o;
-		o.label = "Review and remove their leftovers...";
+		o.label = "检查并移除它们的残留…";
 		o.risk = suspect ? Risk::kRisky : Risk::kCaution;
-		o.why = suspect ? "The mod list looks wrong, so nothing is ticked. Removing a mod you still use deletes its progress and settings."
-						: "Writes a NEW save without them; the original is not touched. Safe for mods you removed for good. A mod you only "
-						  "disabled (for a test, or in another profile) would lose its progress and settings: those are not ticked.";
+		o.why = suspect ? "模组列表看起来不对，所以什么都没勾选。移除你仍在使用的模组会删掉它的进度和设置。"
+						: "写出一个不含这些内容的新存档；原文件不动。对已彻底卸载的模组是安全的。只是暂时停用的模组"
+						  "（为了测试，或在另一个配置里）会丢掉进度和设置：这类不会被勾选。";
 		o.act = [this] {
 			_missingDismissed = false;
 			for (auto& m : _missing) {
@@ -161,22 +161,22 @@ std::vector<App::CheckItem> App::checkItems()
 		for (const auto& s : r.loopingScripts) {
 			CheckItem it;
 			it.level = Risk::kCaution;
-			it.title = "Script '" + s + "' is running in many copies at once";
-			it.what = "Dozens of its threads sit in wait loops. A script that never stops (like the Firefly bug) slows the whole script "
-					  "engine, and it gets worse with every save.";
+			it.title = "脚本 “" + s + "” 正在同时运行很多份";
+			it.what = "它有几十个线程停在等待循环里。永不停止的脚本（比如 Firefly 那个 bug）会拖慢整个脚本"
+					  "引擎，而且每存一次档就更糟。";
 			CheckOption o;
-			o.label = "Purge " + s;
+			o.label = "清除 " + s;
 			o.risk = Risk::kCaution;
-			o.why = "Removes all of its threads and its data, plus the spawned objects they sit on. Right for a runaway script. If it belongs "
-					"to a mod you use, that mod's feature restarts or stops until the mod starts it again.";
+			o.why = "移除它的全部线程和数据，以及它们所在的生成对象。对失控的脚本这是对的。如果它属于你在用的"
+					"模组，那个模组的功能会重新启动，或者一直停到模组再次启动它。";
 			const std::string name = s;
 			o.act = [this, name] {
-				confirm("Purge " + name,
-					"Remove every thread, suspended stack, function message and instance of '" + name +
-						"', plus the spawned objects they sit on?\n\nOnly the save in memory changes: write it with File > Save As.",
+				confirm("清除 " + name,
+					"移除 “" + name +
+						"” 的全部线程、挂起堆栈、函数消息和实例，以及它们所在的生成对象？\n\n只改内存里的存档：请用“文件 > 另存为”写出。",
 					[this, name] {
 						auto x = ops::PurgeScript(*_save, name, true);
-						markEdited(Fmt("Purged %s: %zu threads, %zu instances, %zu spawned objects", name.c_str(), x.threads, x.instances, x.forms));
+						markEdited(Fmt("已清除 %s：%zu 个线程、%zu 个实例、%zu 个生成对象", name.c_str(), x.threads, x.instances, x.forms));
 					});
 			};
 			it.options.push_back(std::move(o));
@@ -187,13 +187,12 @@ std::vector<App::CheckItem> App::checkItems()
 		if (r.mcmJam) {
 			CheckItem it;
 			it.level = Risk::kCaution;
-			it.title = "SkyUI was still registering MCM menus when this save was made";
-			it.what = "Loading replays all of that work, which can make menus missing or the game sluggish after loading.";
+			it.title = "存档创建时 SkyUI 仍在注册 MCM 菜单";
+			it.what = "读档会把那些工作全部重放一遍，可能导致菜单缺失，或读档后游戏卡顿。";
 			CheckOption o;
-			o.label = "Fix SkyUI MCM registration jam...";
+			o.label = "修复 SkyUI MCM 注册卡死…";
 			o.risk = Risk::kSafe;
-			o.why = "Removes only the stuck registration work. Menus already registered keep their settings; SkyUI registers the rest "
-					"again on the next load.";
+			o.why = "只移除卡住的注册工作。已注册的菜单保留设置；下次读档时 SkyUI 会重新注册其余的。";
 			o.act = [this] { fixMcmJam(); };
 			it.options.push_back(std::move(o));
 			v.push_back(std::move(it));
@@ -203,18 +202,17 @@ std::vector<App::CheckItem> App::checkItems()
 		if (r.undefinedInstances || r.undefinedThreads) {
 			CheckItem it;
 			it.level = Risk::kCaution;
-			it.title = Fmt("%zu script instance(s) and %zu thread(s) belong to scripts the game could not load", r.undefinedInstances, r.undefinedThreads);
-			it.what = "Their script files were not found when this save was made, so the game cannot run them: dead data.";
+			it.title = Fmt("%zu 个脚本实例和 %zu 个线程属于游戏无法加载的脚本", r.undefinedInstances, r.undefinedThreads);
+			it.what = "存档创建时找不到它们的脚本文件，所以游戏无法运行它们：死数据。";
 			CheckOption o;
-			o.label = "Remove undefined elements";
+			o.label = "移除未定义元素";
 			o.risk = Risk::kSafe;
-			o.why = "The game cannot use these scripts any more. Only if you reinstalled that mod after this save was made would its data "
-					"still matter.";
+			o.why = "游戏已无法使用这些脚本。只有当你在存档之后重装过那个模组时，它的数据才还有意义。";
 			o.act = [this, p] {
-				confirm("Remove undefined elements",
-					"Delete scripts whose .pex is no longer installed, their instances and references, and terminate threads running them?"
-					"\n\nOnly the save in memory changes: write it with File > Save As.",
-					[this, p] { markEdited(Fmt("Removed/terminated %zu undefined elements", ops::RemoveUndefinedElements(*p))); });
+				confirm("移除未定义元素",
+					"删除 .pex 已不再安装的脚本、它们的实例和引用，并终止正在运行它们的线程？"
+					"\n\n只改内存里的存档：请用“文件 > 另存为”写出。",
+					[this, p] { markEdited(Fmt("已移除/终止 %zu 个未定义元素", ops::RemoveUndefinedElements(*p))); });
 			};
 			it.options.push_back(std::move(o));
 			v.push_back(std::move(it));
@@ -224,13 +222,12 @@ std::vector<App::CheckItem> App::checkItems()
 		if (r.createdWithoutForm) {
 			CheckItem it;
 			it.level = Risk::kCaution;
-			it.title = Fmt("%zu script instance(s) sit on spawned objects that no longer exist", r.createdWithoutForm);
-			it.what = "Objects a mod created during play were deleted, but their scripts stayed in the save.";
+			it.title = Fmt("%zu 个脚本实例位于已不存在的生成对象上", r.createdWithoutForm);
+			it.what = "模组在游戏过程中创建的对象已被删除，但它们的脚本还留在存档里。";
 			CheckOption o;
-			o.label = "Review missing spawned objects...";
+			o.label = "检查缺失的生成对象…";
 			o.risk = Risk::kCaution;
-			o.why = "Shows them grouped by mod first. Ticked are those of mods that are not installed; the ones another script still points "
-					"to are kept unless you choose otherwise.";
+			o.why = "先按模组分组列出它们。勾选的是未安装模组的那些；仍被其他脚本指向的会保留，除非你自己改。";
 			o.act = [this] { openOrphans(); };
 			it.options.push_back(std::move(o));
 			v.push_back(std::move(it));
@@ -240,17 +237,17 @@ std::vector<App::CheckItem> App::checkItems()
 		if (r.unattached >= 100) {
 			CheckItem it;
 			it.level = Risk::kCaution;
-			it.title = Fmt("%zu script instance(s) are attached to nothing", r.unattached);
-			it.what = "Script data whose object is gone. A few are normal; many slow down loading.";
+			it.title = Fmt("%zu 个脚本实例没有附加到任何对象", r.unattached);
+			it.what = "对象已不存在的脚本数据。少数几个是正常的；多了会拖慢读档。";
 			CheckOption o;
-			o.label = "Remove unattached instances";
+			o.label = "移除未附加实例";
 			o.risk = Risk::kSafe;
-			o.why = "Nothing in the game can reach these any more.";
+			o.why = "游戏里已经没有任何东西能访问它们。";
 			o.act = [this, p] {
-				confirm("Remove unattached instances",
-					Fmt("Delete %zu script instances that are attached to nothing?\n\nOnly the save in memory changes: write it with File > Save As.",
+				confirm("移除未附加实例",
+					Fmt("删除 %zu 个未附加到任何对象的脚本实例？\n\n只改内存里的存档：请用“文件 > 另存为”写出。",
 						_report ? _report->unattached : 0),
-					[this, p] { markEdited(Fmt("Removed %zu unattached instances", ops::RemoveUnattachedInstances(*p))); });
+					[this, p] { markEdited(Fmt("已移除 %zu 个未附加实例", ops::RemoveUnattachedInstances(*p))); });
 			};
 			it.options.push_back(std::move(o));
 			v.push_back(std::move(it));
@@ -259,26 +256,26 @@ std::vector<App::CheckItem> App::checkItems()
 		// a busy script engine with no single cause
 		std::vector<std::string> heavy;
 		if (r.threads >= 300) {
-			heavy.push_back(Fmt("%zu running script threads (a healthy save usually has under ~150)", r.threads));
+			heavy.push_back(Fmt("%zu 个运行中的脚本线程（健康的存档通常不到 ~150）", r.threads));
 		}
 		if (r.suspended >= 50) {
-			heavy.push_back(Fmt("%zu suspended stacks (normal is a handful)", r.suspended));
+			heavy.push_back(Fmt("%zu 个挂起堆栈（正常只有几个）", r.suspended));
 		}
 		if (r.instances >= 150000) {
-			heavy.push_back(Fmt("%zu script instances (very high: every load rebuilds them)", r.instances));
+			heavy.push_back(Fmt("%zu 个脚本实例（非常高：每次读档都要重建）", r.instances));
 		}
 		if (!heavy.empty()) {
 			CheckItem it;
 			it.level = Risk::kCaution;
-			it.title = "The script engine is very busy in this save";
+			it.title = "这个存档的脚本引擎非常繁忙";
 			for (const auto& h : heavy) {
 				it.what += "- " + h + "\n";
 			}
-			it.what += "No single cause was found. The Mods page shows which mod runs the most scripts.";
+			it.what += "找不到单一原因。“模组”页会显示哪个模组运行的脚本最多。";
 			CheckOption o;
-			o.label = "Show the Mods page";
+			o.label = "显示“模组”页";
 			o.risk = Risk::kSafe;
-			o.why = "Only shows information.";
+			o.why = "只显示信息。";
 			o.act = [this] {
 				_cat = Cat::kMods;
 				_showCheck = false;
@@ -297,12 +294,12 @@ std::vector<App::CheckItem> App::checkItems()
 		if (broken) {
 			CheckItem it;
 			it.level = Risk::kCaution;
-			it.title = Fmt("%zu enchanted item(s) cannot be recharged", broken);
-			it.what = "They have an enchantment but a max charge of 0 (or more charge than their max), so soul gems do nothing.";
+			it.title = Fmt("%zu 个附魔物品无法再充能", broken);
+			it.what = "它们有附魔，但最大充能为 0（或充能值大于最大值），所以灵魂石不起作用。";
 			CheckOption o;
-			o.label = "Give them a max charge of 3000";
+			o.label = "把最大充能设为 3000";
 			o.risk = Risk::kSafe;
-			o.why = "Only adds the missing max charge to those items; nothing else changes. (Per mod, with your own value: Mods page.)";
+			o.why = "只给这些物品补上缺少的最大充能；其他都不变。（可按模组设成自己的值：见“模组”页。）";
 			o.act = [this] {
 				std::vector<std::pair<std::uint32_t, std::uint32_t>> only;
 				for (const auto& c : chargedItems()) {
@@ -311,7 +308,7 @@ std::vector<App::CheckItem> App::checkItems()
 					}
 				}
 				const auto n = cf::FixCharges(*_save, 3000, only);
-				markEdited(Fmt("Gave %zu item(s) a max charge of 3000", n));
+				markEdited(Fmt("已给 %zu 个物品设置最大充能 3000", n));
 			};
 			it.options.push_back(std::move(o));
 			v.push_back(std::move(it));
@@ -329,23 +326,22 @@ std::vector<App::CheckItem> App::checkItems()
 		if (shownDone) {
 			CheckItem it;
 			it.level = Risk::kInfo;
-			it.title = Fmt("Your journal shows %zu objective(s) of quests that are completed or stopped", shownDone);
-			it.what = "Leftovers of quests that ended. Harmless, but they fill the journal, and a very full journal stops showing new quests.";
+			it.title = Fmt("你的任务日志里有 %zu 个目标属于已完成或已停止的任务", shownDone);
+			it.what = "已结束任务的残留。无害，但会占满日志，而日志太满会让新任务显示不出来。";
 			CheckOption o;
-			o.label = "Refresh journal in game";
+			o.label = "在游戏中刷新任务日志";
 			o.risk = Risk::kCaution;
-			o.why = std::string(info.connected && info.inGame ? "Done in the running game; this file is not changed. "
-															  : "Needs the game running with ReSaverHelper.dll and a save loaded. ") +
-					"Make a save in the game first and keep menus closed while it runs. With journal UI mods (such as QUI) a crash when "
-					"opening the menu afterwards was reported with helper 3; helper 4 works more carefully. If the game crashes, load "
-					"the save from before.";
+			o.why = std::string(info.connected && info.inGame ? "在运行中的游戏里做；这个文件不会变。 "
+															  : "需要游戏在运行、装了 ReSaverHelper.dll 并读了档。 ") +
+					"先在游戏里存个档，运行期间不要打开菜单。使用日志类界面模组（如 QUI）时，用 helper 3 曾报告过之后打开菜单"
+					"会崩溃；helper 4 更谨慎。如果游戏崩溃了，读取之前的那个存档。";
 			o.enabled = info.connected && info.inGame && !_liveRefresh.running;
 			o.act = [this] { startLiveRefresh(); };
 			it.options.push_back(std::move(o));
 			CheckOption q;
-			q.label = "Show the Quests page";
+			q.label = "显示“任务”页";
 			q.risk = Risk::kSafe;
-			q.why = "Only shows information.";
+			q.why = "只显示信息。";
 			q.act = [this] {
 				_cat = Cat::kQuests;
 				_showCheck = false;
@@ -379,25 +375,28 @@ void App::drawSaveCheck()
 		return;
 	}
 	prepareWindow("Save check", ImVec2(0.62f, 0.72f));
-	if (!ImGui::Begin("Save check", &_showCheck, ImGuiWindowFlags_NoCollapse)) {
+	if (!ImGui::Begin("存档检查", &_showCheck, ImGuiWindowFlags_NoCollapse)) {
 		ImGui::End();
 		return;
 	}
 	maximizeControl("Save check");
-	ImGui::TextUnformatted(("Save check:  " + platform::ToUtf8(_path.filename())).c_str());
+	// the file name may be long: wrap before the Maximize button instead of running under it
+	ImGui::PushTextWrapPos(ImGui::GetContentRegionMax().x - 96);
+	ImGui::TextWrapped("存档检查：%s", platform::ToUtf8(_path.filename()).c_str());
+	ImGui::PopTextWrapPos();
 	// legend
 	Dot(Risk::kSafe);
-	ImGui::TextUnformatted("Safe");
+	ImGui::TextUnformatted("安全");
 	ImGui::SameLine(0, 24);
 	Dot(Risk::kCaution);
-	ImGui::TextUnformatted("Caution: read why first");
+	ImGui::TextUnformatted("谨慎：先读原因");
 	ImGui::SameLine(0, 24);
 	Dot(Risk::kRisky);
-	ImGui::TextUnformatted("Risky: can break a mod or quest");
-	ImGui::TextDisabled("Nothing here changes your save file until you use File > Save or Save As (the previous file is kept as .bak).\n"
-						"Removing mods writes a NEW save next to the old one. Make a backup of saves you care about anyway.");
+	ImGui::TextUnformatted("危险：可能弄坏模组或任务");
+	ImGui::TextDisabled("在你用“文件 > 保存”或“另存为”之前，这里不会改动你的存档文件（旧文件会保留为 .bak）。\n"
+						"移除模组会在旧存档旁边写出一个新存档。在意的存档还是先备份一下。");
 	if (scanning()) {
-		ImGui::TextDisabled("Reading your mods in the background: this list updates when it is done.");
+		ImGui::TextDisabled("正在后台读取你的模组：读完后这个列表会更新。");
 		drawBackgroundProgress(0);
 	}
 	ImGui::Separator();
@@ -407,8 +406,8 @@ void App::drawSaveCheck()
 	if (items.empty()) {
 		ImGui::Spacing();
 		Dot(Risk::kSafe);
-		Wrapped(theme::Good(), "No problems found in this save.");
-		ImGui::TextDisabled("Everything else (scripts, threads, quests, plugins) is on the pages on the left.");
+		Wrapped(theme::Good(), "这个存档没有发现问题。");
+		ImGui::TextDisabled("其他内容（脚本、线程、任务、插件）都在左侧各页里。");
 	}
 	int id = 0;
 	for (const auto& it : items) {
@@ -434,12 +433,12 @@ void App::drawSaveCheck()
 		ImGui::PopID();
 	}
 	ImGui::EndChild();
-	if (ImGui::Checkbox("Show this when a save opens", &_checkOnOpen)) {
+	if (ImGui::Checkbox("打开存档时显示", &_checkOnOpen)) {
 		saveSettings();
 	}
 	ImGui::SameLine();
 	ImGui::SetCursorPosX(ImGui::GetWindowWidth() - 140);
-	if (ImGui::Button("Close", ImVec2(120, 0))) {
+	if (ImGui::Button("关闭", ImVec2(120, 0))) {
 		_showCheck = false;
 	}
 	ImGui::End();
@@ -470,17 +469,17 @@ void App::drawCheckSummary()
 	const Risk worst = red ? Risk::kRisky : yellow ? Risk::kCaution : Risk::kSafe;
 	Dot(worst);
 	if (items.empty()) {
-		Wrapped(theme::Good(), "Save check: no problems found.");
+		Wrapped(theme::Good(), "存档检查：没有发现问题。");
 	} else {
 		ImGui::PushStyleColor(ImGuiCol_Text, RiskColor(worst));
-		ImGui::TextUnformatted(Fmt("Save check: %zu thing(s) to look at%s", items.size(),
-								   red ? Fmt(" (%zu risky)", red).c_str() : yellow ? Fmt(" (%zu to read first)", yellow).c_str() : "")
+		ImGui::TextUnformatted(Fmt("存档检查：%zu 处需要看一下%s", items.size(),
+								   red ? Fmt("（%zu 处危险）", red).c_str() : yellow ? Fmt("（%zu 处要先读原因）", yellow).c_str() : "")
 								   .c_str());
 		ImGui::PopStyleColor();
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Open save check")) {
+	if (ImGui::Button("打开存档检查")) {
 		_showCheck = true;
-		ImGui::SetWindowFocus("Save check");
+		ImGui::SetWindowFocus("存档检查");
 	}
 }

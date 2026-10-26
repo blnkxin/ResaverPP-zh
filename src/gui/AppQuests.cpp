@@ -380,12 +380,12 @@ void App::startLiveRefresh()
 {
 	_live.request({ "REFRESH", liveNotifyMode() }, [this](const LiveLink::Reply& r) {
 		if (!LiveLink::Ok(r)) {
-			_status = "The game could not refresh the journal: " + LiveLink::Error(r);
+			_status = "游戏没能刷新任务日志：" + LiveLink::Error(r);
 			return;
 		}
 		const auto n = std::strtoull(LiveLink::Field(r, 0).c_str(), nullptr, 10);
 		if (n == 0) {
-			_status = "Nothing to refresh: no running quest shows an objective.";
+			_status = "没有可刷新的：没有进行中的任务显示目标。";
 			return;
 		}
 		_liveRefresh = LiveRefresh{ true, 0, n, 0 };
@@ -416,7 +416,6 @@ void App::drawRefreshJournal(bool a_compact)
 	ImGui::BeginDisabled(!can || _liveRefresh.running);
 	if (ImGui::Button("在游戏中刷新任务日志")) {
 		startLiveRefresh();
-	}
 	}
 	ImGui::EndDisabled();
 	if (!can) {

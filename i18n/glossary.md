@@ -77,6 +77,26 @@
 | watching folder | 监视存档文件夹 | |
 | scanning | 正在扫描 | |
 | bytes | 字节 | |
+| Save check | 存档检查 | v19.7 新增的窗口；菜单栏入口「存档检查（危险 / 需先读 / 正常）」 |
+| safe / caution / risky / info | 安全 / 谨慎 / 危险 / 提示 | 存档检查的风险等级，按钮与圆点同色 |
+| finding / what can be done | 结论 / 可做的处理 | 存档检查里每项都写「是什么意思」和「怎么处理」 |
+| Transplant | 移植 | 坏档 → 好档，补进度用 |
+| bad save / good save | 坏档 / 好档 | 坏档读不出来，好档是之前能用的存档 |
+| snapshot | 快照 | ReSaverHelper 写出的角色记录文件；`.txt` |
+| bring over | 带过去 | 「带不过去」= cannot be brought over |
+| background quest | 后台任务 | 辐射任务、场景、模组初始化，日志里看不到 |
+| radiant quest | 辐射任务 | |
+| quest line / quest-line order | 任务链 / 任务链顺序 | |
+| perk / perk point | 专长 / 专长点 | |
+| shout / word of power | 龙吼 / 力量之语 | 龙吼分三段「力量之语」，学会且解锁 |
+| attribute | 属性 | 生命 / 魔法 / 耐力 |
+| carry weight / dragon souls | 负重 / 龙魂 | |
+| follower | 随从 | 不是「同伴」；「带回来」= bring back |
+| faction / rank | 派系 / 阶位 | |
+| look / preset (RaceMenu) | 外观 / 预设 | 「你在坏档里的外观（脸、头发、身体、覆盖层）」 |
+| tempering | 强化 | 磨刀石/工作台强化 |
+| poisoned | 已涂毒 | |
+| quest item | 任务物品 | |
 
 标点：中文句子用全角标点（，。：；！？（）），数字与英文术语两侧不加空格（如“3 个脚本”可写“3 个脚本”，数字与量词之间留半角空格风格统一即可）。
 长度：按钮/菜单/列标题尽量 2–6 个字；提示句可完整。

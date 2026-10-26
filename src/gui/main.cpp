@@ -39,7 +39,7 @@ namespace
 	// A window that opens and closes at once says nothing: this file says how far the start got, what
 	// OpenGL the PC has, and where it crashed. Overwritten at every start.
 	std::filesystem::path g_logPath;
-	std::string           g_step = "starting";
+	std::string           g_step = "启动";
 
 	void Log(const std::string& a_line)
 	{
@@ -55,7 +55,7 @@ namespace
 	void Step(const std::string& a_step)
 	{
 		g_step = a_step;
-		Log("step: " + a_step);
+		Log("步骤：" + a_step);
 	}
 
 	void OpenLog()
@@ -81,18 +81,18 @@ namespace
 		if (auto fn = reinterpret_cast<RtlGetVersionFn>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion"))) {
 			fn(&vi);
 		}
-		Log(std::string("ReSaver++ ") + RESAVERPP_VERSION + " starting; Windows " + std::to_string(vi.dwMajorVersion) + "." + std::to_string(vi.dwMinorVersion) +
-			" build " + std::to_string(vi.dwBuildNumber) + "; exe " + platform::ToUtf8(std::filesystem::path(exe)));
+		Log(std::string("ReSaver++ ") + RESAVERPP_VERSION + " 启动；Windows " + std::to_string(vi.dwMajorVersion) + "." + std::to_string(vi.dwMinorVersion) +
+			" 内部版本 " + std::to_string(vi.dwBuildNumber) + "；exe " + platform::ToUtf8(std::filesystem::path(exe)));
 #endif
 	}
 
 #ifdef _WIN32
 	void Fatal(const std::string& a_text)
 	{
-		Log("FATAL: " + a_text);
-		const auto msg = a_text + "\n\nDetails are in " + (g_logPath.empty() ? std::string("(no log could be written)") : platform::ToUtf8(g_logPath)) +
-						 ".\nPlease send that file with your report.";
-		MessageBoxW(nullptr, std::filesystem::path(platform::FromUtf8(msg)).wstring().c_str(), L"ReSaver++ could not start", MB_OK | MB_ICONERROR);
+		Log("致命错误：" + a_text);
+		const auto msg = a_text + "\n\n详细信息在 " + (g_logPath.empty() ? std::string("（日志没能写出）") : platform::ToUtf8(g_logPath)) +
+						 "。\n请把那个文件连同反馈一起发给我们。";
+		MessageBoxW(nullptr, std::filesystem::path(platform::FromUtf8(msg)).wstring().c_str(), L"ReSaver++ 无法启动", MB_OK | MB_ICONERROR);
 	}
 
 	LONG WINAPI OnCrash(EXCEPTION_POINTERS* a_ex)
@@ -110,7 +110,7 @@ namespace
 		}
 		char code[16];
 		std::snprintf(code, sizeof(code), "%08lX", rec ? rec->ExceptionCode : 0ul);
-		Fatal("ReSaver++ crashed while " + g_step + " (exception " + code + " in " + where + ").");
+		Fatal("ReSaver++ 崩溃了（当时步骤：" + g_step + "；异常 " + code + "，位置 " + where + "）。");
 		return EXCEPTION_EXECUTE_HANDLER;
 	}
 #endif
@@ -299,9 +299,9 @@ int RunApp(int argc, char** argv)
 	static std::string glfwError;
 	glfwSetErrorCallback([](int a_code, const char* a_text) {
 		glfwError = std::to_string(a_code) + ": " + (a_text ? a_text : "");
-		Log("GLFW error " + glfwError);
+		Log("GLFW 错误 " + glfwError);
 	});
-	Step("starting the window system");
+	Step("启动窗口系统");
 	if (!glfwInit()) {
 		std::fputs("初始化 GLFW 失败\n", stderr);
 #ifdef _WIN32
@@ -309,7 +309,7 @@ int RunApp(int argc, char** argv)
 #endif
 		return 1;
 	}
-	Step("creating the window (OpenGL 3.0)");
+	Step("创建窗口（OpenGL 3.0）");
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 	GLFWwindow* window = glfwCreateWindow(1600, 950, "ReSaver++ 中文版", nullptr, nullptr);
@@ -340,7 +340,7 @@ int RunApp(int argc, char** argv)
 	float xs = 1, ys = 1;
 	glfwGetWindowContentScale(window, &xs, &ys);
 
-	Step("loading fonts and drawing set-up");
+	Step("加载字体与绘制环境");
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGui::GetIO().IniFilename = nullptr;
@@ -352,7 +352,7 @@ int RunApp(int argc, char** argv)
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 130");
 
-	Step("reading the settings and starting ReSaver++");
+	Step("读取设置并启动 ReSaver++");
 	App app;
 	g_app = &app;
 	app.monoFont = g_mono;
@@ -373,13 +373,13 @@ int RunApp(int argc, char** argv)
 	};
 
 	if (argc > 1) {
-		Step("opening " + std::string(argv[1]));
+		Step("打开 " + std::string(argv[1]));
 		app.openAny(platform::FromUtf8(argv[1]));
 	} else if (!std::getenv("RESAVERPP_SCREENSHOT")) {
-		Step("opening the newest save");
+		Step("打开最新的存档");
 		app.openNewestAtStart();
 	}
-	Step("drawing the first frames");
+	Step("绘制最初的几帧");
 	int drawn = 0;
 	if (const char* t = std::getenv("RESAVERPP_TEST_CAT")) {
 		app.testSelect(std::atoi(t), std::getenv("RESAVERPP_TEST_FILTER"), std::getenv("RESAVERPP_TEST_ANALYSIS") != nullptr);
@@ -431,24 +431,24 @@ int RunApp(int argc, char** argv)
 			} catch (const std::exception& e) {
 				failed = e.what();
 			} catch (...) {
-				failed = "unknown error";
+				failed = "未知错误";
 			}
 			if (!failed.empty()) {
 				ImGui::ErrorRecoveryTryToRecoverState(&state);
 				static std::string last;
 				if (failed != last) {  // once per different error, not every frame
 					last = failed;
-					Log("ERROR while " + g_step + ": " + failed);
-					app.reportError("Something went wrong (ReSaver++ keeps running): " + failed + "\n\nPlease report it with ReSaverPP-startup.log.");
+					Log("错误（步骤：" + g_step + "）：" + failed);
+					app.reportError("出问题了（ReSaver++ 仍在运行）：" + failed + "\n\n请把 ReSaverPP-startup.log 一起反馈。");
 				}
 				// the app's own error box may be past the point that failed: say it here too
 				const ImGuiViewport* vp = ImGui::GetMainViewport();
 				ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + 60), ImGuiCond_Always, ImVec2(0.5f, 0));
 				ImGui::SetNextWindowSize(ImVec2(std::min(760.0f, vp->WorkSize.x - 40), 0));
-				ImGui::Begin("ReSaver++ hit an error", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
-				ImGui::TextWrapped("While %s: %s", g_step.c_str(), failed.c_str());
+				ImGui::Begin("ReSaver++ 出错了", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
+				ImGui::TextWrapped("步骤“%s”：%s", g_step.c_str(), failed.c_str());
 				ImGui::Spacing();
-				ImGui::TextWrapped("Please report this on the mod page with the file ReSaverPP-startup.log (next to ReSaverPP.exe, or in %%TEMP%%).");
+				ImGui::TextWrapped("请在模组页面反馈，并附上 ReSaverPP-startup.log（在 ReSaverPP.exe 旁边，或在 %TEMP% 里）。");
 				ImGui::End();
 			}
 		}
@@ -477,7 +477,7 @@ int RunApp(int argc, char** argv)
 		}
 		glfwSwapBuffers(window);
 		if (++drawn == 60) {
-			Step("running (60 frames drawn)");
+			Step("运行中（已绘制 60 帧）");
 		}
 
 		// Frame cap of our own: some drivers ignore the swap interval (hybrid-GPU laptops, vsync forced off
@@ -507,7 +507,7 @@ int RunApp(int argc, char** argv)
 	ImGui::DestroyContext();
 	glfwDestroyWindow(window);
 	glfwTerminate();
-	Step("closed normally");
+	Step("正常退出");
 	return 0;
 }
 
@@ -528,9 +528,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 	try {
 		return RunApp(static_cast<int>(argv.size()), argv.data());
 	} catch (const std::exception& e) {
-		Fatal("ReSaver++ stopped while " + g_step + ": " + e.what());
+		Fatal("ReSaver++ 停止了（步骤：" + g_step + "）：" + e.what());
 	} catch (...) {
-		Fatal("ReSaver++ stopped while " + g_step + " (unknown error).");
+		Fatal("ReSaver++ 停止了（步骤：" + g_step + "；未知错误）。");
 	}
 	return 1;
 }

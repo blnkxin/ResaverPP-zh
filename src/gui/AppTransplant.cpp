@@ -67,7 +67,7 @@ namespace
 	std::string Summary(const tp::Snapshot& s)
 	{
 		if (!s.valid) {
-			return s.error.empty() ? "not chosen yet" : s.error;
+			return s.error.empty() ? "尚未选择" : s.error;
 		}
 		std::size_t items = 0, done = 0;
 		for (const auto& i : s.items) {
@@ -76,9 +76,9 @@ namespace
 		for (const auto& [k, q] : s.quests) {
 			done += q.completed ? 1 : 0;
 		}
-		return Fmt("%s%s%s: %zu quests completed, %zu items%s", s.player.empty() ? "" : (s.player + " ").c_str(), s.level > 0 ? Fmt("level %d", s.level).c_str() : "",
-			s.fromFile ? "  (read from the save file)" : "  (from the game)", done, items,
-			s.fromFile ? "" : Fmt(", %zu perks, %zu spells", s.perks.size(), s.spells.size()).c_str());
+		return Fmt("%s%s%s：%zu 个任务已完成，%zu 件物品%s", s.player.empty() ? "" : (s.player + " ").c_str(), s.level > 0 ? Fmt("等级 %d", s.level).c_str() : "",
+			s.fromFile ? "（从存档文件读出）" : "（来自游戏）", done, items,
+			s.fromFile ? "" : Fmt("，%zu 个专长、%zu 个法术", s.perks.size(), s.spells.size()).c_str());
 	}
 
 	// a moving dashed frame around the last item: "do this next"
@@ -143,8 +143,8 @@ namespace
 			return v;
 		};
 		if (s.level > 0) {
-			ImGui::Text("Level %d%s%s", s.level, s.perkPoints > 0 ? Fmt(",  %d perk point(s) to spend", s.perkPoints).c_str() : "",
-				s.look.empty() ? "" : ",  look saved (RaceMenu)");
+			ImGui::Text("等级 %d%s%s", s.level, s.perkPoints > 0 ? Fmt("，%d 点未用的专长点", s.perkPoints).c_str() : "",
+				s.look.empty() ? "" : "，外观已保存（RaceMenu）");
 		}
 		std::vector<std::string> skills;
 		for (int i = 0; i < 18; ++i) {
@@ -152,13 +152,13 @@ namespace
 				skills.push_back(Fmt("%s %.0f", tp::SkillName(i), s.skills[i].level));
 			}
 		}
-		list("Skills", skills);
-		list("Perks", names(s.perks));
-		list("Spells and powers", names(s.spells));
-		list("Shouts", names(s.shouts));
-		list("Words of power", names(s.words));
-		list("Map locations", names(s.markers));
-		list("Factions", names(s.factions));
+		list("技能", skills);
+		list("专长", names(s.perks));
+		list("法术与能力", names(s.spells));
+		list("龙吼", names(s.shouts));
+		list("力量之语", names(s.words));
+		list("地图地点", names(s.markers));
+		list("派系", names(s.factions));
 		std::vector<std::string> active, completed;
 		for (const auto& [k, q] : s.quests) {
 			const bool journal = s.journalKnown ? q.inJournal : q.known ? q.shown() : q.completed;
@@ -170,16 +170,16 @@ namespace
 		}
 		std::sort(active.begin(), active.end());
 		std::sort(completed.begin(), completed.end());
-		list("Quests in progress (journal)", active);
-		list("Quests completed (journal)", completed);
+		list("进行中的任务（日志）", active);
+		list("已完成的任务（日志）", completed);
 		std::map<std::string, std::vector<std::string>> kinds;
 		for (const auto& it : s.items) {
-			const auto kind = it.record.size() > 12 && !it.record[12].empty() ? it.record[12] : std::string("Items");
+			const auto kind = it.record.size() > 12 && !it.record[12].empty() ? it.record[12] : std::string("物品");
 			kinds[kind].push_back(it.count > 1 ? Fmt("%s x%d", it.name.c_str(), it.count) : it.name);
 		}
 		for (auto& [k, v] : kinds) {
 			std::sort(v.begin(), v.end());
-			list(("Inventory: " + k).c_str(), v);
+			list(("物品栏：" + k).c_str(), v);
 		}
 		std::vector<std::string> made, worn;
 		for (const auto& p : s.potions) {
@@ -188,13 +188,13 @@ namespace
 		for (const auto& e : s.equips) {
 			worn.push_back(e.name);
 		}
-		list("Potions and poisons you made", made);
-		list("Worn and held", worn);
+		list("你制作的药水与毒药", made);
+		list("穿戴与手持", worn);
 		std::vector<std::string> followers;
 		for (const auto& f : s.followers) {
 			followers.push_back(f.name);
 		}
-		list("Followers", followers);
+		list("随从", followers);
 	}
 }
 
@@ -202,13 +202,13 @@ namespace
 
 void App::transplantSnapshot(bool a_bad)
 {
-	_status = "Asking the game for a snapshot of the loaded save: switch to Skyrim for a moment (it pauses in the background)...";
+	_status = "正在向游戏索取已读档的快照：请切到天际一会儿（它在后台会暂停）……";
 	_tpWaiting = true;
 	_tpWaitStart = ImGui::GetTime();
 	_live.request({ "SNAPSHOT" }, [this, a_bad](const LiveLink::Reply& r) {
 		_tpWaiting = false;
 		if (!LiveLink::Ok(r)) {
-			_status = "The game could not take a snapshot: " + LiveLink::Error(r);
+			_status = "游戏没能生成快照：" + LiveLink::Error(r);
 			return;
 		}
 		auto s = tp::ReadSnapshot(platform::FromUtf8(LiveLink::Field(r, 0)));
@@ -216,7 +216,7 @@ void App::transplantSnapshot(bool a_bad)
 			_status = s.error;
 			return;
 		}
-		_status = Fmt("Snapshot of %s taken (%s records).", s.player.c_str(), LiveLink::Field(r, 1).c_str());
+		_status = Fmt("已生成 %s 的快照（%s 条记录）。", s.player.c_str(), LiveLink::Field(r, 1).c_str());
 		(a_bad ? _tpBad : _tpGood) = std::move(s);
 		_tpDirty = true;
 	});
@@ -233,9 +233,9 @@ void App::transplantFromFile(const std::filesystem::path& a_path)
 			transplantNames(_tpBad, *save);
 		}
 		_tpDirty = true;
-		_status = _tpBad.valid ? "Read " + platform::ToUtf8(a_path.filename()) : _tpBad.error;
+		_status = _tpBad.valid ? "已读取 " + platform::ToUtf8(a_path.filename()) : _tpBad.error;
 	} catch (const std::exception& e) {
-		_error = "Could not read " + platform::ToUtf8(a_path.filename()) + ":\n\n" + e.what();
+		_error = "无法读取 " + platform::ToUtf8(a_path.filename()) + ":\n\n" + e.what();
 	}
 }
 
@@ -305,9 +305,9 @@ void App::transplantStep()
 		for (const auto& r : _tpResults) {
 			failed += r.ok ? 0 : 1;
 		}
-		_status = Fmt("Transplant done: %zu of %zu brought over%s. Quests may keep loading for a couple of minutes: save in the game when "
-					  "their messages stop.",
-			_tpRun.size() - failed, _tpRun.size(), failed ? Fmt(", %zu could not be (see the Transplant page)", failed).c_str() : "");
+		_status = Fmt("移植完成：%zu / %zu 已带过去%s。任务可能还要继续加载一两分钟：等它们的"
+					  "提示停下后再在游戏里存档。",
+			_tpRun.size() - failed, _tpRun.size(), failed ? Fmt("，%zu 个没能带过去（见“移植”页）", failed).c_str() : "");
 		bool quests = false;
 		for (auto i : _tpRun) {
 			quests = quests || (i < _tpChanges.size() && _tpChanges[i].quest);
@@ -317,7 +317,7 @@ void App::transplantStep()
 			_live.request({ "APPLY", "controls" }, [](const LiveLink::Reply&) {});
 		}
 		_live.request({ "NOTIFY", liveNotifyMode(),
-						  Fmt("ReSaver++: transplant done (%zu of %zu). Quests may still be loading: wait until their messages stop, then save.",
+						  Fmt("ReSaver++：移植完成（%zu / %zu）。任务可能还在加载：等提示停下后再存档。",
 							  _tpRun.size() - failed, _tpRun.size()) },
 			[](const LiveLink::Reply&) {});
 		_tpRunning = false;
@@ -333,7 +333,7 @@ void App::transplantStep()
 		return;
 	}
 	const auto& ch = _tpChanges[idx];
-	_status = Fmt("Transplanting %zu of %zu: %s", _tpPos + 1, _tpRun.size(), ch.label.c_str());
+	_status = Fmt("正在移植 %zu / %zu：%s", _tpPos + 1, _tpRun.size(), ch.label.c_str());
 	auto done = [this, idx](bool a_ok, const std::string& a_why) {
 		_tpResults.push_back({ idx, a_ok, a_why });
 		++_tpPos;
@@ -349,7 +349,7 @@ void App::transplantStep()
 			} else if (LiveLink::Field(r, 0) == "0") {
 				done(false, LiveLink::Field(r, 1));
 			} else {
-				done(true, LiveLink::Field(r, 0) == "?" ? "the game is still doing it" : "");
+				done(true, LiveLink::Field(r, 0) == "?" ? "游戏还在处理" : "");
 			}
 		});
 		return;
@@ -371,7 +371,7 @@ void App::transplantStep()
         }
         _live.request({ "APPLY", "questobj", q->plugin, Fmt("%06X", q->local), "", q->objectives }, [done, a_ok, a_why](const LiveLink::Reply& r) {
             const bool ok = LiveLink::Ok(r) && LiveLink::Field(r, 0) != "0";
-            done(a_ok || ok, a_why + (a_why.empty() ? "" : ", ") + (ok ? "objectives shown in the journal" : "objectives not shown: " + LiveLink::Field(r, 1)));
+            done(a_ok || ok, a_why + (a_why.empty() ? "" : ", ") + (ok ? "目标已在日志里显示" : "目标未显示：" + LiveLink::Field(r, 1)));
         });
 	};
 	auto        run = [this, q, complete, markRefused, journalOnly, before, shown, done](std::uint32_t a_id) {
@@ -380,7 +380,7 @@ void App::transplantStep()
         auto      mark = [this, a_id, shown](const std::string& a_before) {
             _live.request({ "COMPLETE", Fmt("%08X", a_id), "none", "" }, [shown, a_before](const LiveLink::Reply& r) {
                 const bool ok = LiveLink::Ok(r) && LiveLink::Field(r, 0) != "0";
-                shown(ok, ok ? a_before + ", marked as done" : a_before + ", and it could not be marked as done either");
+                shown(ok, ok ? a_before + "，已标记为完成" : a_before + "，而且也没能标记为完成");
             });
         };
         auto      stageStep = [this, a_id, stage, complete, markRefused, journalOnly, mark, shown, done]() {
@@ -390,9 +390,9 @@ void App::transplantStep()
             }
             if (stage < 0) {
                 if (complete || markRefused) {
-                    mark("completion stage not known (plugins not read)");
+                    mark("完成阶段未知（未读取插件）");
                 } else {
-                    shown(false, "no stage to set");
+                    shown(false, "没有可设置的阶段");
                 }
                 return;
             }
@@ -404,13 +404,13 @@ void App::transplantStep()
                 const auto f = LiveLink::Field(r, 0);
                 if (f == "0") {
                     if (markRefused) {
-                        mark(Fmt("refused stage %d", stage));
+                        mark(Fmt("游戏拒绝了阶段 %d", stage));
                     } else {
-                        shown(false, Fmt("refused stage %d", stage));
+                        shown(false, Fmt("游戏拒绝了阶段 %d", stage));
                     }
                     return;
                 }
-                shown(true, f == "?" ? Fmt("stage %d set; the game is still running its script", stage) : Fmt("stage %d set", stage));
+                shown(true, f == "?" ? Fmt("阶段 %d 已设置；游戏还在运行它的脚本", stage) : Fmt("阶段 %d 已设置", stage));
             });
         };
         if (!before) {
@@ -440,7 +440,7 @@ void App::transplantCheckJournal()
 	_live.request({ "SNAPSHOT" }, [this](const LiveLink::Reply& r) {
 		_tpChecking = false;
 		if (!LiveLink::Ok(r)) {
-			_status = "Could not check the journal: " + LiveLink::Error(r);
+			_status = "无法核对任务日志：" + LiveLink::Error(r);
 			return;
 		}
 		transplantMissing(tp::ReadSnapshot(platform::FromUtf8(LiveLink::Field(r, 0))));
@@ -450,14 +450,14 @@ void App::transplantCheckJournal()
 void App::transplantMissing(const ess::transplant::Snapshot& now)
 {
 		if (!now.valid || !now.journalKnown) {
-			_status = "Could not check the journal (the snapshot has no journal list: ReSaverHelper 9 is needed).";
+			_status = "无法核对任务日志（快照里没有日志列表：需要 ReSaverHelper 9）。";
 			return;
 		}
 		// what the run did with each quest
 		std::map<const tp::Quest*, std::string> why;
 		for (std::size_t i = 0; i < _tpChanges.size(); ++i) {
 			if (const auto* q = _tpChanges[i].quest) {
-				why[q] = !_tpChanges[i].available ? "its mod is not in this game" : !_tpChanges[i].tick ? "it was not ticked" : "";
+				why[q] = !_tpChanges[i].available ? "它的模组不在这个游戏里" : !_tpChanges[i].tick ? "没有勾选它" : "";
 			}
 		}
 		for (const auto& res : _tpResults) {
@@ -481,16 +481,16 @@ void App::transplantMissing(const ess::transplant::Snapshot& now)
 			m.quest = &q;
 			m.completed = q.completed;
 			auto w = why.find(&q);
-			m.why = w == why.end() ? "it was not in the list (nothing to bring: the good save had it as far)"
+			m.why = w == why.end() ? "它不在列表里（没什么可带的：好档已经进行到这里）"
 					: !w->second.empty() ? w->second
-					: q.completed ? "the game would not complete it here"
-								  : "the game would not start it here: it starts from something in the game (a note, a person, a place)";
+					: q.completed ? "游戏在这里不肯完成它"
+								  : "游戏在这里不肯启动它：它是由游戏里的某样东西启动的（一张纸条、一个人、一个地点）";
 			_tpMissing.push_back(std::move(m));
 		}
 		std::sort(_tpMissing.begin(), _tpMissing.end(), [](const TpMissing& a, const TpMissing& b) { return a.name < b.name; });
 		_tpChecked = true;
-		_status = _tpMissing.empty() ? "Every quest of the bad save's journal is in the game's journal now."
-									 : Fmt("%zu quest(s) of the bad save's journal are not in the game's journal: see the list.", _tpMissing.size());
+		_status = _tpMissing.empty() ? "坏档日志里的每个任务现在都在游戏的日志里了。"
+									 : Fmt("坏档日志里有 %zu 个任务不在游戏的日志里：见列表。", _tpMissing.size());
 }
 
 // quests in quest-line order: a quest that leads into another one (its journal names the next quest, or
@@ -561,20 +561,20 @@ std::string App::transplantGroup(const tp::Change& a_ch) const
 			return at(12);  // written by ReSaverHelper 6
 		}
 		if (Lower(at(1)) == "skyrim.esm" && std::strtoul(at(2).c_str(), nullptr, 16) == 0xF) {
-			return "Gold";
+			return "金币";
 		}
 		if (_db) {
 			if (const auto* f = _db->find(static_cast<std::uint32_t>(std::strtoul(at(3).c_str(), nullptr, 16)))) {
 				const auto t = _db->type(*f);
-				return t == "WEAP" ? "Weapons" : t == "ARMO" ? "Armor and clothing" : t == "AMMO" ? "Arrows and bolts" : t == "BOOK" ? "Books and spell tomes"
-					   : t == "ALCH" ? "Potions and food" : t == "INGR" ? "Ingredients" : t == "SLGM" ? "Soul gems" : t == "KEYM" ? "Keys"
-					   : t == "SCRL" ? "Scrolls" : t == "MISC" ? "Miscellaneous" : t == "LIGH" ? "Torches and lights" : "Other";
+				return t == "WEAP" ? "武器" : t == "ARMO" ? "护甲与衣物" : t == "AMMO" ? "箭与弩矢" : t == "BOOK" ? "书与法术书"
+					   : t == "ALCH" ? "药水与食物" : t == "INGR" ? "材料" : t == "SLGM" ? "灵魂石" : t == "KEYM" ? "钥匙"
+					   : t == "SCRL" ? "卷轴" : t == "MISC" ? "杂项" : t == "LIGH" ? "火把与灯具" : "其他";
 			}
 		}
-		return "Other";
+		return "其他";
 	}
 	if (a_ch.cat == tp::Category::kMade) {
-		return at(0) == "potion" ? (at(3) == "1" ? "Poisons" : "Potions") : "Enchanted gear";
+		return at(0) == "potion" ? (at(3) == "1" ? "毒药" : "药水") : "附魔装备";
 	}
 	if (a_ch.cat == tp::Category::kCharacter) {
 		return {};
@@ -583,7 +583,7 @@ std::string App::transplantGroup(const tp::Change& a_ch) const
 		return {};
 	}
 	if (a_ch.quest) {
-		return a_ch.background ? "~ Background quests (not in the journal): normally leave these unticked" : a_ch.quest->plugin;
+		return a_ch.background ? "~ 后台任务（不在日志里）：通常不要勾选" : a_ch.quest->plugin;
 	}
 	return at(1);
 }
@@ -597,13 +597,13 @@ void App::maximizeControl(const char* a_id)
 	const float title = ImGui::GetFrameHeight();
 	bool        toggle = ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && ImGui::IsMouseHoveringRect(wp, ImVec2(wp.x + ws.x, wp.y + title), false) &&
 				  ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
-	const char* label = maxed ? "Restore size" : "Maximize";
+	const char* label = maxed ? "还原大小" : "最大化";
 	const float w = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2;
 	const auto  back = ImGui::GetCursorPos();
 	ImGui::SetCursorPos(ImVec2(ImGui::GetWindowContentRegionMax().x - w, back.y));
 	toggle |= ImGui::SmallButton(label);
 	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("%s (or double-click the title bar)", maxed ? "Back to the size it had" : "Fill the whole ReSaver++ window");
+		ImGui::SetTooltip("%s（或双击标题栏）", maxed ? "回到原来的大小" : "填满整个 ReSaver++ 窗口");
 	}
 	ImGui::SetCursorPos(back);
 	if (toggle) {
@@ -635,7 +635,7 @@ void App::prepareWindow(const char* a_id, ImVec2 a_defaultFraction)
 void App::drawTransplant()
 {
 	prepareWindow("Transplant", ImVec2(0.9f, 0.9f));
-	if (!ImGui::Begin("Transplant", &_showTransplant, ImGuiWindowFlags_NoCollapse)) {
+	if (!ImGui::Begin("移植", &_showTransplant, ImGuiWindowFlags_NoCollapse)) {
 		ImGui::End();
 		return;
 	}
@@ -646,72 +646,72 @@ void App::drawTransplant()
 	const bool busy = _tpRunning || _tpWaiting;
 
 	ImGui::PushTextWrapPos(ImGui::GetContentRegionMax().x - 140);
-	ImGui::TextWrapped("Bring your character's progress from a bad save into a good one from before. ReSaver++ lists what the bad save has and "
-					   "the good one does not; you tick what to bring; the game itself puts it into the good save the normal way, so the result "
-					   "is a clean save written by the game. Needs Skyrim running with ReSaverHelper.dll 5 or newer.");
+	ImGui::TextWrapped("把角色进度从坏档移植到之前的好档里。ReSaver++ 会列出坏档有、"
+					   "好档没有的内容；你来勾选要带什么；由游戏自己按正常方式放进好档，所以结果"
+					   "是一个由游戏写出的干净存档。需要天际正在运行，并装有 ReSaverHelper.dll 5 或更新版本。");
 	ImGui::PopTextWrapPos();
 	if (!helperOk) {
-		Wrapped(theme::Caution(), info.connected ? Fmt("ReSaverHelper %s is running: version 5 or newer is needed (Optional files on the mod page).", info.helperVersion.c_str())
-												 : "ReSaverHelper is not connected: start Skyrim with ReSaverHelper.dll (version 5 or newer) installed.");
+		Wrapped(theme::Caution(), info.connected ? Fmt("ReSaverHelper %s 正在运行：需要 5 或更新版本（模组页的 Optional files）。", info.helperVersion.c_str())
+												 : "ReSaverHelper 没有连上：请安装 ReSaverHelper.dll（5 或更新版本）后启动天际。");
 	}
 	if (helperOk && helperAtLeast(9) && !helperAtLeast(10)) {
-		Wrapped(theme::Caution(), Fmt("ReSaverHelper %s is running: followers need version 10. Install the newest ReSaverHelper and take new snapshots.",
+		Wrapped(theme::Caution(), Fmt("ReSaverHelper %s 正在运行：随从需要 10 版。请安装最新的 ReSaverHelper 并重新生成快照。",
 									  info.helperVersion.c_str()));
 	}
 	if (helperOk && !helperAtLeast(9)) {
-		Wrapped(theme::Caution(), Fmt("ReSaverHelper %s is running: your look and worn gear need version 7, and quests brought into the journal need "
-									  "version 9. Install the newest ReSaverHelper and take new snapshots.",
+		Wrapped(theme::Caution(), Fmt("ReSaverHelper %s 正在运行：外观和穿戴装备需要 7 版，把任务带进日志需要"
+									  "9 版。请安装最新的 ReSaverHelper 并重新生成快照。",
 									  info.helperVersion.c_str()));
 	}
 	if (_tpWaiting && ImGui::GetTime() - _tpWaitStart > 75.0) {
 		_tpWaiting = false;
-		_status = "No answer from the game for the snapshot. Was Skyrim the active window for a few seconds? Try again; if it still does not "
-				  "answer, restart the game and send ReSaverHelper.log (Documents\\My Games\\Skyrim Special Edition\\SKSE).";
+		_status = "游戏没有回应快照请求。天际有没有在前台保持几秒？再试一次；如果仍然不"
+				  "回应，请重启游戏，并把 ReSaverHelper.log 发出来（Documents\\My Games\\Skyrim Special Edition\\SKSE）。";
 	}
 	if (_tpWaiting) {
-		Wrapped(theme::Caution(), Fmt("Waiting for the game (%.0f s): switch to Skyrim for a few seconds (it pauses while it is not the active window), "
-									  "then come back.", ImGui::GetTime() - _tpWaitStart));
+		Wrapped(theme::Caution(), Fmt("正在等游戏回应（%.0f 秒）：请切到天际几秒（它不在前台时会暂停），"
+									  "然后回来。", ImGui::GetTime() - _tpWaitStart));
 	}
 
 	// steps 1 and 2 side by side
 	if (ImGui::BeginTable("steps", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame)) {
 		ImGui::TableNextColumn();
-		ImGui::SeparatorText("1. The bad save: take its progress");
+		ImGui::SeparatorText("1. 坏档：取出它的进度");
 		ImGui::TextWrapped("%s", Summary(_tpBad).c_str());
 		ImGui::BeginDisabled(!live || !helperOk || busy);
-		const bool badBtn = ImGui::Button("Snapshot the game (bad save loaded in the game)");
+		const bool badBtn = ImGui::Button("给游戏做快照（游戏里读的是坏档）");
 		if (!_tpBad.valid && !busy) {
 			Marquee();
 			ImGui::SameLine();
-			TextColored(IM_COL32(255, 196, 40, 255), "<- step 1: start here");
+			TextColored(IM_COL32(255, 196, 40, 255), "← 第 1 步：从这里开始");
 		}
 		if (badBtn) {
-			confirm("Snapshot the bad save", "Is the BAD save loaded in the game right now?\n\nReSaverHelper writes down everything about your character "
-											 "in the loaded game: level, skills, perks, spells, shouts, items, quests, map locations.\n\n"
-											 "Skyrim pauses while it is not the active window: after OK, switch to the game for a moment.",
+			confirm("给坏档做快照", "现在游戏里读的是坏档吗？\n\nReSaverHelper 会把已读档游戏里关于你角色的所有内容记下来："
+											 "等级、技能、专长、法术、龙吼、物品、任务、地图地点。\n\n"
+											 "天际不在前台时会暂停：点确定后，请切到游戏里待一会儿。",
 				[this] { transplantSnapshot(true); });
 		}
 		ImGui::EndDisabled();
 		ImGui::BeginDisabled(busy);
-		if (ImGui::Button("Bad save won't load? Read it from the save file...") && platform::HasNativeDialogs()) {
+		if (ImGui::Button("坏档读不出来？从存档文件读取…") && platform::HasNativeDialogs()) {
 			if (auto p = platform::OpenSaveDialog(savesFolder())) {
 				transplantFromFile(*p);
 			}
 		}
 		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("For a save the game cannot load at all. Without the game only part of it can be read:\n"
-							  "quests, items, spells and shouts, level. Not skills, perks, words of power, map locations or things you made.");
+			ImGui::SetTooltip("给游戏完全读不出来的存档用。没有游戏时只能读出其中一部分：\n"
+							  "任务、物品、法术和龙吼、等级。不含技能、专长、力量之语、地图地点和你制作的东西。");
 		}
 		if (_save) {
-			if (ImGui::SmallButton("Use the save open in ReSaver++")) {
+			if (ImGui::SmallButton("用 ReSaver++ 里打开的这个存档")) {
 				_tpBad = tp::FromSave(*_save, platform::ToUtf8(_path.filename()));
 				transplantNames(_tpBad, *_save);
 				_tpDirty = true;
 			}
 		}
 		ImGui::SameLine();
-		if (ImGui::SmallButton("Open a snapshot file...") && platform::HasNativeDialogs()) {
-			if (auto p = platform::OpenFileDialog({}, "txt", "ReSaverHelper snapshot (Documents\\My Games\\...\\SKSE\\ReSaverHelper)")) {
+		if (ImGui::SmallButton("打开快照文件…") && platform::HasNativeDialogs()) {
+			if (auto p = platform::OpenFileDialog({}, "txt", "ReSaverHelper 快照（Documents\\My Games\\...\\SKSE\\ReSaverHelper）")) {
 				transplantFromFile(*p);
 			}
 		}
@@ -721,27 +721,27 @@ void App::drawTransplant()
 			for (const auto& m : _tpBad.missingParts) {
 				parts += (parts.empty() ? "" : ", ") + m;
 			}
-			Wrapped(theme::Caution(), "Read from the file without the game: " + parts + " are not included.");
+			Wrapped(theme::Caution(), "没有游戏、只从文件读出：" + parts + " 不含在内。");
 		}
 
 		ImGui::TableNextColumn();
-		ImGui::SeparatorText("2. The good save: load it in the game, then snapshot it");
+		ImGui::SeparatorText("2. 好档：在游戏里读取它，然后做快照");
 		ImGui::TextWrapped("%s", Summary(_tpGood).c_str());
 		ImGui::BeginDisabled(!live || !helperOk || !_tpBad.valid || busy);
-		const bool goodBtn = ImGui::Button(_tpGood.valid ? "Snapshot the game again (good save loaded in the game)" : "Snapshot the game (good save loaded in the game)");
+		const bool goodBtn = ImGui::Button(_tpGood.valid ? "再给游戏做一次快照（游戏里读的是好档）" : "给游戏做快照（游戏里读的是好档）");
 		if (_tpBad.valid && !_tpGood.valid && !busy) {
 			Marquee();
 			ImGui::SameLine();
-			TextColored(IM_COL32(255, 196, 40, 255), "<- step 2: now this");
+			TextColored(IM_COL32(255, 196, 40, 255), "← 第 2 步：现在做这个");
 		}
 		if (goodBtn) {
-			confirm("Snapshot the good save", "Is the GOOD save loaded in the game right now? (Load it from the game's menu first, and make a backup save.)\n\n"
-											  "After OK, switch to the game for a moment: it pauses while it is not the active window.",
+			confirm("给好档做快照", "现在游戏里读的是好档吗？（先在游戏菜单里读取它，并做一个备份存档。）\n\n"
+											  "点确定后，请切到游戏里待一会儿：它不在前台时会暂停。",
 				[this] { transplantSnapshot(false); });
 		}
 		ImGui::EndDisabled();
 		if (_tpBad.valid && _tpGood.valid && !_tpBad.player.empty() && !_tpGood.player.empty() && _tpBad.player != _tpGood.player) {
-			Wrapped(theme::Bad(), "These are two different characters (" + _tpBad.player + " / " + _tpGood.player + ").");
+			Wrapped(theme::Bad(), "这是两个不同的角色（" + _tpBad.player + " / " + _tpGood.player + "）。");
 		}
 		ImGui::EndTable();
 	}
@@ -753,7 +753,7 @@ void App::drawTransplant()
 	}
 	if (!_tpBad.valid || !_tpGood.valid) {
 		if (_tpBad.valid) {
-			ImGui::SeparatorText("What the bad save has (this is what can be brought over)");
+			ImGui::SeparatorText("坏档有什么（这些就是能带过去的）");
 			ImGui::BeginChild("##tpbad", ImVec2(0, 0), ImGuiChildFlags_Borders);
 			SnapshotContents(_tpBad);
 			ImGui::EndChild();
@@ -763,33 +763,33 @@ void App::drawTransplant()
 	}
 
 	// step 3: what to bring, in folded groups
-	ImGui::SeparatorText(Fmt("3. What to bring over (%zu)", _tpChanges.size()).c_str());
+	ImGui::SeparatorText(Fmt("3. 要带过去的内容（%zu）", _tpChanges.size()).c_str());
 	Dot(theme::Good());
-	ImGui::TextUnformatted("Safe");
+	ImGui::TextUnformatted("安全");
 	ImGui::SameLine(0, 18);
 	Dot(theme::Caution());
-	ImGui::TextUnformatted("Caution (hover to read why)");
+	ImGui::TextUnformatted("谨慎（悬停看原因）");
 	ImGui::SameLine(0, 18);
 	Dot(theme::Bad());
-	ImGui::TextUnformatted("Cannot: its mod is not in the game");
+	ImGui::TextUnformatted("不能：它的模组不在这个游戏里");
 	ImGui::SameLine(0, 30);
 	int openAll = -1;
-	if (ImGui::SmallButton("Expand all")) {
+	if (ImGui::SmallButton("全部展开")) {
 		openAll = 1;
 	}
 	ImGui::SameLine();
-	if (ImGui::SmallButton("Collapse all")) {
+	if (ImGui::SmallButton("全部折叠")) {
 		openAll = 0;
 	}
 	ImGui::SameLine();
 	ImGui::BeginDisabled(_tpRunning);
-	if (ImGui::SmallButton("Tick everything")) {
+	if (ImGui::SmallButton("全选")) {
 		for (auto& c : _tpChanges) {
 			c.tick = c.available;
 		}
 	}
 	ImGui::SameLine();
-	if (ImGui::SmallButton("Untick everything")) {
+	if (ImGui::SmallButton("全不选")) {
 		for (auto& c : _tpChanges) {
 			c.tick = false;
 		}
@@ -797,7 +797,7 @@ void App::drawTransplant()
 	ImGui::EndDisabled();
 	ImGui::SameLine(0, 20);
 	ImGui::SetNextItemWidth(-1);
-	ImGui::InputTextWithHint("##tpfilter", "search (opens the groups that match)", _tpFilter, sizeof(_tpFilter));
+	ImGui::InputTextWithHint("##tpfilter", "搜索（展开匹配组）", _tpFilter, sizeof(_tpFilter));
 	const auto needle = Lower(_tpFilter);
 	if (!needle.empty()) {
 		openAll = 1;
@@ -826,19 +826,19 @@ void App::drawTransplant()
 		if (auto it = results.find(i); it != results.end()) {
 			ImGui::SameLine();
 			TextColored(it->second->ok ? theme::Good() : theme::Bad(),
-				it->second->ok ? (it->second->why.empty() ? "done" : "done: " + it->second->why) : "not done: " + it->second->why);
+				it->second->ok ? (it->second->why.empty() ? "完成" : "完成：" + it->second->why) : "未完成：" + it->second->why);
 		}
 		ImGui::PopID();
 	};
 	auto tickButtons = [&](const std::vector<std::size_t>& a_in) {
 		ImGui::BeginDisabled(_tpRunning);
-		if (ImGui::SmallButton("Tick all")) {
+		if (ImGui::SmallButton("全选")) {
 			for (auto i : a_in) {
 				_tpChanges[i].tick = _tpChanges[i].available;
 			}
 		}
 		ImGui::SameLine();
-		if (ImGui::SmallButton("Untick all")) {
+		if (ImGui::SmallButton("全不选")) {
 			for (auto i : a_in) {
 				_tpChanges[i].tick = false;
 			}
@@ -850,33 +850,33 @@ void App::drawTransplant()
 		for (auto i : a_in) {
 			t += _tpChanges[i].tick && _tpChanges[i].available ? 1 : 0;
 		}
-		return Fmt("%zu of %zu ticked", t, a_in.size());
+		return Fmt("已勾选 %zu / %zu", t, a_in.size());
 	};
 
 	ImGui::BeginChild("##tplist", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 2.4f), ImGuiChildFlags_Borders);
 	if (_tpChecking) {
-		Wrapped(theme::Caution(), "Checking the game's journal (switch to Skyrim for a moment if it takes long)...");
+		Wrapped(theme::Caution(), "正在核对游戏的任务日志（如果很久，请切到天际一会儿）……");
 	} else if (_tpChecked) {
 		if (_tpMissing.empty()) {
-			Wrapped(theme::Good(), "Every quest of the bad save's journal is in the game's journal now.");
+			Wrapped(theme::Good(), "坏档日志里的每个任务现在都在游戏的日志里了。");
 		} else {
 			ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(theme::Caution()));
 			ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
-			const bool open = ImGui::CollapsingHeader(Fmt("Quests that could not be brought over (%zu)###tpmissing", _tpMissing.size()).c_str());
+			const bool open = ImGui::CollapsingHeader(Fmt("没能带过去的任务（%zu）###tpmissing", _tpMissing.size()).c_str());
 			ImGui::PopStyleColor();
 			if (open) {
 				ImGui::Indent();
-				ImGui::TextWrapped("These were in the bad save's journal but are not in the game's journal now. Unfinished ones come back when "
-								   "you do what starts them in the game (read the note, talk to the person, go to the place). Completed ones "
-								   "can be marked as done here (like \"Mark refused quests as done\": no rewards, follow-up quests not started).");
+				ImGui::TextWrapped("这些在坏档的日志里，但现在的游戏日志里没有。未完成的，等你在游戏里"
+								   "做启动它们的事（读纸条、跟人说话、到那个地点）就会回来。已完成的"
+								   "可以在这里标记为完成（和“被拒绝的任务标记为完成”一样：没有奖励，后续任务不会启动）。");
 				std::string all;
 				for (std::size_t mi = 0; mi < _tpMissing.size(); ++mi) {
 					auto& m = _tpMissing[mi];
 					ImGui::PushID(static_cast<int>(mi));
 					if (m.completed && m.quest) {
 						ImGui::BeginDisabled(!_live.info().connected || _tpRunning || !m.done.empty());
-						if (ImGui::SmallButton("Mark as done")) {
-							m.done = "marking...";
+						if (ImGui::SmallButton("标记为完成")) {
+							m.done = "标记中…";
 							const auto* q = m.quest;
 							_live.request({ "RESOLVE", q->plugin, Fmt("%06X", q->local) }, [this, mi, q](const LiveLink::Reply& r) {
 								auto set = [this, mi](const std::string& a_done) {
@@ -885,16 +885,16 @@ void App::drawTransplant()
 									}
 								};
 								if (!LiveLink::Ok(r)) {
-									set("not done: " + LiveLink::Error(r));
+									set("未完成：" + LiveLink::Error(r));
 									return;
 								}
 								_live.request({ "COMPLETE", LiveLink::Field(r, 0), "none", "" }, [this, q, set](const LiveLink::Reply& c) {
 									const bool ok = LiveLink::Ok(c) && LiveLink::Field(c, 0) != "0";
 									if (!ok) {
-										set("the game would not mark it as done");
+										set("游戏不肯把它标记为完成");
 										return;
 									}
-									set("marked as done");
+									set("已标记为完成");
 									if (!q->objectives.empty() && helperAtLeast(9)) {  // and listed in the journal as it was
 										_live.request({ "APPLY", "questobj", q->plugin, Fmt("%06X", q->local), "", q->objectives }, [](const LiveLink::Reply&) {});
 									}
@@ -907,25 +907,25 @@ void App::drawTransplant()
 					Dot(m.completed ? theme::Caution() : theme::Bad());
 					ImGui::TextUnformatted(m.name.c_str());
 					ImGui::SameLine();
-					ImGui::TextDisabled("[%s]  %s  -  %s", m.edid.c_str(), m.completed ? "completed in the bad save" : "in progress in the bad save", m.why.c_str());
-					all += m.name + "  [" + m.edid + "]  (" + (m.completed ? "completed" : "in progress") + "): " + m.why + "\n";
+					ImGui::TextDisabled("[%s]  %s  -  %s", m.edid.c_str(), m.completed ? "在坏档中已完成" : "在坏档中进行中", m.why.c_str());
+					all += m.name + "  [" + m.edid + "]  (" + (m.completed ? "已完成" : "进行中") + "): " + m.why + "\n";
 					if (!m.done.empty()) {
 						ImGui::SameLine();
-						TextColored(m.done == "marked as done" ? theme::Good() : theme::Caution(), m.done);
+						TextColored(m.done == "已标记为完成" ? theme::Good() : theme::Caution(), m.done);
 					}
 					ImGui::PopID();
 				}
-				if (ImGui::SmallButton("Copy the list")) {
+				if (ImGui::SmallButton("复制列表")) {
 					ImGui::SetClipboardText(all.c_str());
 				}
 				ImGui::SameLine();
 				ImGui::BeginDisabled(!_live.info().connected || _tpRunning || _tpChecking);
-				if (ImGui::SmallButton("Check the journal again")) {
+				if (ImGui::SmallButton("再核对一次日志")) {
 					transplantCheckJournal();
 				}
 				ImGui::EndDisabled();
 				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::SetTooltip("Quests may keep loading for a minute or two after the transplant: check again after that.");
+					ImGui::SetTooltip("移植后任务可能还要加载一两分钟：过一会儿再核对。");
 				}
 				ImGui::Unindent();
 			}
@@ -982,7 +982,7 @@ void App::drawTransplant()
 			tickButtons(in);
 			if (c == static_cast<int>(tp::Category::kQuests)) {
 				ImGui::SameLine();
-				ImGui::TextDisabled("Quests run in quest-line order, after everything else.");
+				ImGui::TextDisabled("任务按任务链顺序运行，排在其他所有内容之后。");
 			}
 			// groups: items by kind, the rest by mod (when there are many)
 			std::map<std::string, std::vector<std::size_t>> groups;
@@ -1000,7 +1000,7 @@ void App::drawTransplant()
 					if (openAll >= 0) {
 						ImGui::SetNextItemOpen(openAll == 1);
 					}
-					if (ImGui::TreeNodeEx("##grp", ImGuiTreeNodeFlags_SpanAvailWidth, "%s   (%s)", name.empty() ? "Other" : name.c_str(), counts(gi).c_str())) {
+					if (ImGui::TreeNodeEx("##grp", ImGuiTreeNodeFlags_SpanAvailWidth, "%s   (%s)", name.empty() ? "其他" : name.c_str(), counts(gi).c_str())) {
 						tickButtons(gi);
 						for (auto i : gi) {
 							row(i);
@@ -1015,7 +1015,7 @@ void App::drawTransplant()
 		ImGui::PopID();
 	}
 	if (_tpChanges.empty()) {
-		Wrapped(theme::Good(), "The good save already has everything the bad one has (of what could be read).");
+		Wrapped(theme::Good(), "好档已经拥有坏档（能读到的部分）的全部内容。");
 	}
 	ImGui::EndChild();
 
@@ -1029,29 +1029,29 @@ void App::drawTransplant()
 		}
 	}
 	ImGui::BeginDisabled(_tpRunning);
-	ImGui::Checkbox("Mark refused quests as done", &_tpMarkRefused);
+	ImGui::Checkbox("被拒绝的任务标记为完成", &_tpMarkRefused);
 	ImGui::EndDisabled();
 	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("When the game refuses a quest's stage (its people or places are not set up in this save), the quest is marked\n"
-						  "completed instead, and the list says so (\"refused stage 10, marked as done\"). Marked quests give no rewards\n"
-						  "and do not start the quests that normally follow them. This applies to quests that were only further along in\n"
-						  "the bad save too. Untick to leave refused quests as they are.");
+		ImGui::SetTooltip("游戏拒绝某个任务的阶段时（它的人物或地点在这个存档里没有设置好），就把这个任务\n"
+						  "标记为完成，列表里也会写明（“游戏拒绝了阶段 10，已标记为完成”）。标记的任务没有奖励，\n"
+						  "也不会启动通常跟在后面的任务。只有坏档进度更靠前的任务也适用这一条。\n"
+						  "不想这样就不勾选，被拒绝的任务保持原样。");
 	}
 	ImGui::SameLine(0, 30);
 	ImGui::BeginDisabled(!live || !helperOk || run.empty() || busy);
-	const bool goBtn = ImGui::Button(Fmt("Transplant %zu ticked thing(s) into the game", run.size()).c_str());
+	const bool goBtn = ImGui::Button(Fmt("把勾选的 %zu 项移植进游戏", run.size()).c_str());
 	if (!busy && _tpResults.empty() && !run.empty() && live && helperOk) {
 		Marquee();
 		ImGui::SameLine();
-		TextColored(IM_COL32(255, 196, 40, 255), "<- step 3: go");
+		TextColored(IM_COL32(255, 196, 40, 255), "← 第 3 步：开始");
 	}
 	if (goBtn) {
-		confirm("Transplant",
-			Fmt("Put %zu ticked thing(s) into the game now?\n\n"
-				"- The GOOD save must be the one loaded in the game (the one snapshotted in step 2).\n"
-				"- Make a save in the game first, so you can go back.\n"
-				"- After OK, switch to Skyrim and stay there, unpaused with menus closed, until it is done.\n"
-				"- Quests may keep loading for a couple of minutes after that: save in the game when their messages stop.",
+		confirm("移植",
+			Fmt("现在把勾选的 %zu 项放进游戏？\n\n"
+				"- 游戏里读的必须是那个好档（第 2 步做快照的那个）。\n"
+				"- 先在游戏里存个档，方便回退。\n"
+				"- 点确定后，切到天际并留在那里，不要暂停、不要开菜单，直到它做完。\n"
+				"- 之后任务可能还要加载一两分钟：等它们的提示停下后在游戏里存档。",
 				run.size()),
 			[this, run] {
 				_tpRun = run;
@@ -1068,7 +1068,7 @@ void App::drawTransplant()
 	if (_tpRunning) {
 		ImGui::SameLine();
 		ImGui::ProgressBar(_tpRun.empty() ? 0.0f : static_cast<float>(_tpPos) / static_cast<float>(_tpRun.size()), ImVec2(260, 0),
-			Fmt("%zu of %zu", _tpPos, _tpRun.size()).c_str());
+			Fmt("%zu / %zu", _tpPos, _tpRun.size()).c_str());
 	} else if (!_tpResults.empty()) {
 		std::size_t failed = 0;
 		for (const auto& r : _tpResults) {
@@ -1076,10 +1076,10 @@ void App::drawTransplant()
 		}
 		ImGui::SameLine();
 		TextColored(failed ? theme::Caution() : theme::Good(),
-			Fmt("Done: %zu brought over, %zu not (see the list). Quests may keep loading for a couple of minutes: save in the game when their "
-				"messages stop.",
+			Fmt("完成：%zu 项已带过去，%zu 项没有（见列表）。任务可能还要继续加载一两分钟：等它们的"
+				"提示停下后再在游戏里存档。",
 				_tpResults.size() - failed, failed));
 	}
-	ImGui::TextDisabled("Nothing is taken away from the good save: things are only added, and levels and skills only raised.");
+	ImGui::TextDisabled("不会从好档里拿走任何东西：只添加内容，等级和技能只会提高。");
 	ImGui::End();
 }

@@ -61,8 +61,8 @@ namespace ess::transplant
 			return At(r, 6) + "|" + round(At(r, 7)) + "|" + (At(r, 8).empty() ? "" : "c") + "|" + At(r, 9) + "|" + At(r, 10);
 		}
 
-		const char* kSkillNames[18] = { "One-handed", "Two-handed", "Archery", "Block", "Smithing", "Heavy Armor", "Light Armor", "Pickpocket", "Lockpicking",
-			"Sneak", "Alchemy", "Speech", "Alteration", "Conjuration", "Destruction", "Illusion", "Restoration", "Enchanting" };
+		const char* kSkillNames[18] = { "单手", "双手", "箭术", "格挡", "锻造", "重甲", "轻甲", "扒窃", "开锁",
+			"潜行", "炼金", "口才", "变化", "召唤", "毁灭", "幻术", "恢复", "附魔" };
 	}
 
 	bool Quest::shown() const
@@ -90,18 +90,18 @@ namespace ess::transplant
 	const char* CategoryName(Category a_cat)
 	{
 		switch (a_cat) {
-		case Category::kAppearance: return "YOUR CHARACTER'S LOOK: face, hair, body (RaceMenu)";
-		case Category::kCharacter: return "Character: level, skills, attributes";
-		case Category::kPerks: return "Perks";
-		case Category::kSpells: return "Spells and powers";
-		case Category::kShouts: return "Shouts and words of power";
-		case Category::kMarkers: return "Map locations found";
-		case Category::kItems: return "Items and gold";
-		case Category::kMade: return "Things you made: enchanted gear, potions, poisons";
-		case Category::kLook: return "Worn and held gear";
-		case Category::kFactions: return "Factions";
-		case Category::kQuests: return "Quests";
-		case Category::kFollowers: return "YOUR FOLLOWERS: tick the ones to bring with you";
+		case Category::kAppearance: return "你的角色外观：脸、头发、身体（RaceMenu）";
+		case Category::kCharacter: return "角色：等级、技能、属性";
+		case Category::kPerks: return "专长";
+		case Category::kSpells: return "法术与能力";
+		case Category::kShouts: return "龙吼与力量之语";
+		case Category::kMarkers: return "已发现的地图地点";
+		case Category::kItems: return "物品与金币";
+		case Category::kMade: return "你制作的东西：附魔装备、药水、毒药";
+		case Category::kLook: return "穿戴与手持装备";
+		case Category::kFactions: return "派系";
+		case Category::kQuests: return "任务";
+		case Category::kFollowers: return "你的随从：勾选要带过去的";
 		default: return "?";
 		}
 	}
@@ -114,13 +114,13 @@ namespace ess::transplant
 		s.source = a_file.filename().string();
 		std::ifstream f(a_file, std::ios::binary);
 		if (!f) {
-			s.error = "cannot open " + a_file.string();
+			s.error = "无法打开 " + a_file.string();
 			return s;
 		}
 		std::string line;
 		std::map<FormKey, std::string> jobj;  // journal objectives per quest
 		if (!std::getline(f, line) || At(SplitLine(line), 0) != "RSH-SNAPSHOT") {
-			s.error = a_file.filename().string() + " is not a ReSaverHelper snapshot";
+			s.error = a_file.filename().string() + " 不是 ReSaverHelper 快照";
 			return s;
 		}
 		{
@@ -247,8 +247,8 @@ namespace ess::transplant
 		s.fromFile = true;
 		s.source = a_name;
 		s.player = a_save.header.playerName;
-		s.missingParts = { "skills and experience", "perks", "words of power", "map locations", "enchanted gear, potions and poisons you made",
-			"custom names and tempering of items" };
+		s.missingParts = { "技能与经验", "专长", "力量之语", "地图地点", "你制作的附魔装备、药水和毒药",
+			"物品的自定义名称与强化" };
 		auto local = [&](std::uint32_t id) { return (id >> 24) == 0xFE ? (id & 0xFFF) : (id & 0xFFFFFF); };
 		auto put = [&](Record& r, std::uint32_t id) {
 			r.push_back(a_save.pluginOf(id));
@@ -388,7 +388,7 @@ namespace ess::transplant
 			ch.record = std::move(rec);
 			ch.available = plugin.empty() || has(plugin);
 			if (!ch.available) {
-				ch.why = plugin + " is not in the game's load order now, so this cannot be brought over.";
+				ch.why = plugin + " 现在不在游戏的加载顺序里，所以带不过去。";
 				ch.risk = 2;
 				ch.tick = false;
 			}
@@ -398,23 +398,23 @@ namespace ess::transplant
 
 		// character
 		if (a_bad.level > a_good.level && !a_bad.playerRecord.empty()) {
-			add(Category::kCharacter, Fmt("Level %d (now %d)", a_bad.level, a_good.level), a_bad.perkPoints >= 0 ? Fmt("with its experience and %d unspent perk point(s)", a_bad.perkPoints) : std::string(),
-				0, "Raises the level; the game's own level-up rules do not run, so health/magicka/stamina come from the attributes below.", a_bad.playerRecord, "");
+			add(Category::kCharacter, Fmt("等级 %d（现在 %d）", a_bad.level, a_good.level), a_bad.perkPoints >= 0 ? Fmt("连同经验值和 %d 点未用的专长点", a_bad.perkPoints) : std::string(),
+				0, "提升等级；游戏自己的升级规则不会运行，所以生命/魔法/耐力来自下面的属性。", a_bad.playerRecord, "");
 		}
 		for (int i = 0; i < 18; ++i) {
 			const auto& b = a_bad.skills[i];
 			if (b.level > a_good.skills[i].level + 0.01f && !b.record.empty()) {
-				add(Category::kCharacter, Fmt("%s %d (now %d)", SkillName(i), static_cast<int>(b.level), static_cast<int>(std::max(0.0f, a_good.skills[i].level))), "",
-					0, "Sets the skill's level and progress.", b.record, "");
+				add(Category::kCharacter, Fmt("%s %d（现在 %d）", SkillName(i), static_cast<int>(b.level), static_cast<int>(std::max(0.0f, a_good.skills[i].level))), "",
+					0, "设置该技能的等级和进度。", b.record, "");
 			}
 		}
 		for (const auto& [name, vr] : a_bad.avs) {
 			const auto it = a_good.avs.find(name);
 			const float g = it == a_good.avs.end() ? 0.0f : it->second.first;
 			if (vr.first > g + 0.01f) {
-				add(Category::kCharacter, Fmt("%s %d (now %d)", name == "CarryWeight" ? "Carry weight" : name == "DragonSouls" ? "Dragon souls" : name.c_str(),
+				add(Category::kCharacter, Fmt("%s %d（现在 %d）", name == "CarryWeight" ? "负重" : name == "DragonSouls" ? "龙魂" : name.c_str(),
 							  static_cast<int>(vr.first), static_cast<int>(g)),
-					"", 0, "Sets the base value.", vr.second, "");
+					"", 0, "设置基础值。", vr.second, "");
 			}
 		}
 
@@ -426,13 +426,13 @@ namespace ess::transplant
 				std::string extra;
 				if (c == Category::kShouts && At(e.record, 0) == "word") {
 					missing = g == good.end() || (e.a && !g->second.a) || (e.b && !g->second.b);
-					extra = e.b ? "learned and unlocked" : "learned";
+					extra = e.b ? "已学会并解锁" : "已学会";
 				}
 				if (c == Category::kFactions && !missing) {
 					missing = e.a > g->second.a;
 				}
 				if (c == Category::kFactions) {
-					extra = Fmt("rank %d", e.a);
+					extra = Fmt("阶位 %d", e.a);
 				}
 				if (missing) {
 					add(c, e.name.empty() ? At(e.record, 2) + " (" + At(e.record, 1) + ")" : e.name, extra.empty() ? At(e.record, 1) : extra + "  -  " + At(e.record, 1), risk,
@@ -440,13 +440,13 @@ namespace ess::transplant
 				}
 			}
 		};
-		entries(a_bad.perks, a_good.perks, Category::kPerks, 0, "Adds the perk.");
-		entries(a_bad.spells, a_good.spells, Category::kSpells, 0, "Adds the spell or power.");
-		entries(a_bad.shouts, a_good.shouts, Category::kShouts, 0, "Adds the shout.");
-		entries(a_bad.words, a_good.words, Category::kShouts, 0, "Teaches the word (and unlocks it if it was unlocked).");
-		entries(a_bad.markers, a_good.markers, Category::kMarkers, 0, "Shows the location on the map (and lets you fast-travel there if you could).");
+		entries(a_bad.perks, a_good.perks, Category::kPerks, 0, "添加该专长。");
+		entries(a_bad.spells, a_good.spells, Category::kSpells, 0, "添加该法术或能力。");
+		entries(a_bad.shouts, a_good.shouts, Category::kShouts, 0, "添加该龙吼。");
+		entries(a_bad.words, a_good.words, Category::kShouts, 0, "教你这个力量之语（原本已解锁的则一并解锁）。");
+		entries(a_bad.markers, a_good.markers, Category::kMarkers, 0, "在地图上显示该地点（如果你本来能去，也能快速旅行过去）。");
 		entries(a_bad.factions, a_good.factions, Category::kFactions, 1,
-			"Joins the faction. Quests that make you a member (guilds, Companions...) may not expect it: transplant their quests too.");
+			"加入该派系。让你成为成员的任务（公会、战友团……）可能没料到这一点：把它们的任务也一起移植过去。");
 
 		// items: plain stacks by count, special items (named, tempered, enchanted, poisoned) one by one
 		{
@@ -478,9 +478,9 @@ namespace ess::transplant
 				}
 				const bool gold = k.plugin == "skyrim.esm" && k.local == 0xF;
 				const auto name = b.second->name.empty() ? At(rec, 2) : b.second->name;
-				add(Category::kItems, gold ? Fmt("%d gold", more) : Fmt("%s x%d", name.c_str(), more), At(rec, 1), b.second->questItem ? 1 : 0,
-					b.second->questItem ? "A quest item: its quest may not expect a second one. Bring it only if that quest is brought over too."
-										: "Adds the item(s) to your inventory.",
+				add(Category::kItems, gold ? Fmt("%d 金币", more) : Fmt("%s x%d", name.c_str(), more), At(rec, 1), b.second->questItem ? 1 : 0,
+					b.second->questItem ? "任务物品：它的任务可能没料到会有第二件。只有那个任务也一起移植时才带过去。"
+										: "把物品加入你的物品栏。",
 					rec, At(rec, 1));
 			}
 			for (const auto& it : a_bad.items) {
@@ -497,23 +497,23 @@ namespace ess::transplant
 				rec[5] = std::to_string(more);
 				std::string what;
 				if (!At(rec, 6).empty()) {
-					what += "named \"" + At(rec, 6) + "\", ";
+					what += "名称 “" + At(rec, 6) + "”，";
 				}
 				if (!At(rec, 7).empty()) {
-					what += "tempered, ";
+					what += "已强化，";
 				}
 				if (!At(rec, 9).empty()) {
-					what += it.madeEnchantment ? "your own enchantment, " : "enchanted, ";
+					what += it.madeEnchantment ? "你自己的附魔，" : "已附魔，";
 				}
 				if (!At(rec, 10).empty()) {
-					what += "poisoned, ";
+					what += "已涂毒，";
 				}
 				if (what.size() > 2) {
 					what.resize(what.size() - 2);
 				}
 				const auto name = !At(rec, 6).empty() ? At(rec, 6) : it.name;
 				add(it.madeEnchantment ? Category::kMade : Category::kItems, Fmt("%s x%d", name.c_str(), more), what + "  -  " + At(rec, 1), it.questItem ? 1 : 0,
-					it.madeEnchantment ? "Made again from the same magic effects and strengths, then given to you." : "Adds the item with its name, temper and magic.",
+					it.madeEnchantment ? "用相同的魔法效果和强度重新制作，然后交给你。" : "连同名称、强化和魔法一起添加该物品。",
 					rec, At(rec, 1));
 			}
 		}
@@ -530,17 +530,17 @@ namespace ess::transplant
 				if (more > 0) {
 					auto rec = p.record;
 					rec[2] = std::to_string(more);
-					add(Category::kMade, Fmt("%s x%d", p.name.c_str(), more), p.poison ? "a poison you made" : "a potion you made", 0,
-						"Made again from the same magic effects and strengths, then given to you.", rec, "");
+					add(Category::kMade, Fmt("%s x%d", p.name.c_str(), more), p.poison ? "你做的毒药" : "你做的药水", 0,
+						"用相同的魔法效果和强度重新制作，然后交给你。", rec, "");
 				}
 			}
 		}
 
 		// the look (RaceMenu preset) and what the character wore and held
 		if (!a_bad.look.empty()) {
-			add(Category::kAppearance, "Your look from the bad save (face, hair, body, overlays)", "saved by RaceMenu as preset " + a_bad.look, 1,
-				"RaceMenu loads the preset it saved from the bad save onto your character: face, hair, body sliders, overlays. It replaces "
-				"the good save's look. Your race is not changed.",
+			add(Category::kAppearance, "你在坏档里的外观（脸、头发、身体、覆盖层）", "由 RaceMenu 保存为预设 " + a_bad.look, 1,
+				"RaceMenu 会把从坏档保存的预设加载到你的角色上：脸、头发、身体滑块、覆盖层。它会替换好档的"
+				"外观。种族不变。",
 				{ "look", a_bad.look }, "");
 		}
 		{
@@ -554,10 +554,10 @@ namespace ess::transplant
 				}
 				const auto& kind = At(e.record, 0);
 				const auto  slot = At(e.record, 5);
-				const auto  label = kind == "equip"      ? "Wear / hold: " + e.name + (slot == "left" ? " (left hand)" : "")
-									: kind == "equipshout" ? "Shout selected: " + e.name
-														   : (slot == "voice" ? "Power selected: " : "Spell in " + slot + " hand: ") + e.name;
-				add(Category::kLook, label, At(e.record, 1), 0, "Equips it after everything else is brought over (it has to be in your inventory / known by then).",
+				const auto  label = kind == "equip"      ? "穿戴 / 手持：" + e.name + (slot == "left" ? "（左手）" : "")
+									: kind == "equipshout" ? "已选龙吼：" + e.name
+														   : (slot == "voice" ? "已选能力：" : "法术（" + slot + " 手）：") + e.name;
+				add(Category::kLook, label, At(e.record, 1), 0, "在其余内容都移植完之后装备它（那时它必须在你的物品栏里 / 已学会）。",
 					e.record, At(e.record, 1));
 			}
 		}
@@ -571,13 +571,13 @@ namespace ess::transplant
 			for (const auto& f : a_bad.followers) {
 				const bool already = following.contains(Lower(At(f.record, 1)) + Fmt(":%X", Hex(At(f.record, 2))));
 				const auto name = f.name.empty() ? At(f.record, 2) : f.name;
-				add(Category::kFollowers, already ? name + " - already following here: give back what they carried" : name + " - bring back as your follower",
+				add(Category::kFollowers, already ? name + " - 已经在这里跟随你：把带的东西还给他" : name + " - 作为你的随从带回来",
 					At(f.record, 1), already ? 0 : 1,
-					already ? "Gives them the items they carried in the bad save that they do not have now. Nothing is taken from them."
-							: "Brings them to you (brought back to life and enabled if needed), puts them back in the quest aliases that made them "
-							  "follow (their follower mod's own system), makes them your teammate and gives back what they carried. Followers with "
-							  "their own mod (Inigo, Serana, Vilja...) may also need their quest brought over (Quests). If one does not follow, talk "
-							  "to them and ask them to follow you.",
+					already ? "把他在坏档里带着、而现在已经没有的物品给他。不会从他身上拿走任何东西。"
+							: "把他带回到你身边（需要时复活并启用），放回让跟随生效的任务别名里"
+							  "（由他的随从模组自己的机制管理），让他成为你的队友，并把带的东西还给他。有自己模组的"
+							  "随从（Inigo、Serana、Vilja……）可能还需要把它们相关的任务也移植过去（见“任务”）。"
+							  "如果他不跟随，跟他说话、让他跟着你。",
 					f.record, At(f.record, 1));
 			}
 		}
@@ -593,28 +593,27 @@ namespace ess::transplant
 			const bool journal = a_bad.journalKnown ? q.inJournal : q.known ? q.shown() : q.completed;
 			std::size_t ch = static_cast<std::size_t>(-1);
 			if (q.completed && !goodDone) {
-				ch = add(Category::kQuests, name + " - complete it", q.edid + "  -  " + q.plugin, journal ? 1 : 2,
-					journal ? "Its completion stage runs in the game (rewards and follow-up quests happen normally), then its objectives are shown "
-							  "as they were, so it is listed in the journal. If the game refuses the stage, it is marked as done instead "
-							  "(when \"Mark refused quests as done\" is ticked)."
-							: "A background quest (radiant job, scene, mod setup): the journal never showed it. Bringing it over can start or end "
-							  "things you never saw. Leave it unless you know it.",
+				ch = add(Category::kQuests, name + " - 完成它", q.edid + "  -  " + q.plugin, journal ? 1 : 2,
+					journal ? "它的完成阶段会在游戏里运行（奖励和后续任务照常发生），然后把它当时的目标显示出来，"
+							  "这样它就出现在日志里。如果游戏拒绝该阶段，就改为标记为完成"
+							  "（勾选了“被拒绝的任务标记为完成”时）。"
+							: "后台任务（辐射任务、场景、模组初始化）：日志从来没显示过它。带过去可能启动或结束你从未"
+							  "见过的东西。不了解就别带。",
 					{}, q.plugin);
 			} else if (!q.completed && q.running && q.stage > goodStage && !goodDone) {
-				ch = add(Category::kQuests, name + Fmt(" - stage %d (now %d)", q.stage, goodStage), q.edid + "  -  " + q.plugin, journal ? 1 : 2,
-					journal ? "Sets the quest to the stage it had (its script runs) and shows its objectives as they were. If the game refuses "
-							  "the stage, it is left as it is (it was not completed in the bad save)."
-							: "A background quest (radiant job, scene, mod setup) still running in the bad save: the journal never showed it. "
-							  "Leave it unless you know it.",
+				ch = add(Category::kQuests, name + Fmt(" - 阶段 %d（现在 %d）", q.stage, goodStage), q.edid + "  -  " + q.plugin, journal ? 1 : 2,
+					journal ? "把任务设回它当时的阶段（它的脚本会运行），并把它当时的目标显示出来。如果游戏拒绝该"
+							  "阶段，就保持原样（它在坏档里并没有完成）。"
+							: "在坏档里仍在运行的后台任务（辐射任务、场景、模组初始化）：日志从来没显示过它。"
+							  "不了解就别带。",
 					{}, q.plugin);
 			}
 			bool onlyShow = false;
 			if (ch == static_cast<std::size_t>(-1) && journal && a_good.journalKnown && !goodDone && !q.objectives.empty() &&
 				(g == a_good.quests.end() || !g->second.inJournal)) {
 				// in the bad save's journal, not in the good one's, and no stage to move: show it in the journal
-				ch = add(Category::kQuests, name + " - show it in the journal", q.edid + "  -  " + q.plugin, 1,
-					"The good save is as far in this quest but its journal does not list it: starts it if needed and shows its "
-					"objectives as they were.",
+				ch = add(Category::kQuests, name + " - 在日志里显示它", q.edid + "  -  " + q.plugin, 1,
+					"好档在这个任务上进度相同，但它的日志里没有列出：需要时启动它，并把它当时的目标显示出来。",
 					{}, q.plugin);
 				onlyShow = true;
 			}

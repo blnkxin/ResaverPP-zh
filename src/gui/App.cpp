@@ -1050,10 +1050,10 @@ void App::drawMenu()
 		const Risk  worst = checkWorst();
 		const auto  col = worst == Risk::kRisky ? theme::Bad() : worst == Risk::kCaution ? theme::Caution() : theme::Good();
 		ImGui::PushStyleColor(ImGuiCol_Text, col);
-		const bool  click = ImGui::MenuItem(worst == Risk::kRisky ? "Save check (risky)" : worst == Risk::kCaution ? "Save check (look)" : "Save check (OK)");
+		const bool  click = ImGui::MenuItem(worst == Risk::kRisky ? "存档检查（危险）" : worst == Risk::kCaution ? "存档检查（需先读）" : "存档检查（正常）");
 		ImGui::PopStyleColor();
 		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Everything ReSaver++ noticed about this save, and what can safely be done about it (F2).");
+			ImGui::SetTooltip("ReSaver++ 对这个存档注意到的一切，以及可以安全地做什么（F2）。");
 		}
 		if (click) {
 			_showCheck = true;

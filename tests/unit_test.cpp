@@ -255,7 +255,9 @@ namespace
 	void TestTransplant()
 	{
 		namespace tp = ess::transplant;
-		const auto dir = std::filesystem::temp_directory_path();
+		const auto dir = std::filesystem::path("rs_unit_tmp");  // a folder of its own, under the working directory
+		std::error_code ec;
+		std::filesystem::create_directories(dir, ec);
 		auto write = [&](const char* a_name, const std::string& a_text) {
 			const auto p = dir / a_name;
 			std::ofstream(p, std::ios::binary) << a_text;
@@ -304,10 +306,10 @@ namespace
 			}
 			return nullptr;
 		};
-		Check(find("Level 15 (now 10)") != nullptr, "transplant: a higher level is listed");
-		Check(find("One-handed 35") && find("Two-handed 15") && !find("Health"), "transplant: higher skills listed, equal attributes not");
+		Check(find("等级 15（现在 10）") != nullptr, "transplant: a higher level is listed");
+		Check(find("单手 35") && find("双手 15") && !find("Health"), "transplant: higher skills listed, equal attributes not");
 		Check(find("Bladesman") && !find("Armsman"), "transplant: only perks the good save lacks");
-		Check(find("250 gold") != nullptr, "transplant: gold is the difference (350 - 100)");
+		Check(find("250 金币") != nullptr, "transplant: gold is the difference (350 - 100)");
 		const auto* sword = find("My Blade");
 		Check(sword && sword->cat == tp::Category::kMade && sword->record.size() > 9 && sword->record[9].rfind("C:w:1500:", 0) == 0,
 			"transplant: a sword with the player's own enchantment is listed, enchantment kept");
@@ -319,14 +321,14 @@ namespace
 		Check(find("Potion of Healing x3") != nullptr, "transplant: a potion the player made is listed");
 		const auto* conj = find("Conjure Wrathman");
 		Check(conj && !conj->available && !conj->tick, "transplant: something from a plugin the good game lacks cannot be ticked");
-		const auto* mq102 = find("Before the Storm - complete");
-		const auto* mq103 = find("Dragon Rising - stage 80");
+		const auto* mq102 = find("Before the Storm - 完成它");
+		const auto* mq103 = find("Dragon Rising - 阶段 80");
 		Check(mq102 && mq102->complete && mq102->goodRuntime == 0x3372A && mq103 && !mq103->complete && !find("Unbound"),
 			"transplant: quests: completed ones and further stages, not the ones already done");
-		const auto* look = find("Your look from the bad save");
-		const auto* wear = find("Wear / hold: My Blade");
+		const auto* look = find("你在坏档里的外观");
+		const auto* wear = find("穿戴 / 手持：My Blade");
 		Check(look && look->cat == tp::Category::kAppearance && look->record.size() == 2 && look->record[1] == "ReSaverPP_Allandor_20261024" && wear &&
-				  wear->record[0] == "equip" && find("Shout selected: Unrelenting Force"),
+				  wear->record[0] == "equip" && find("已选龙吼：Unrelenting Force"),
 			"transplant: the RaceMenu look and the worn gear are listed");
 		// helper 10: followers
 		{
@@ -335,14 +337,15 @@ namespace
 			const auto b10 = write("rs_tp_bad10.txt", "RSH-SNAPSHOT\t1\t1-6-1170-0\tAllandor\n"
 													  "follower\tInigo.esp\t000D62\t5700D62\tInigo\t1\t0\tInigo.esp*001D8B*0\tSkyrim.esm*01397E*2\n"
 													  "follower\tSkyrim.esm\t0A2C94\t000A2C94\tLydia\t1\t0\tSkyrim.esm*0750BA*0\tSkyrim.esm*013989*1\n");
-			const auto c10 = tp::Diff(tp::ReadSnapshot(g10), tp::ReadSnapshot(b10));
+			const auto s10g = tp::ReadSnapshot(g10), s10b = tp::ReadSnapshot(b10);
+			const auto c10 = tp::Diff(s10g, s10b);
 			const tp::Change *inigo = nullptr, *lydia = nullptr;
 			for (const auto& c : c10) {
 				inigo = c.cat == tp::Category::kFollowers && c.label.rfind("Inigo", 0) == 0 ? &c : inigo;
 				lydia = c.cat == tp::Category::kFollowers && c.label.rfind("Lydia", 0) == 0 ? &c : lydia;
 			}
-			Check(lydia && lydia->label.find("bring back") != std::string::npos && lydia->record.size() == 9 && lydia->record[0] == "follower" && inigo &&
-					  inigo->label.find("already following") != std::string::npos,
+			Check(lydia && lydia->label.find("带回来") != std::string::npos && lydia->record.size() == 9 && lydia->record[0] == "follower" && inigo &&
+					  inigo->label.find("已经在这里跟随你") != std::string::npos,
 				"transplant: followers - a missing one brought back, one already following only gets its items");
 			std::filesystem::remove(g10);
 			std::filesystem::remove(b10);
@@ -362,7 +365,8 @@ namespace
 				"jobj\tSkyrim.esm\t0242BA\t000242BA\t10\t1\n"
 				"jobj\tSkyrim.esm\t025231\t00025231\t10\t3\n");
 			std::ofstream(g9, std::ios::app) << "jobj\tSkyrim.esm\t0BBBBB\t000BBBBB\t10\t1\n";
-			const auto c9 = tp::Diff(tp::ReadSnapshot(g9), tp::ReadSnapshot(b9));
+			const auto s9g = tp::ReadSnapshot(g9), s9b = tp::ReadSnapshot(b9);  // the changes point into these
+			const auto c9 = tp::Diff(s9g, s9b);
 			const tp::Change *voice = nullptr, *muscle = nullptr, *theft = nullptr;
 			for (const auto& c : c9) {
 				voice = c.label.rfind("The Way of the Voice", 0) == 0 ? &c : voice;
@@ -377,6 +381,7 @@ namespace
 		}
 		std::filesystem::remove(good);
 		std::filesystem::remove(bad);
+		std::filesystem::remove(dir);
 	}
 
 }

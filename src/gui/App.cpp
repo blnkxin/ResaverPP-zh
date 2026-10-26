@@ -10,6 +10,8 @@
 #include "imgui.h"
 
 #include <algorithm>
+#include <cfloat>
+#include <cmath>
 #include <thread>
 #include <chrono>
 #include <cctype>
@@ -163,14 +165,10 @@ void App::open(const std::filesystem::path& a_path)
 			for (const auto& pr : _save->problems) {
 				list += "\n  - " + pr;
 			}
-			_error = "这个存档已损坏，或采用了 ReSaver++ 还不能完全理解的布局：\n" + list +
-					 "\n\n它已按只读方式打开：所有内容都能查看，但无法从 ReSaver++ 保存（写回可能丢失数据，也可能凭空造出数据）。"
-					 "请在游戏中读取一个更早的存档，或带上这个文件反馈问题。";
-			_status += "  -  只读（存档损坏）";
+			(void)list;  // 存档检查里会说明
+			_status += "  -  只读（存档损坏：见存档检查）";
 		}
-		if (!_report->warnings.empty()) {
-			_status += Fmt("  -  %zu 个问题：见 工具 > 分析", _report->warnings.size());
-		}
+		_showCheck = _checkOnOpen || _readOnly;  // everything noticed about the save, in one window
 	} catch (const std::exception& e) {
 		_error = std::string("无法打开 ") + platform::ToUtf8(a_path.filename()) + ":\n\n" + e.what();
 	}
@@ -226,8 +224,7 @@ void App::startSaveAsDialog()
 	if (!_save) {
 		return;
 	}
-	auto suggested = _path;
-	suggested.replace_filename(_path.stem().u8string() + u8"_edited.ess");
+	const auto suggested = EditedSaveName(_path, "edited", false);  // the game reads this name correctly (see Save.h)
 	if (platform::HasNativeDialogs()) {
 		if (auto p = platform::SaveAsDialog(suggested)) {
 			doSave(*p);
@@ -786,17 +783,20 @@ void App::draw()
 	const float statusH = ImGui::GetFrameHeightWithSpacing();
 	ImGui::BeginChild("##body", ImVec2(0, -statusH));
 	if (!_save) {
-		ImGui::Dummy(ImVec2(0, 80));
-		ImGui::Indent(40);
-		ImGui::TextUnformatted("ReSaver++");
-		ImGui::TextDisabled("Skyrim Special Edition / Anniversary Edition / VR 存档编辑器");
+		drawLogo();
+		auto centered = [](const char* a_text, bool a_dim) {
+			ImGui::SetCursorPosX((ImGui::GetWindowWidth() - ImGui::CalcTextSize(a_text).x) * 0.5f);
+			a_dim ? ImGui::TextDisabled("%s", a_text) : ImGui::TextUnformatted(a_text);
+		};
+		centered("Skyrim Special Edition / Anniversary Edition / VR 存档编辑器", true);
 		ImGui::Spacing();
+		ImGui::Spacing();
+		ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 180) * 0.5f);
 		if (ImGui::Button("打开存档…", ImVec2(180, 0))) {
 			startOpenDialog();
 		}
 		ImGui::Spacing();
-		ImGui::TextDisabled("或将 .ess 文件拖到此窗口（.pex 脚本会显示其代码）");
-		ImGui::Unindent(40);
+		centered("或将 .ess 文件拖到此窗口（.pex 脚本会显示其代码）", true);
 	} else {
 		drawCategories();
 		ImGui::SameLine();
@@ -835,6 +835,12 @@ void App::draw()
 	drawStatus();
 	ImGui::End();
 
+	if (_showCheck) {
+		drawSaveCheck();
+	}
+	if (_showTransplant) {
+		drawTransplant();
+	}
 	if (_showAnalysis) {
 		drawAnalysis();
 	}
@@ -996,6 +1002,10 @@ void App::drawMenu()
 		ImGui::EndMenu();
 	}
 	if (ImGui::BeginMenu("工具", _save != nullptr)) {
+		if (ImGui::MenuItem("存档检查…", "F2", false, _save != nullptr)) {
+			_showCheck = true;
+		}
+		ImGui::MenuItem("从坏档移植进度…", nullptr, &_showTransplant);
 		ImGui::MenuItem("分析", nullptr, &_showAnalysis);
 		if (ImGui::MenuItem("报告…")) {
 			_reportOpen = true;
@@ -1035,7 +1045,24 @@ void App::drawMenu()
 	}
 
 	// keyboard shortcuts
+	// the way back to the Save check, always in sight, in the colour of its worst finding
+	if (_save) {
+		const Risk  worst = checkWorst();
+		const auto  col = worst == Risk::kRisky ? theme::Bad() : worst == Risk::kCaution ? theme::Caution() : theme::Good();
+		ImGui::PushStyleColor(ImGuiCol_Text, col);
+		const bool  click = ImGui::MenuItem(worst == Risk::kRisky ? "Save check (risky)" : worst == Risk::kCaution ? "Save check (look)" : "Save check (OK)");
+		ImGui::PopStyleColor();
+		if (ImGui::IsItemHovered()) {
+			ImGui::SetTooltip("Everything ReSaver++ noticed about this save, and what can safely be done about it (F2).");
+		}
+		if (click) {
+			_showCheck = true;
+		}
+	}
 	auto& io = ImGui::GetIO();
+	if (_save && ImGui::IsKeyPressed(ImGuiKey_F2, false)) {
+		_showCheck = true;
+	}
 	if (!_viewerFocused && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O, false)) {
 		startOpenDialog();
 	}
@@ -1843,7 +1870,8 @@ void App::detailUnbind(std::uint64_t k)
 void App::drawOverview()
 {
 	const auto& h = _save->header;
-	drawMissingBanner();
+	drawCheckSummary();
+	ImGui::Spacing();
 	if (_shotTex) {
 		const float w = std::min(ImGui::GetContentRegionAvail().x * 0.45f, 480.0f);
 		ImGui::Image(static_cast<ImTextureID>(_shotTex), ImVec2(w, w * _shotH / std::max(1, _shotW)));
@@ -1869,37 +1897,6 @@ void App::drawOverview()
 		return;
 	}
 	const auto& r = *_report;
-	ImGui::SeparatorText("健康状况");
-	if (r.warnings.empty()) {
-		TextColored(theme::Good(), "未发现问题。");
-	}
-	for (const auto& w : r.warnings) {
-		ImGui::Bullet();
-		ImGui::PushStyleColor(ImGuiCol_Text, theme::Warn());
-		ImGui::TextWrapped("%s", w.c_str());
-		ImGui::PopStyleColor();
-	}
-	for (const auto& s : r.loopingScripts) {
-		ImGui::PushID(s.c_str());
-		if (ImGui::Button(("清除 " + s).c_str())) {
-			const std::string name = s;
-			confirm("清除 " + name,
-				"移除 “" + name +
-					"” 的全部线程、挂起堆栈、函数消息和实例，以及它们所在的生成对象？\n\n这正是修好 Firefly 循环的办法。结果请用“文件 > 另存为”写出。",
-				[this, name] {
-					auto x = ops::PurgeScript(*_save, name, true);
-					markEdited(Fmt("已清除 %s：%zu 个线程、%zu 个实例、%zu 个生成对象", name.c_str(), x.threads, x.instances, x.forms));
-				});
-		}
-		ImGui::PopID();
-		ImGui::SameLine();
-	}
-	if (r.mcmJam) {
-		if (ImGui::Button("修复 SkyUI MCM 注册卡死")) {
-			fixMcmJam();
-		}
-		ImGui::SameLine();
-	}
 	ImGui::NewLine();
 	ImGui::SeparatorText("统计");
 	if (BeginKV("counts")) {
@@ -1918,11 +1915,12 @@ void App::drawOverview()
 
 void App::drawAnalysis()
 {
-	ImGui::SetNextWindowSize(ImVec2(820, 640), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin("分析", &_showAnalysis)) {
+	prepareWindow("Analysis", ImVec2(0.7f, 0.75f));
+	if (!ImGui::Begin("分析", &_showAnalysis, ImGuiWindowFlags_NoCollapse)) {
 		ImGui::End();
 		return;
 	}
+	maximizeControl("Analysis");
 	if (_report) {
 		if (ImGui::Button("复制报告到剪贴板")) {
 			ImGui::SetClipboardText(ops::FormatReport(*_report, 40).c_str());
@@ -2274,6 +2272,8 @@ void App::loadSettings()
 			_autoNames = line.substr(6) != "0";
 		} else if (line.rfind("watch=", 0) == 0 && line.substr(6) == "1") {
 			_watch = true;
+		} else if (line.rfind("open_newest=", 0) == 0) {
+			_openNewest = line.substr(12) == "1";
 		} else if (line.rfind("live=", 0) == 0) {
 			_liveEnabled = line.substr(5) != "0";
 		} else if (line.rfind("live_notify=", 0) == 0) {
@@ -2288,6 +2288,8 @@ void App::loadSettings()
 			text::SetCodePage(static_cast<unsigned>(std::strtoul(line.c_str() + 9, nullptr, 10)));
 		} else if (line.rfind("game=", 0) == 0) {
 			se.gamePath = line.substr(5);
+		} else if (line.rfind("check_on_open=", 0) == 0) {
+			_checkOnOpen = line.substr(14) != "0";
 		} else if (line.rfind("saves_dir=", 0) == 0) {
 			_savesDirSe = line.substr(10);
 		} else if (line.rfind("saves_dir_vr=", 0) == 0) {
@@ -2346,7 +2348,9 @@ void App::saveSettings()
 	f << "sort=" << _sortMode << "\n";
 	f << "compression=" << _saveCompression << "\n";
 	f << "watch=" << (_watch ? 1 : 0) << "\n";
+	f << "open_newest=" << (_openNewest ? 1 : 0) << "\n";
 	f << "game=" << se.gamePath << "\n";
+	f << "check_on_open=" << (_checkOnOpen ? 1 : 0) << "\n";
 	f << "saves_dir=" << _savesDirSe << "\n";
 	f << "saves_dir_vr=" << _savesDirVr << "\n";
 	f << "last_dir=" << _lastDirSe << "\n";
@@ -3099,12 +3103,7 @@ void App::drawRemoveModModal()
 				ch = u8'_';
 			}
 		}
-		const auto base = _path.stem().u8string() + u8"_without_" + modStem;
-		target.replace_filename(base + u8".ess");
-		std::error_code ec;
-		for (int n = 2; std::filesystem::exists(target, ec); ++n) {
-			target.replace_filename(base + u8"_" + std::u8string(reinterpret_cast<const char8_t*>(std::to_string(n).c_str())) + u8".ess");
-		}
+		target = EditedSaveName(_path, "without" + std::string(modStem.begin(), modStem.end()));
 	}
 	ImGui::TextDisabled("新文件：%s", platform::ToUtf8(target.filename()).c_str());
 	ImGui::BeginDisabled(!plan.canApply());
@@ -3192,4 +3191,57 @@ bool App::drawBackgroundProgress(float a_width)
 		ImGui::SetTooltip("%s", label.c_str());
 	}
 	return true;
+}
+
+// The start page logo: RESAVER ++ in red, under a scanner light that sweeps back and forth along a red
+// line, leaving a fading trail (the light bar of an old TV robot car).
+void App::drawLogo()
+{
+	const char* text = "RESAVER ++";
+	ImFont*     font = titleFont ? titleFont : ImGui::GetFont();
+	const float size = titleFont ? titleFont->FontSize : ImGui::GetFontSize() * 4.0f;
+	const auto  ts = font->CalcTextSizeA(size, FLT_MAX, 0.0f, text);
+	const float avail = ImGui::GetContentRegionAvail().x;
+	const auto  origin = ImGui::GetCursorScreenPos();
+	const float top = origin.y + std::max(40.0f, ImGui::GetContentRegionAvail().y * 0.12f);
+	const float x0 = origin.x + (avail - ts.x) * 0.5f;
+	auto*       dl = ImGui::GetWindowDrawList();
+
+	// the scanner: a red line a little wider than the logo, a light going back and forth on it
+	const float lineY = top;
+	const float lx0 = x0 - ts.x * 0.05f, lx1 = x0 + ts.x * 1.05f;
+	dl->AddLine(ImVec2(lx0, lineY), ImVec2(lx1, lineY), IM_COL32(90, 0, 0, 255), 6.0f);
+	dl->AddLine(ImVec2(lx0, lineY), ImVec2(lx1, lineY), IM_COL32(150, 10, 10, 255), 2.0f);
+	const double t = ImGui::GetTime();
+	auto         at = [&](double a_t) {
+        // smooth back and forth, a little slower at the ends like the real thing
+        const double p = 0.5 - 0.5 * std::cos(a_t * 2.4);
+        return lx0 + static_cast<float>(p) * (lx1 - lx0);
+	};
+	const float r = 7.0f;
+	constexpr int kTrail = 60;  // the trail: earlier positions, fading, close enough together to read as a streak
+	for (int k = kTrail; k >= 1; --k) {
+		const float x = at(t - k * 0.006);
+		const float f = 1.0f - static_cast<float>(k) / (kTrail + 1);
+		dl->AddCircleFilled(ImVec2(x, lineY), r * (0.45f + 0.5f * f), IM_COL32(230, 0, 0, static_cast<int>(70.0f * f * f)));
+	}
+	const float x = at(t);
+	dl->AddCircleFilled(ImVec2(x, lineY), r * 3.2f, IM_COL32(255, 0, 0, 35));
+	dl->AddCircleFilled(ImVec2(x, lineY), r * 2.0f, IM_COL32(255, 20, 20, 80));
+	dl->AddCircleFilled(ImVec2(x, lineY), r, IM_COL32(255, 40, 30, 255));
+	dl->AddCircleFilled(ImVec2(x, lineY), r * 0.45f, IM_COL32(255, 200, 180, 255));
+
+	// the words, with a soft red glow behind them
+	const float ty = lineY + 16.0f;
+	for (int g = 3; g >= 1; --g) {
+		const float o = g * 2.0f;
+		const auto  col = IM_COL32(255, 0, 0, 22);
+		for (const auto& d : { ImVec2(-o, 0), ImVec2(o, 0), ImVec2(0, -o), ImVec2(0, o) }) {
+			dl->AddText(font, size, ImVec2(x0 + d.x, ty + d.y), col, text);
+		}
+	}
+	dl->AddText(font, size, ImVec2(x0, ty), IM_COL32(215, 18, 18, 255), text);
+
+	ImGui::SetCursorScreenPos(ImVec2(origin.x, ty + ts.y + 18.0f));
+	ImGui::Dummy(ImVec2(0, 0));
 }

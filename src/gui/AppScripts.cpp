@@ -4,6 +4,7 @@
 // matching block keywords, folding, find and an outline; compile it with the game's Papyrus
 // compiler. Modelled on the npp-papyrus Notepad++ plugin (blu3mania/npp-papyrus).
 #include "App.h"
+#include "core/Text.h"
 
 #include "Platform.h"
 #include "Theme.h"
@@ -495,13 +496,13 @@ void App::placeCursor(ScriptDoc& d, const std::string& a_function, const std::st
 void App::drawScriptViewer()
 {
 	const ImGuiViewport* vp = ImGui::GetMainViewport();
-	ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.04f, vp->WorkPos.y + vp->WorkSize.y * 0.04f), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowSize(ImVec2(vp->WorkSize.x * 0.92f, vp->WorkSize.y * 0.9f), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin("脚本查看器###scriptviewer", &_showViewer)) {
+	prepareWindow("Script viewer###scriptviewer", ImVec2(0.7f, 0.75f));
+	if (!ImGui::Begin("脚本查看器###scriptviewer", &_showViewer, ImGuiWindowFlags_NoCollapse)) {
 		_viewerFocused = false;
 		ImGui::End();
 		return;
 	}
+	maximizeControl("Script viewer###scriptviewer");
 	_viewerFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 	if (_docs.empty()) {
 		ImGui::TextDisabled("在任意位置双击脚本（脚本、脚本实例、线程、模组的脚本列表）即可在此查看。");
@@ -1458,8 +1459,8 @@ void App::autoDetectPaths(bool a_force)
 						   return v;
 					   }
 				   }
-				   if (const char* ad = std::getenv("APPDATA")) {
-					   return FindVortexDeployment(platform::FromUtf8(ad) / "Vortex" / (_vr ? "skyrimvr" : "skyrimse") / "mods");
+				   if (const auto ad = text::EnvPath("APPDATA"); !ad.empty()) {
+					   return FindVortexDeployment(ad / "Vortex" / (_vr ? "skyrimvr" : "skyrimse") / "mods");
 				   }
 				   return std::nullopt;
 			   }()) {
@@ -1546,4 +1547,30 @@ void App::setGame(bool a_vr)
 	autoDetectPaths(false);  // this game's setup, found by itself the first time
 	saveSettings();
 	_status = std::string("使用 ") + gameName() + " 的设置";
+}
+
+void App::openNewestAtStart()
+{
+	if (!_openNewest) {
+		return;
+	}
+	// the newest .ess in the saves folders (the chosen one, the last used one, the game's and MO2's)
+	std::error_code                 ec;
+	std::vector<std::filesystem::path> dirs = watchFolders();
+	dirs.push_back(savesFolder());
+	std::filesystem::path           best;
+	std::filesystem::file_time_type bestTime = std::filesystem::file_time_type::min();  // (not {}: MinGW file times)
+	for (const auto& dir : dirs) {
+		for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
+			if (e.is_regular_file(ec) && Lower(platform::ToUtf8(e.path().extension())) == ".ess") {
+				if (const auto t = e.last_write_time(ec); t > bestTime) {
+					bestTime = t;
+					best = e.path();
+				}
+			}
+		}
+	}
+	if (!best.empty()) {
+		openAny(best);
+	}
 }

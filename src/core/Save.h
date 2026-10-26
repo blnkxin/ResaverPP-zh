@@ -136,6 +136,14 @@ namespace ess
 		std::unordered_map<std::uint32_t, std::size_t> _cfIdx;
 	};
 
+	// A name for an edited copy of a save that the game still reads correctly. The game takes the
+	// character's ID and other details from the name's fields (Save<n>_<character id>_..._<date>_<level>_<n>);
+	// text added at the end ("_edited") breaks that, and the saves made after it lose the character ID
+	// (00000000) and drop out of the character's group in the load menu. So the tag goes right after the
+	// 14-digit date, as letters and digits only ("..._20261025075454edited_66_1.ess"). Names not in the
+	// game's format get "_<tag>" at the end. a_unique: the first name not taken (tag, tag2, tag3...).
+	std::filesystem::path EditedSaveName(const std::filesystem::path& a_save, const std::string& a_tag, bool a_unique = true);
+
 	std::vector<std::uint8_t> DecompressLZ4(const std::uint8_t* a_src, std::size_t a_srcLen, std::size_t a_dstLen);
 	std::vector<std::uint8_t> CompressLZ4(const std::vector<std::uint8_t>& a_src);
 	std::vector<std::uint8_t> DecompressZlib(const std::uint8_t* a_src, std::size_t a_srcLen, std::size_t a_dstLen);

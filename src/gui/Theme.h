@@ -21,6 +21,7 @@ namespace theme
 	const char* Name(Kind a_kind);
 
 	std::uint32_t Warn();
+	std::uint32_t Caution();  // a true yellow (Warn is orange): the "caution" colour of the Save check
 	std::uint32_t Bad();
 	std::uint32_t Good();
 	std::uint32_t Dim();

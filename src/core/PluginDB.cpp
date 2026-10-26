@@ -240,7 +240,7 @@ namespace ess
 					}
 				}
 				// ---- localized names (.strings); journal text comes from .dlstrings, read only when needed
-				const auto stem = Lower(U8(std::filesystem::path(std::u8string(pluginName.begin(), pluginName.end())).stem()));
+				const auto stem = Lower(U8(text::PathFrom(pluginName).stem()));
 				auto loadStrings = [&](const char* a_ext) {
 					std::unordered_map<std::uint32_t, std::string> table;
 					for (const auto& lang : { Lower(a_in.language), std::string("english") }) {

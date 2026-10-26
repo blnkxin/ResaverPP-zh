@@ -104,6 +104,14 @@ namespace theme
 		default: return IM_COL32(255, 190, 80, 255);
 		}
 	}
+	std::uint32_t Caution()
+	{
+		switch (g_kind) {
+		case Kind::kLight: return IM_COL32(186, 150, 0, 255);  // dark yellow: plain yellow cannot be read on the light background
+		case Kind::kGrey: return IM_COL32(245, 222, 70, 255);
+		default: return IM_COL32(250, 220, 60, 255);
+		}
+	}
 	std::uint32_t Bad()
 	{
 		switch (g_kind) {

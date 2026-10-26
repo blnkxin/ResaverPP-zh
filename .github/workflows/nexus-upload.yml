@@ -128,27 +128,13 @@ jobs:
           TEXT: ${{ inputs.description || inputs.changelog }}
           VERSION: ${{ inputs.version }}
         run: |
-          d="Version $VERSION: $(printf '%s' "$TEXT" | sed 's/ | /; /g')"
+          d="$(printf '%s' "$TEXT" | sed 's/ | /; /g')"
+          case "$d" in [Vv]ersion*) ;; *) d="Version $VERSION: $d" ;; esac  # no "Version x: Version x:"
           if [ ${#d} -gt 250 ]; then d="${d:0:246}..."; fi
           echo "text=$d" >> "$GITHUB_OUTPUT"
 
-      - name: Upload to Nexus Mods
-        uses: Nexus-Mods/upload-action@main
-        with:
-          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
-          file_id: ${{ inputs.file_id || vars.NEXUSMODS_FILE_ID }}
-          filename: ReSaverPP.zip
-          display_name: ${{ inputs.display_name }}
-          description: ${{ steps.desc.outputs.text }}
-          version: ${{ inputs.version }}
-          mod_id: ${{ inputs.mod_id || vars.NEXUSMODS_MOD_ID }}
-          category: main
-          allow_mod_manager_download: ${{ inputs.mod_manager }}
-          primary_mod_manager_download: false
-          update_mod_version: true
-
-      # The upload action does not attach the changelog (checked on version 14), so it is posted here,
-      # the same way as the "Add Nexus changelog" workflow.
+      # The changelog is posted BEFORE the file: an entry added through the API only shows on the
+      # Changelogs tab once Nexus rebuilds the page, and the upload is what makes it rebuild.
       - name: Post changelog
         if: ${{ inputs.changelog != '' }}
         env:
@@ -164,3 +150,18 @@ jobs:
           echo "HTTP $code"
           cat resp.json; echo
           if [ "$code" != "201" ]; then echo "::error::Nexus refused the changelog (HTTP $code): $(head -c 300 resp.json)"; exit 1; fi
+
+      - name: Upload to Nexus Mods
+        uses: Nexus-Mods/upload-action@main
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_id: ${{ inputs.file_id || vars.NEXUSMODS_FILE_ID }}
+          filename: ReSaverPP.zip
+          display_name: ${{ inputs.display_name }}
+          description: ${{ steps.desc.outputs.text }}
+          version: ${{ inputs.version }}
+          mod_id: ${{ inputs.mod_id || vars.NEXUSMODS_MOD_ID }}
+          category: main
+          allow_mod_manager_download: ${{ inputs.mod_manager }}
+          primary_mod_manager_download: false
+          update_mod_version: true

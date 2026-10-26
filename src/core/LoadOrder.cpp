@@ -1,5 +1,6 @@
 // ReSaver++ - C++ port of ReSaver (FallrimTools) by Mark Fairchild, Apache License 2.0.
 #include "LoadOrder.h"
+#include "Text.h"
 
 #include <cctype>
 #include <cstdlib>
@@ -37,11 +38,10 @@ namespace ess::loadorder
 
 	std::filesystem::path GamePluginsTxt(bool a_vr)
 	{
-		const char* la = std::getenv("LOCALAPPDATA");
-		if (!la) {
+		const auto base = text::EnvPath("LOCALAPPDATA");
+		if (base.empty()) {
 			return {};
 		}
-		const std::filesystem::path base(la);
 		if (a_vr) {
 			return base / "Skyrim VR" / "plugins.txt";
 		}

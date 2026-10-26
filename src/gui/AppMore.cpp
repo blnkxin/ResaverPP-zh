@@ -288,11 +288,12 @@ void App::arrayEditor(ArrayInfo& a)
 
 void App::drawArraysAnalysis()
 {
-	ImGui::SetNextWindowSize(ImVec2(820, 600), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin("数组区块", &_showArrays)) {
+	prepareWindow("Arrays block", ImVec2(0.7f, 0.75f));
+	if (!ImGui::Begin("数组区块", &_showArrays, ImGuiWindowFlags_NoCollapse)) {
 		ImGui::End();
 		return;
 	}
+	maximizeControl("Arrays block");
 	auto& p = *_save->papyrus();
 	if (_arraysDirty) {
 		_arraysDirty = false;
@@ -458,11 +459,12 @@ void App::logStatus()
 
 void App::drawLog()
 {
-	ImGui::SetNextWindowSize(ImVec2(820, 420), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin("日志", &_showLog)) {
+	prepareWindow("Log", ImVec2(0.7f, 0.75f));
+	if (!ImGui::Begin("日志", &_showLog, ImGuiWindowFlags_NoCollapse)) {
 		ImGui::End();
 		return;
 	}
+	maximizeControl("Log");
 	if (ImGui::Button("复制")) {
 		std::string all;
 		for (const auto& l : _log) {
@@ -578,9 +580,9 @@ void App::drawSettings()
 										   : "由你指定：「文件 > 打开」从这里开始，「监视存档文件夹」也监视它。");
 	}
 	// Mod Organizer instances installed for this user (%LOCALAPPDATA%\ModOrganizer\<instance>)
-	if (const char* la = std::getenv("LOCALAPPDATA")) {
+	if (const auto la = text::EnvPath("LOCALAPPDATA"); !la.empty()) {
 		std::error_code ec;
-		const auto      root = platform::FromUtf8(la) / "ModOrganizer";
+		const auto      root = la / "ModOrganizer";
 		for (const auto& e : std::filesystem::directory_iterator(root, ec)) {
 			const auto ini = e.path() / "ModOrganizer.ini";
 			if (!e.is_directory(ec) || !std::filesystem::exists(ini, ec)) {
@@ -711,6 +713,7 @@ void App::drawSettings()
 	if (ImGui::Checkbox("监视存档文件夹（自动打开新存档）", &watch)) {
 		setWatching(watch);
 	}
+	ch |= ImGui::Checkbox("启动 ReSaver++ 时打开最新的存档", &_openNewest);
 	const char* sorts[] = { "存档顺序", "字母顺序", "大小", "总量" };
 	if (ImGui::Combo("列表排序", &_sortMode, sorts, 4)) {
 		_rowsDirty = true;

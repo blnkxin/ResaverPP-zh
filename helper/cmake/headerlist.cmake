@@ -4,4 +4,5 @@ set(headers ${headers}
     src/Game.h
     src/Server.h
     src/Protocol.h
+    src/Transplant.h
 )

@@ -60,75 +60,104 @@ namespace Game
 		}
 
 		// ---- journal refresh ----------------------------------------------------------------------
-		struct Item
+		// One quest at a time: all of its shown objectives are hidden, then shown again, then their
+		// completed / failed state is put back, before the next quest is touched. So at any moment at
+		// most one quest is in flux, and nothing happens while a menu is open (the Journal remembers what
+		// it showed; changing its list under it is what crashed in version 3 with some setups).
+		struct Obj
 		{
-			RE::FormID    quest = 0;
-			std::uint16_t objective = 0;
+			std::uint16_t index = 0;
 			std::uint8_t  state = 0;  // 1 shown, 3 completed + shown, 5 failed + shown
 		};
-		std::vector<Item>         g_items;
+		struct QuestItem
+		{
+			RE::FormID       quest = 0;
+			std::vector<Obj> objs;
+		};
+		std::vector<QuestItem>    g_quests;
+		std::size_t               g_total = 0;
 		std::atomic<std::size_t>  g_done{ 0 }, g_failedCalls{ 0 };
-		std::atomic<int>          g_workersLeft{ 0 };
 		std::atomic<bool>         g_refreshing{ false };
 		std::string               g_refreshNotify;
-		std::size_t               g_refreshQuests = 0;
-		constexpr std::size_t     kWorkers = 8;
 
 		void Finish()
 		{
 			g_refreshing = false;
-			const auto msg = std::format("ReSaverHelper: quest journal refreshed ({} objective(s) in {} quest(s))", g_done.load(), g_refreshQuests);
+			const auto msg = std::format("ReSaverHelper: quest journal refreshed ({} objective(s) in {} quest(s))", g_done.load(), g_quests.size());
 			spdlog::info("{} ({} call(s) failed)", msg, g_failedCalls.load());
 			Notify(g_refreshNotify, msg);
 		}
 
-		void Step(std::size_t a_index, int a_phase);
-
-		// calls Quest.<fn>(args) on the item's quest, then continues with the next phase
-		template <class... Args>
-		void CallThen(std::size_t a_index, int a_nextPhase, const char* a_fn, Args... a_args)
+		// a menu is open (Journal, pause menu, inventory...): wait
+		bool MenuOpen()
 		{
-			auto* quest = RE::TESForm::LookupByID<RE::TESQuest>(g_items[a_index].quest);
-			auto* vm = VM::GetSingleton();
+			auto* ui = RE::UI::GetSingleton();
+			return ui && (ui->GameIsPaused() || ui->IsMenuOpen(RE::JournalMenu::MENU_NAME));
+		}
+
+		void Step(std::size_t a_quest, int a_phase, std::size_t a_obj);
+
+		// runs Step later on the main thread (while a menu is open)
+		void StepLater(std::size_t a_quest, int a_phase, std::size_t a_obj)
+		{
+			std::thread([a_quest, a_phase, a_obj] {
+				std::this_thread::sleep_for(400ms);
+				if (auto* task = SKSE::GetTaskInterface()) {
+					task->AddTask([a_quest, a_phase, a_obj] { Step(a_quest, a_phase, a_obj); });
+				}
+			}).detach();
+		}
+
+		template <class... Args>
+		void CallThen(std::size_t a_quest, int a_phase, std::size_t a_nextObj, const char* a_fn, Args... a_args)
+		{
+			auto*      quest = RE::TESForm::LookupByID<RE::TESQuest>(g_quests[a_quest].quest);
+			auto*      vm = VM::GetSingleton();
 			const auto handle = HandleOf(quest);
-			auto       cb = MakeCallback([a_index, a_nextPhase](const RE::BSScript::Variable&) { Step(a_index, a_nextPhase); });
+			auto       cb = MakeCallback([a_quest, a_phase, a_nextObj](const RE::BSScript::Variable&) { Step(a_quest, a_phase, a_nextObj); });
 			if (!vm || !handle || !vm->DispatchMethodCall(handle, "Quest", a_fn, RE::MakeFunctionArguments(std::move(a_args)...), cb)) {
 				++g_failedCalls;
-				Step(a_index, 99);  // skip the rest of this objective
+				Step(a_quest, a_phase, a_nextObj);
 			}
 		}
 
-		// phase 0 hide, 1 show, 2 put completed / failed back, 3 next objective of this worker
-		void Step(std::size_t a_index, int a_phase)
+		// phase 0: hide each shown objective; 1: show each again; 2: put completed / failed back; then the next quest
+		void Step(std::size_t a_quest, int a_phase, std::size_t a_obj)
 		{
-			if (a_index >= g_items.size()) {
-				if (--g_workersLeft == 0) {
-					Finish();
+			if (a_quest >= g_quests.size()) {
+				Finish();
+				return;
+			}
+			if (a_phase == 0 && a_obj == 0 && MenuOpen()) {
+				StepLater(a_quest, a_phase, a_obj);  // a quest is only started with every menu closed
+				return;
+			}
+			const auto& objs = g_quests[a_quest].objs;
+			if (a_obj >= objs.size()) {
+				if (a_phase < 2) {
+					Step(a_quest, a_phase + 1, 0);
+				} else {
+					g_done += objs.size();
+					Step(a_quest + 1, 0, 0);
 				}
 				return;
 			}
-			const auto& it = g_items[a_index];
-			const auto  idx = static_cast<std::int32_t>(it.objective);
+			const auto idx = static_cast<std::int32_t>(objs[a_obj].index);
 			switch (a_phase) {
 			case 0:
-				CallThen(a_index, 1, "SetObjectiveDisplayed", idx, false, false);
+				CallThen(a_quest, 0, a_obj + 1, "SetObjectiveDisplayed", idx, false, false);
 				return;
 			case 1:
-				CallThen(a_index, 2, "SetObjectiveDisplayed", idx, true, false);
+				CallThen(a_quest, 1, a_obj + 1, "SetObjectiveDisplayed", idx, true, false);
 				return;
-			case 2:
-				if (it.state == 3) {
-					CallThen(a_index, 3, "SetObjectiveCompleted", idx, true);
-					return;
-				}
-				if (it.state == 5) {
-					CallThen(a_index, 3, "SetObjectiveFailed", idx, true);
-					return;
-				}
-				[[fallthrough]];
 			default:
-				++g_done;
-				Step(a_index + kWorkers, 0);
+				if (objs[a_obj].state == 3) {
+					CallThen(a_quest, 2, a_obj + 1, "SetObjectiveCompleted", idx, true);
+				} else if (objs[a_obj].state == 5) {
+					CallThen(a_quest, 2, a_obj + 1, "SetObjectiveFailed", idx, true);
+				} else {
+					Step(a_quest, 2, a_obj + 1);
+				}
 				return;
 			}
 		}
@@ -146,8 +175,17 @@ namespace Game
 		auto done = std::make_shared<std::promise<void>>();
 		auto fut = done->get_future();
 		task->AddTask([fn = std::move(a_fn), done]() {
-			fn();
-			done->set_value();
+			try {
+				fn();
+			} catch (const std::exception& e) {
+				spdlog::error("main thread task failed: {}", e.what());
+			} catch (...) {
+				spdlog::error("main thread task failed (unknown error)");
+			}
+			try {
+				done->set_value();
+			} catch (...) {
+			}
 		});
 		return fut.wait_for(a_timeout) == std::future_status::ready;
 	}
@@ -183,7 +221,7 @@ namespace Game
 		info.editorID = quest->GetFormEditorID() ? quest->GetFormEditorID() : "";
 		info.flags = static_cast<std::uint16_t>(quest->data.flags.underlying());
 		info.currentStage = quest->GetCurrentStageID();
-		info.running = quest->IsRunning();
+		info.running = Running(quest);
 		info.completed = quest->IsCompleted();
 		for (auto* o : quest->objectives) {
 			if (o) {
@@ -191,6 +229,11 @@ namespace Game
 			}
 		}
 		return info;
+	}
+
+	bool Running(const RE::TESQuest* a_quest)
+	{
+		return a_quest && a_quest->IsEnabled() && !a_quest->IsStopping();
 	}
 
 	void SetStage(std::uint32_t a_formID, std::uint16_t a_stage, std::function<void(bool)> a_done)
@@ -206,7 +249,7 @@ namespace Game
             const bool ok = a_result.IsBool() ? a_result.GetBool() : true;
             auto*      q = RE::TESForm::LookupByID<RE::TESQuest>(a_formID);
             spdlog::info("SetStage {:08X} stage {}: {} (running {}, completed {}, current stage {})", a_formID, a_stage, ok ? "accepted" : "refused",
-                q && q->IsRunning(), q && q->IsCompleted(), q ? q->GetCurrentStageID() : 0);
+                q && Running(q), q && q->IsCompleted(), q ? q->GetCurrentStageID() : 0);
             a_done(ok);
         });
 		if (vm && handle && vm->DispatchMethodCall(handle, "Quest", "SetStage", RE::MakeFunctionArguments(static_cast<std::int32_t>(a_stage)), cb)) {
@@ -230,7 +273,7 @@ namespace Game
 			a_done(false);
 			return;
 		}
-		spdlog::info("Complete {:08X} ({}): running {}, completed {}, current stage {}", a_formID, quest->GetFormEditorID(), quest->IsRunning(), quest->IsCompleted(),
+		spdlog::info("Complete {:08X} ({}): running {}, completed {}, current stage {}", a_formID, quest->GetFormEditorID(), Running(quest), quest->IsCompleted(),
 			quest->GetCurrentStageID());
 		// last resort, on the main thread: the console's CompleteQuest
 		auto viaConsole = [a_formID, a_done] {
@@ -285,26 +328,29 @@ namespace Game
 		if (!dh) {
 			return 0;
 		}
-		g_items.clear();
-		g_refreshQuests = 0;
+		g_quests.clear();
+		g_total = 0;
 		for (auto* quest : dh->GetFormArray<RE::TESQuest>()) {
-			if (!quest || !quest->IsRunning()) {
+			if (!quest || !Running(quest)) {
 				continue;
 			}
-			bool any = false;
+			QuestItem qi;
+			qi.quest = quest->GetFormID();
 			for (auto* o : quest->objectives) {
 				if (!o) {
 					continue;
 				}
 				const auto st = static_cast<std::uint8_t>(o->state.underlying());
 				if (st == 1 || st == 3 || st == 5) {
-					g_items.push_back({ quest->GetFormID(), o->index, st });
-					any = true;
+					qi.objs.push_back({ o->index, st });
 				}
 			}
-			g_refreshQuests += any ? 1 : 0;
+			if (!qi.objs.empty()) {
+				g_total += qi.objs.size();
+				g_quests.push_back(std::move(qi));
+			}
 		}
-		if (g_items.empty()) {
+		if (g_quests.empty()) {
 			Notify(a_notify, "ReSaverHelper: no journal objectives to refresh");
 			return 0;
 		}
@@ -312,17 +358,15 @@ namespace Game
 		g_failedCalls = 0;
 		g_refreshNotify = a_notify;
 		g_refreshing = true;
-		const auto workers = std::min<std::size_t>(kWorkers, g_items.size());
-		g_workersLeft = static_cast<int>(workers);
-		spdlog::info("Journal refresh: {} objective(s) in {} quest(s), {} worker(s)", g_items.size(), g_refreshQuests, workers);
-		Notify(a_notify, std::format("ReSaverHelper: refreshing the quest journal ({} objectives)...", g_items.size()));
-		for (std::size_t w = 0; w < workers; ++w) {
-			Step(w, 0);
-		}
-		return g_items.size();
+		spdlog::info("Journal refresh: {} objective(s) in {} quest(s), one quest at a time", g_total, g_quests.size());
+		Notify(a_notify, std::format("ReSaverHelper: refreshing the quest journal ({} objectives) - keep menus closed until it is done", g_total));
+		Step(0, 0, 0);
+		return g_total;
 	}
 
-	Progress RefreshProgress() { return { g_done.load(), g_items.size(), g_refreshing.load() }; }
+	bool MenuBlocksRefresh() { return MenuOpen(); }
+
+	Progress RefreshProgress() { return { g_done.load(), g_total, g_refreshing.load() }; }
 
 	void OnGameLoaded()
 	{

@@ -3,4 +3,5 @@ set(sources ${sources}
     src/Settings.cpp
     src/Game.cpp
     src/Server.cpp
+    src/Transplant.cpp
 )

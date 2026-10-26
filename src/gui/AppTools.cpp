@@ -170,11 +170,12 @@ bool App::namesLoading() const { return _dbThread.joinable() && !_dbDone; }
 
 void App::drawLookup()
 {
-	ImGui::SetNextWindowSize(ImVec2(900, 560), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin("查找表单", &_showLookup)) {
+	prepareWindow("Find form", ImVec2(0.7f, 0.75f));
+	if (!ImGui::Begin("查找表单", &_showLookup, ImGuiWindowFlags_NoCollapse)) {
 		ImGui::End();
 		return;
 	}
+	maximizeControl("Find form");
 	if (!_db) {
 		if (namesLoading()) {
 			ImGui::TextUnformatted("正在读取插件…");
@@ -501,11 +502,12 @@ void App::compareWith(const std::filesystem::path& a_other)
 
 void App::drawCompare()
 {
-	ImGui::SetNextWindowSize(ImVec2(820, 620), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin("对比存档", &_showCompare)) {
+	prepareWindow("Compare saves", ImVec2(0.7f, 0.75f));
+	if (!ImGui::Begin("对比存档", &_showCompare, ImGuiWindowFlags_NoCollapse)) {
 		ImGui::End();
 		return;
 	}
+	maximizeControl("Compare saves");
 	ImGui::TextUnformatted(("A = " + _compareTitle).c_str());
 	if (ImGui::Button("复制到剪贴板")) {
 		std::string all;

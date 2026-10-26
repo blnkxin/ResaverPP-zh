@@ -1,6 +1,7 @@
 // ReSaver++ - C++ port of ReSaver (FallrimTools) by Mark Fairchild, Apache License 2.0.
 // 本地化修改：界面、提示与报告文字改为简体中文（详见 README.zh-CN.md）。
 #include "Platform.h"
+#include "core/Text.h"
 
 #ifdef _WIN32
 #	include <windows.h>
@@ -17,14 +18,21 @@ namespace platform
 {
 	std::string ToUtf8(const std::filesystem::path& a_path)
 	{
-		const auto u8 = a_path.u8string();
-		return std::string(u8.begin(), u8.end());
+		try {
+			const auto u8 = a_path.u8string();
+			return std::string(u8.begin(), u8.end());
+		} catch (...) {  // a name with broken UTF-16 (rare): shown with ? for what cannot be converted
+			std::string out;
+			for (wchar_t c : a_path.native()) {
+				out += c < 0x80 ? static_cast<char>(c) : '?';
+			}
+			return out;
+		}
 	}
 
-	std::filesystem::path FromUtf8(const std::string& a_utf8)
-	{
-		return std::filesystem::path(std::u8string(a_utf8.begin(), a_utf8.end()));
-	}
+	// never throws: text that is not UTF-8 (a value from an INI written in the Windows code page, an
+	// environment variable from getenv) is read in the Windows code page instead
+	std::filesystem::path FromUtf8(const std::string& a_utf8) { return ess::text::PathFrom(a_utf8); }
 
 	namespace
 	{

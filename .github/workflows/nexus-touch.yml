@@ -1,0 +1,35 @@
+name: Refresh the Nexus mod page
+
+# Manual: makes Nexus rebuild the mod page (and its Changelogs tab) by renaming a file to its
+# current name. Entries added through the API otherwise show only when something else changes the page.
+on:
+  workflow_dispatch:
+    inputs:
+      file_id:
+        description: "Nexus File ID (Files tab -> Advanced -> API)"
+        required: false
+        default: "8208150"
+      name:
+        description: "The file's current name"
+        required: false
+        default: "ReSaverPP"
+
+permissions:
+  contents: read
+
+jobs:
+  touch:
+    runs-on: ubuntu-24.04
+    environment: nexus
+    steps:
+      - name: Rename the file to its own name
+        env:
+          KEY: ${{ secrets.NEXUSMODS_API_KEY }}
+          FILE_ID: ${{ inputs.file_id }}
+          NAME: ${{ inputs.name }}
+        run: |
+          body=$(jq -n --arg n "$NAME" '{name: $n}')
+          code=$(curl -sS -o r.json -w '%{http_code}' -X PUT -H "apikey: $KEY" -H "User-Agent: ReSaverPP-release" \
+            -H "Content-Type: application/json" --data "$body" "https://api.nexusmods.com/v3/mod-files/$FILE_ID")
+          echo "::notice::rename: HTTP $code $(head -c 300 r.json)"
+          [ "${code:0:1}" = "2" ] || exit 1

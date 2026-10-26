@@ -13,6 +13,7 @@
 #include "core/ScriptSources.h"
 #include "core/Orphans.h"
 #include "core/Quests.h"
+#include "core/Transplant.h"
 #include <functional>
 #include <map>
 #include <set>
@@ -49,12 +50,16 @@ static void Usage()
 		"  --batch <list.txt>        purge every script in a ReSaver batch-clean list (\"@@\" lines are skipped\n"
 		"                            unless --batch-all is given)\n"
 		"  --compare <other.ess>     list what changed from this save to the other one\n"
+		"  --transplant <bad.ess|snapshot.txt>  list what the bad save (or a ReSaverHelper snapshot) has that\n"
+		"                            this save does not (from a save file: partial, see the GUI's Transplant page)\n"
 		"  --report <file.txt|.pdf>  write a report (mods with their scripts + anomalies); --report-mods or\n"
 		"                            --report-anomalies limit it to one part. Uses --sources if given.\n"
 		"  --fix-mcm                 fix a SkyUI MCM registration jam (stuck OnConfigManagerReady/RegisterMod work)\n"
 		"  --remove-nonexistent      Clean > Remove instances on non-existent created forms (all of them)\n"
 		"  --quests [text]           list the quests in the save (state, stage, journal objectives); with text,\n"
 		"                            details of the matching ones. Uses --sources to read the plugins.\n"
+		"  --journal                 list the quests the player's journal shows (in progress and completed), as\n"
+		"                            the save lists them. Uses --sources to name them.\n"
 		"  --allow-damaged           edit and write a save even though it has structural problems (risky)\n"
 		"  --charged                 list enchanted / charged items in inventories (max charge, charge)\n"
 		"  --fix-charges <max>       give enchanted items with max charge 0 this max charge (so they can be\n"
@@ -115,10 +120,11 @@ int main(int argc, char** argv)
 	bool                     modsView = false;
 	std::string              sources, profile, removeMod, game, findText;
 	bool                     names = false, havok = false, purify = false, batchAll = false, repMods = false, repAnom = false;
-	std::string              batchFile, compareWith, reportFile;
+	std::string              batchFile, compareWith, reportFile, transplantFrom;
 	bool                     dryRun = false, spawned = false, spawnedGone = false, charged = false, allowDamaged = false;
 	int                      fixCharges = 0;
 	bool                     questsView = false;
+	bool journalOnly = false;
 	std::string              questFilter;
 	modremove::Options       removeOpt;
 	for (int i = 2; i < argc; ++i) {
@@ -146,6 +152,9 @@ int main(int argc, char** argv)
 			termUndef = true;
 		} else if (a == "--remove-nonexistent") {
 			nonexist = true;
+		} else if (a == "--journal") {
+			questsView = true;
+			journalOnly = true;
 		} else if (a == "--quests") {
 			questsView = true;
 			if (i + 1 < argc && argv[i + 1][0] != '-') {
@@ -183,6 +192,8 @@ int main(int argc, char** argv)
 			batchFile = next();
 		} else if (a == "--batch-all") {
 			batchAll = true;
+		} else if (a == "--transplant") {
+			transplantFrom = next();
 		} else if (a == "--compare") {
 			compareWith = next();
 		} else if (a == "--report") {
@@ -209,6 +220,31 @@ int main(int argc, char** argv)
 		}
 	}
 
+	// two snapshots: resaverpp-cli good.txt --transplant bad.txt
+	if (!transplantFrom.empty() && std::filesystem::path(in).extension() == ".txt") {
+		using namespace ess::transplant;
+		const auto good = ReadSnapshot(in);
+		Snapshot bad;
+		if (std::filesystem::path(transplantFrom).extension() == ".txt") {
+			bad = ReadSnapshot(transplantFrom);
+		} else if (auto bs = ess::SaveFile::load(transplantFrom)) {
+			bad = FromSave(*bs, std::filesystem::path(transplantFrom).filename().string());  // partial: read without the game
+		}
+		if (!good.valid || !bad.valid) {
+			std::fprintf(stderr, "%s%s\n", good.error.c_str(), bad.error.c_str());
+			return 1;
+		}
+		std::size_t journal = 0, background = 0;
+		for (const auto& ch : Diff(good, bad)) {
+			if (ch.cat != Category::kQuests) {
+				continue;
+			}
+			(ch.background ? background : journal) += 1;
+			std::printf("  %s %s\n", ch.background ? "[background, unticked]" : "[journal, ticked]   ", ch.label.c_str());
+		}
+		std::printf("quests: %zu journal, %zu background\n", journal, background);
+		return 0;
+	}
 	try {
 		auto save = SaveFile::load(in);
 		auto* p = save->papyrus();
@@ -285,6 +321,38 @@ int main(int argc, char** argv)
 				return 0;
 			}
 		}
+		if (!transplantFrom.empty()) {
+			using namespace ess::transplant;
+			const auto good = FromSave(*save, std::filesystem::path(in).filename().string());
+			Snapshot   bad;
+			if (std::filesystem::path(transplantFrom).extension() == ".txt") {
+				bad = ReadSnapshot(transplantFrom);
+			} else {
+				auto other = SaveFile::load(transplantFrom);
+				bad = FromSave(*other, std::filesystem::path(transplantFrom).filename().string());
+			}
+			if (!bad.valid) {
+				std::fprintf(stderr, "%s\n", bad.error.c_str());
+				return 1;
+			}
+			const auto changes = Diff(good, bad);
+			std::printf("%zu thing(s) the bad save has and this one does not:\n", changes.size());
+			for (int c = 0; c < static_cast<int>(Category::kCount); ++c) {
+				bool head = false;
+				for (const auto& ch : changes) {
+					if (static_cast<int>(ch.cat) != c) {
+						continue;
+					}
+					if (!head) {
+						std::printf("\n%s\n", CategoryName(static_cast<Category>(c)));
+						head = true;
+					}
+					std::printf("  [%s] %s%s%s\n", ch.risk == 0 ? "safe" : ch.risk == 1 ? "caution" : "risky", ch.label.c_str(), ch.detail.empty() ? "" : "   ",
+						ch.detail.c_str());
+				}
+			}
+			return 0;
+		}
 		if (!compareWith.empty()) {
 			auto other = SaveFile::load(compareWith);
 			for (const auto& l : compare::Compare(*save, *other).text()) {
@@ -354,6 +422,19 @@ int main(int argc, char** argv)
 				shown += q.shownObjectives();
 			}
 			std::printf("%zu quests in the save, %zu running, %zu objectives shown in the journal\n", states.size(), running, shown);
+			{
+				bool        found = false;
+				const auto  j = quests::ReadJournal(*save, &found);
+				std::size_t inJournal = 0;
+				for (const auto& q : states) {
+					inJournal += q.inJournal() ? 1 : 0;
+				}
+				if (found) {
+					std::printf("journal: %zu entries, %zu quests listed (read from the player's record)\n", j.size(), inJournal);
+				} else {
+					std::printf("journal: not found in the player's record (objective counts come from the quests' own records)\n");
+				}
+			}
 			auto lower = [](std::string x) {
 				for (auto& c : x) {
 					c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -368,7 +449,7 @@ int main(int argc, char** argv)
 				if (!needle.empty() && lower(edid).find(needle) == std::string::npos && lower(name).find(needle) == std::string::npos) {
 					continue;
 				}
-				if (needle.empty() && !(q.running() && !q.completed())) {
+				if (needle.empty() && (journalOnly ? !q.inJournal() : !(q.running() && !q.completed()))) {
 					continue;
 				}
 				if (++listed > top && needle.empty()) {
@@ -409,6 +490,13 @@ int main(int argc, char** argv)
 							}
 						}
 						std::printf("    objective %u (%s): %s\n", o.index, quests::ObjectiveStateText(state), o.text.c_str());
+					}
+					if (q.journalKnown) {
+						std::string js;
+						for (const auto& o : q.journal) {
+							js += (js.empty() ? "" : ", ") + std::to_string(o.index) + " " + quests::ObjectiveStateText(o.state);
+						}
+						std::printf("    in the journal: %s\n", js.empty() ? "no" : js.c_str());
 					}
 					for (const auto& pr : def->properties) {
 						std::printf("    property %s = %s\n", pr.name.c_str(), pr.type == 1 ? db->describe(pr.form).c_str() : pr.text.c_str());

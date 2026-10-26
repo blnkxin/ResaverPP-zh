@@ -119,16 +119,34 @@ namespace ess::quests
 		std::vector<std::pair<std::int16_t, bool>>     stages;     // stage, done
 		std::vector<ObjectiveState>                    objectives;
 		bool                                           decoded = false;
+		// what the player's journal lists for this quest (the journal itself, read from the player's record;
+		// journalKnown false when the save's journal list could not be found)
+		std::vector<ObjectiveState>                    journal;
+		bool                                           journalKnown = false;
+
+		bool          inJournal() const;  // the journal shows one of its objectives
 
 		bool          running() const { return hasFlags && (flags & 1); }
 		bool          completed() const { return hasFlags && (flags & 2); }
 		bool          failed() const { return hasFlags && (flags & 0x40); }
 		std::int32_t  highestDoneStage() const;  // -1 if none
-		std::size_t   shownObjectives() const;   // objectives the journal shows (states 1, 3, 5)
+		std::size_t   shownObjectives() const;   // objectives the journal shows (states 1, 3, 5): from the journal when known
 		const char*   statusText() const;
 	};
 
-	// Every quest with saved state in the save (its QUST change form), in change form order.
+	// The player's journal: every quest objective the journal lists, as saved in the player's record
+	// (ACHR 00000014): a count, then per objective the quest (RefID), the objective index, the quest
+	// instance and the state. The list is found by its shape (the player's record is not decoded field
+	// by field); a_found tells whether it was found. Entries of quests that no longer run may still be
+	// listed here: the game drops them when the save is loaded.
+	struct JournalEntry
+	{
+		std::uint32_t quest = 0, index = 0, instance = 0, state = 0;
+	};
+	std::vector<JournalEntry> ReadJournal(const SaveFile& a_save, bool* a_found = nullptr);
+
+	// Every quest with saved state in the save (its QUST change form), in change form order, with what
+	// the journal lists for it (quests only in the journal are added at the end).
 	std::vector<QuestState> ReadStates(const SaveFile& a_save);
 	const char*             ObjectiveStateText(std::int32_t a_state);
 }

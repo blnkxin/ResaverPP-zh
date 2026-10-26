@@ -1,6 +1,7 @@
 // ReSaver++ - C++ port of ReSaver (FallrimTools) by Mark Fairchild, Apache License 2.0.
 // 本地化修改：界面、提示与报告文字改为简体中文（详见 README.zh-CN.md）。
 #include "ScriptSources.h"
+#include "Text.h"
 
 #include "Bsa.h"
 #include "Json.h"
@@ -206,7 +207,7 @@ namespace ess
 			std::set<std::string> listed;
 			for (const auto& name : *a_modOrder) {
 				listed.insert(name);
-				const auto dir = a_root / std::filesystem::path(std::u8string(name.begin(), name.end()));
+				const auto dir = a_root / text::PathFrom(name);
 				if (a_progress) {
 					a_progress->setCurrent(name);
 				}
@@ -355,7 +356,7 @@ namespace ess
 			}
 		};
 		for (const auto& m : v.mods) {
-			const auto dir = root / std::filesystem::path(std::u8string(m.begin(), m.end()));
+			const auto dir = root / text::PathFrom(m);
 			if (a_progress) {
 				a_progress->setCurrent(m);
 			}
@@ -399,7 +400,7 @@ namespace ess
 			}
 		}
 		// Vortex decides conflicts with its own rules: the deployed copy wins
-		auto modPath = [&](const std::string& mod) { return root / std::filesystem::path(std::u8string(mod.begin(), mod.end())); };
+		auto modPath = [&](const std::string& mod) { return root / text::PathFrom(mod); };
 		for (auto& [script, list] : _byScript) {
 			auto it = v.winner.find("scripts\\" + script + ".pex");
 			if (it == v.winner.end()) {
@@ -460,8 +461,8 @@ namespace ess
 		const auto target = j.str("targetPath");
 		v.method = j.str("deploymentMethod");
 		v.gameId = j.str("gameId");
-		v.stagingPath = std::filesystem::path(std::u8string(staging.begin(), staging.end()));
-		v.dataPath = target.empty() ? a_manifest.parent_path() : std::filesystem::path(std::u8string(target.begin(), target.end()));
+		v.stagingPath = text::PathFrom(staging);
+		v.dataPath = target.empty() ? a_manifest.parent_path() : text::PathFrom(target);
 		std::set<std::string> seen;
 		if (const auto* files = j.get("files"); files && files->type == json::Value::Type::kArray) {
 			for (const auto& f : files->a) {
@@ -533,7 +534,7 @@ namespace ess
 		if (a_folder == "Data") {
 			return root;
 		}
-		return root / std::filesystem::path(std::u8string(a_folder.begin(), a_folder.end()));
+		return root / text::PathFrom(a_folder);
 	}
 
 	std::optional<std::filesystem::path> ScriptSources::pluginPath(const std::string& a_plugin) const
@@ -545,7 +546,7 @@ namespace ess
 		const auto dir = folderPath(it->second);
 		std::error_code ec;
 		// exact name first, then a case-insensitive match
-		auto p = dir / std::filesystem::path(std::u8string(a_plugin.begin(), a_plugin.end()));
+		auto p = dir / text::PathFrom(a_plugin);
 		if (std::filesystem::exists(p, ec)) {
 			return p;
 		}
@@ -619,7 +620,7 @@ namespace ess
 				} else if (general && key == "gamePath") {
 					game = val;
 				} else if (settings && key == "base_directory") {
-					m.base = std::filesystem::path(std::u8string(val.begin(), val.end()));
+					m.base = text::PathFrom(val);
 				} else if (settings && key == "mod_directory") {
 					mods = val;
 				} else if (settings && key == "profiles_directory") {
@@ -635,13 +636,13 @@ namespace ess
 				if (auto p = v.find("%BASE_DIR%"); p != std::string::npos) {
 					v.replace(p, 10, U8(m.base));
 				}
-				return std::filesystem::path(std::u8string(v.begin(), v.end()));
+				return text::PathFrom(v);
 			};
 			m.modsDir = resolve(mods, "mods");
 			m.profilesDir = resolve(profiles, "profiles");
 			m.overwriteDir = resolve(overwrite, "overwrite");
 			if (!game.empty()) {
-				m.gamePath = std::filesystem::path(std::u8string(game.begin(), game.end()));
+				m.gamePath = text::PathFrom(game);
 			}
 			std::error_code ec;
 			for (const auto& e : std::filesystem::directory_iterator(m.profilesDir, ec)) {
@@ -660,8 +661,8 @@ namespace ess
 	{
 		std::vector<std::filesystem::path> inis;
 		std::error_code                    ec;
-		if (const char* la = std::getenv("LOCALAPPDATA")) {
-			for (const auto& e : std::filesystem::directory_iterator(std::filesystem::path(la) / "ModOrganizer", ec)) {
+		if (const auto la = text::EnvPath("LOCALAPPDATA"); !la.empty()) {
+			for (const auto& e : std::filesystem::directory_iterator(la / "ModOrganizer", ec)) {
 				inis.push_back(e.path() / "ModOrganizer.ini");
 			}
 		}
@@ -698,9 +699,9 @@ namespace ess
 	{
 		std::vector<std::filesystem::path> inis;
 		inis.push_back(a_modsFolder.parent_path() / "ModOrganizer.ini");
-		if (const char* la = std::getenv("LOCALAPPDATA")) {
+		if (const auto la = text::EnvPath("LOCALAPPDATA"); !la.empty()) {
 			std::error_code ec;
-			for (const auto& e : std::filesystem::directory_iterator(std::filesystem::path(la) / "ModOrganizer", ec)) {
+			for (const auto& e : std::filesystem::directory_iterator(la / "ModOrganizer", ec)) {
 				inis.push_back(e.path() / "ModOrganizer.ini");
 			}
 		}

@@ -376,6 +376,22 @@ void App::drawLiveStatus()
 
 // ---- journal refresh (live) -----------------------------------------------------------------------
 
+void App::startLiveRefresh()
+{
+	_live.request({ "REFRESH", liveNotifyMode() }, [this](const LiveLink::Reply& r) {
+		if (!LiveLink::Ok(r)) {
+			_status = "The game could not refresh the journal: " + LiveLink::Error(r);
+			return;
+		}
+		const auto n = std::strtoull(LiveLink::Field(r, 0).c_str(), nullptr, 10);
+		if (n == 0) {
+			_status = "Nothing to refresh: no running quest shows an objective.";
+			return;
+		}
+		_liveRefresh = LiveRefresh{ true, 0, n, 0 };
+	});
+}
+
 void App::drawRefreshJournal(bool a_compact)
 {
 	const auto info = _live.info();
@@ -399,27 +415,16 @@ void App::drawRefreshJournal(bool a_compact)
 	}
 	ImGui::BeginDisabled(!can || _liveRefresh.running);
 	if (ImGui::Button("在游戏中刷新任务日志")) {
-		_live.request({ "REFRESH", "none" }, [this](const LiveLink::Reply& r) {
-			if (!LiveLink::Ok(r)) {
-				_status = "游戏没能刷新任务日志：" + LiveErrorText(LiveLink::Error(r));
-				return;
-			}
-			const auto n = std::strtoull(LiveLink::Field(r, 0).c_str(), nullptr, 10);
-			if (n == 0) {
-				_status = "没有可刷新的：没有进行中的任务显示目标。";
-				liveNotify("没有可刷新的任务目标");
-				return;
-			}
-			_liveRefresh = LiveRefresh{ true, 0, n, 0 };
-			liveNotify("正在刷新任务日志…");
-		});
+		startLiveRefresh();
+	}
 	}
 	ImGui::EndDisabled();
 	if (!can) {
 		LiveHint(info);
 	} else if (ImGui::IsItemHovered()) {
 		ImGui::SetTooltip("对每个进行中的任务，把日志里显示的目标先隐藏再显示（已完成/已失败的复原），让游戏重建列表。\n"
-						  "能把日志不再显示的任务和目标找回来（和 Quest Journal Limit Bug Fixer 是同一个修法）。");
+						  "能把日志不再显示的任务和目标找回来（和 Quest Journal Limit Bug Fixer 是同一个修法）。\n\n"
+						  "先在游戏里存个档，并在它做完之前不要打开菜单（helper 4 会等菜单关掉）。");
 	}
 	if (_liveRefresh.running) {
 		ImGui::SameLine();
@@ -697,6 +702,13 @@ void App::drawQuestDetail()
 	ImGui::TextUnformatted(def && !def->name.empty() ? def->name.c_str() : (def ? def->edid.c_str() : Fmt("%08X", q->formID).c_str()));
 	Dim(Fmt("%s  |  %08X  |  %s", def ? def->edid.c_str() : "?", q->formID, def ? _db->plugins()[def->plugin].c_str() : _save->pluginOf(q->formID).c_str()));
 	ImGui::Text("本存档中：%s，已完成最高阶段 %d，日志里显示 %zu 个目标", q->statusText(), q->highestDoneStage(), q->shownObjectives());
+	if (q->journalKnown) {
+		std::string js;
+		for (const auto& o : q->journal) {
+			js += (js.empty() ? "" : "，") + Fmt("目标 %d %s", o.index, quests::ObjectiveStateText(o.state));
+		}
+		Dim(js.empty() ? std::string("日志里没有列出它。") : "日志里列出：" + js);
+	}
 	if (live) {
 		auto it = _liveQuests.find(q->formID);
 		if (it != _liveQuests.end() && it->second.valid) {

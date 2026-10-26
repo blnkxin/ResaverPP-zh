@@ -13,11 +13,13 @@
 #include "UiGlyphs.h"  // generated: the code points the Chinese UI text uses (i18n/gen_glyph_ranges.py)
 
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -25,8 +27,94 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+static FILE* _wfopen_compat(const std::filesystem::path& p, const char*) { return _wfopen(p.c_str(), L"ab"); }
+#else
+static FILE* _wfopen_compat(const std::filesystem::path& p, const char* m) { return std::fopen(p.c_str(), m); }
+#endif
+
 namespace
 {
+	// ---- start-up log: ReSaverPP-startup.log next to the exe (else in %TEMP%) -------------------------
+	// A window that opens and closes at once says nothing: this file says how far the start got, what
+	// OpenGL the PC has, and where it crashed. Overwritten at every start.
+	std::filesystem::path g_logPath;
+	std::string           g_step = "starting";
+
+	void Log(const std::string& a_line)
+	{
+		if (g_logPath.empty()) {
+			return;
+		}
+		if (FILE* f = _wfopen_compat(g_logPath, "ab")) {
+			std::fprintf(f, "%s\r\n", a_line.c_str());
+			std::fclose(f);
+		}
+	}
+
+	void Step(const std::string& a_step)
+	{
+		g_step = a_step;
+		Log("step: " + a_step);
+	}
+
+	void OpenLog()
+	{
+#ifdef _WIN32
+		wchar_t exe[MAX_PATH * 4] = L"";
+		GetModuleFileNameW(nullptr, exe, static_cast<DWORD>(std::size(exe)));
+		std::vector<std::filesystem::path> where{ std::filesystem::path(exe).parent_path() / "ReSaverPP-startup.log" };
+		wchar_t tmp[MAX_PATH + 1] = L"";
+		if (GetTempPathW(MAX_PATH, tmp)) {
+			where.push_back(std::filesystem::path(tmp) / "ReSaverPP-startup.log");
+		}
+		for (const auto& w : where) {
+			if (FILE* f = _wfopen(w.c_str(), L"wb")) {
+				std::fclose(f);
+				g_logPath = w;
+				break;
+			}
+		}
+		OSVERSIONINFOW vi{};  // the build number is enough to tell Windows 10 from 11
+		vi.dwOSVersionInfoSize = sizeof(vi);
+		using RtlGetVersionFn = LONG(WINAPI*)(OSVERSIONINFOW*);
+		if (auto fn = reinterpret_cast<RtlGetVersionFn>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion"))) {
+			fn(&vi);
+		}
+		Log(std::string("ReSaver++ ") + RESAVERPP_VERSION + " starting; Windows " + std::to_string(vi.dwMajorVersion) + "." + std::to_string(vi.dwMinorVersion) +
+			" build " + std::to_string(vi.dwBuildNumber) + "; exe " + platform::ToUtf8(std::filesystem::path(exe)));
+#endif
+	}
+
+#ifdef _WIN32
+	void Fatal(const std::string& a_text)
+	{
+		Log("FATAL: " + a_text);
+		const auto msg = a_text + "\n\nDetails are in " + (g_logPath.empty() ? std::string("(no log could be written)") : platform::ToUtf8(g_logPath)) +
+						 ".\nPlease send that file with your report.";
+		MessageBoxW(nullptr, std::filesystem::path(platform::FromUtf8(msg)).wstring().c_str(), L"ReSaver++ could not start", MB_OK | MB_ICONERROR);
+	}
+
+	LONG WINAPI OnCrash(EXCEPTION_POINTERS* a_ex)
+	{
+		const auto* rec = a_ex ? a_ex->ExceptionRecord : nullptr;
+		const auto  addr = rec ? reinterpret_cast<std::uintptr_t>(rec->ExceptionAddress) : 0;
+		std::string where = "?";
+		HMODULE     mod = nullptr;
+		if (addr && GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, reinterpret_cast<LPCWSTR>(addr), &mod)) {
+			wchar_t name[MAX_PATH] = L"";
+			GetModuleFileNameW(mod, name, MAX_PATH);
+			char off[32];
+			std::snprintf(off, sizeof(off), "+%llX", static_cast<unsigned long long>(addr - reinterpret_cast<std::uintptr_t>(mod)));
+			where = platform::ToUtf8(std::filesystem::path(name).filename()) + off;
+		}
+		char code[16];
+		std::snprintf(code, sizeof(code), "%08lX", rec ? rec->ExceptionCode : 0ul);
+		Fatal("ReSaver++ crashed while " + g_step + " (exception " + code + " in " + where + ").");
+		return EXCEPTION_EXECUTE_HANDLER;
+	}
+#endif
+
 	App*                     g_app = nullptr;
 	std::vector<std::string> g_dropped;
 
@@ -162,6 +250,21 @@ namespace
 			16.0f * a_scale, true);
 	}
 
+	// the start page logo: a big bold font with only the characters it needs (a big font with every
+	// character would take a lot of texture memory)
+	ImFont* g_title = nullptr;
+	void    LoadTitleFont(float a_scale)
+	{
+		static const ImWchar ranges[] = { 0x0020, 0x005A, 0 };  // space to Z: capitals, digits, +
+		for (const char* f : { "C:\\Windows\\Fonts\\segoeuib.ttf", "C:\\Windows\\Fonts\\arialbd.ttf",
+				 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf" }) {
+			std::error_code ec;
+			if (std::filesystem::exists(f, ec) && (g_title = ImGui::GetIO().Fonts->AddFontFromFileTTF(f, 110.0f * a_scale, nullptr, ranges)) != nullptr) {
+				return;
+			}
+		}
+	}
+
 	void LoadFonts(float a_scale)
 	{
 		AddFont({ "C:\\Windows\\Fonts\\segoeui.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf" },
@@ -190,20 +293,44 @@ int RunApp(int argc, char** argv)
 	// tools install one) can't load there - "GetTickCount could not be located in api-ms-win-core-sysinfo-l1-2-1.dll".
 	// GLFW just falls back to xinput1_3, but Windows showed that message box first. ReSaver++ doesn't use gamepads.
 	SetErrorMode(GetErrorMode() | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
+	OpenLog();
+	SetUnhandledExceptionFilter(OnCrash);
 #endif
+	static std::string glfwError;
+	glfwSetErrorCallback([](int a_code, const char* a_text) {
+		glfwError = std::to_string(a_code) + ": " + (a_text ? a_text : "");
+		Log("GLFW error " + glfwError);
+	});
+	Step("starting the window system");
 	if (!glfwInit()) {
 		std::fputs("初始化 GLFW 失败\n", stderr);
+#ifdef _WIN32
+		Fatal("窗口系统无法启动（GLFW " + glfwError + "）。");
+#endif
 		return 1;
 	}
+	Step("creating the window (OpenGL 3.0)");
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 	GLFWwindow* window = glfwCreateWindow(1600, 950, "ReSaver++ 中文版", nullptr, nullptr);
 	if (!window) {
 		std::fputs("无法创建窗口（需要 OpenGL 3.0）\n", stderr);
+#ifdef _WIN32
+		Fatal("无法创建窗口：ReSaver++ 需要显卡驱动的 OpenGL 3.0（" + glfwError +
+			  "）。\n\n请更新显卡驱动（从 NVIDIA / AMD / Intel 官网，不要用 Windows 更新）。双显卡笔记本上，"
+			  "把 ReSaver++ 设为使用高性能显卡。远程桌面和一些虚拟机没有 OpenGL 3。");
+#endif
 		glfwTerminate();
 		return 1;
 	}
 	glfwMakeContextCurrent(window);
+	{
+		auto str = [](GLenum a_what) {
+			const auto* t = glGetString(a_what);
+			return t ? std::string(reinterpret_cast<const char*>(t)) : std::string("?");
+		};
+		Log("OpenGL " + str(GL_VERSION) + "; " + str(GL_RENDERER) + " (" + str(GL_VENDOR) + ")");
+	}
 	glfwSwapInterval(1);
 #ifdef _WIN32
 	timeBeginPeriod(1);  // 1 ms timer resolution, so the frame cap below waits ~16 ms, not 31
@@ -213,6 +340,7 @@ int RunApp(int argc, char** argv)
 	float xs = 1, ys = 1;
 	glfwGetWindowContentScale(window, &xs, &ys);
 
+	Step("loading fonts and drawing set-up");
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGui::GetIO().IniFilename = nullptr;
@@ -220,12 +348,15 @@ int RunApp(int argc, char** argv)
 	ImGui::GetStyle().ScaleAllSizes(xs);
 	LoadFonts(xs);
 	LoadMonoFont(xs);
+	LoadTitleFont(xs);
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 130");
 
+	Step("reading the settings and starting ReSaver++");
 	App app;
 	g_app = &app;
 	app.monoFont = g_mono;
+	app.titleFont = g_title;
 	app.uploadTexture = [](const std::uint8_t* px, int w, int h) -> std::uint64_t {
 		GLuint tex = 0;
 		glGenTextures(1, &tex);
@@ -242,8 +373,14 @@ int RunApp(int argc, char** argv)
 	};
 
 	if (argc > 1) {
+		Step("opening " + std::string(argv[1]));
 		app.openAny(platform::FromUtf8(argv[1]));
+	} else if (!std::getenv("RESAVERPP_SCREENSHOT")) {
+		Step("opening the newest save");
+		app.openNewestAtStart();
 	}
+	Step("drawing the first frames");
+	int drawn = 0;
 	if (const char* t = std::getenv("RESAVERPP_TEST_CAT")) {
 		app.testSelect(std::atoi(t), std::getenv("RESAVERPP_TEST_FILTER"), std::getenv("RESAVERPP_TEST_ANALYSIS") != nullptr);
 		if (const char* rm = std::getenv("RESAVERPP_TEST_REMOVE")) {
@@ -283,7 +420,38 @@ int RunApp(int argc, char** argv)
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
-		app.draw();
+		// an error while drawing (a file name the system cannot convert, a damaged file...) is reported in
+		// the error box and the window keeps running, instead of closing
+		{
+			ImGuiErrorRecoveryState state;
+			ImGui::ErrorRecoveryStoreState(&state);
+			std::string failed;
+			try {
+				app.draw();
+			} catch (const std::exception& e) {
+				failed = e.what();
+			} catch (...) {
+				failed = "unknown error";
+			}
+			if (!failed.empty()) {
+				ImGui::ErrorRecoveryTryToRecoverState(&state);
+				static std::string last;
+				if (failed != last) {  // once per different error, not every frame
+					last = failed;
+					Log("ERROR while " + g_step + ": " + failed);
+					app.reportError("Something went wrong (ReSaver++ keeps running): " + failed + "\n\nPlease report it with ReSaverPP-startup.log.");
+				}
+				// the app's own error box may be past the point that failed: say it here too
+				const ImGuiViewport* vp = ImGui::GetMainViewport();
+				ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + 60), ImGuiCond_Always, ImVec2(0.5f, 0));
+				ImGui::SetNextWindowSize(ImVec2(std::min(760.0f, vp->WorkSize.x - 40), 0));
+				ImGui::Begin("ReSaver++ hit an error", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
+				ImGui::TextWrapped("While %s: %s", g_step.c_str(), failed.c_str());
+				ImGui::Spacing();
+				ImGui::TextWrapped("Please report this on the mod page with the file ReSaverPP-startup.log (next to ReSaverPP.exe, or in %%TEMP%%).");
+				ImGui::End();
+			}
+		}
 		ImGui::Render();
 
 		int w, h;
@@ -308,6 +476,9 @@ int RunApp(int argc, char** argv)
 			break;
 		}
 		glfwSwapBuffers(window);
+		if (++drawn == 60) {
+			Step("running (60 frames drawn)");
+		}
 
 		// Frame cap of our own: some drivers ignore the swap interval (hybrid-GPU laptops, vsync forced off
 		// in the NVIDIA / AMD control panel), and the window would then draw thousands of frames a second
@@ -336,6 +507,7 @@ int RunApp(int argc, char** argv)
 	ImGui::DestroyContext();
 	glfwDestroyWindow(window);
 	glfwTerminate();
+	Step("closed normally");
 	return 0;
 }
 
@@ -353,7 +525,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 	for (auto& a : args) {
 		argv.push_back(a.data());
 	}
-	return RunApp(static_cast<int>(argv.size()), argv.data());
+	try {
+		return RunApp(static_cast<int>(argv.size()), argv.data());
+	} catch (const std::exception& e) {
+		Fatal("ReSaver++ stopped while " + g_step + ": " + e.what());
+	} catch (...) {
+		Fatal("ReSaver++ stopped while " + g_step + " (unknown error).");
+	}
+	return 1;
 }
 #else
 int main(int argc, char** argv)

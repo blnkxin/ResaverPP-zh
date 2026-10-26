@@ -2,6 +2,9 @@
 // 本地化修改：界面、提示与报告文字改为简体中文（详见 README.zh-CN.md）。
 #include "Save.h"
 
+#include <algorithm>
+#include <cctype>
+
 #include "lz4.h"
 #include "miniz.h"
 
@@ -642,5 +645,61 @@ namespace ess
 	{
 		auto it = _cfIdx.find(a_id.data);
 		return it == _cfIdx.end() ? nullptr : &changeForms[it->second];
+	}
+
+	std::filesystem::path EditedSaveName(const std::filesystem::path& a_save, const std::string& a_tag, bool a_unique)
+	{
+		std::string tag;
+		for (char c : a_tag) {
+			if (std::isalnum(static_cast<unsigned char>(c))) {
+				tag += c;
+			}
+		}
+		const auto stem = a_save.stem().u8string();
+		const std::string s(stem.begin(), stem.end());
+		// ..._<14 digits><old tag?>_<digits>_<digits>
+		std::size_t tail = s.size();
+		int         fields = 0;
+		while (fields < 2 && tail > 0) {
+			const auto us = s.rfind('_', tail - 1);
+			if (us == std::string::npos) {
+				break;
+			}
+			bool digits = us + 1 < tail;
+			for (std::size_t i = us + 1; i < tail; ++i) {
+				digits = digits && std::isdigit(static_cast<unsigned char>(s[i]));
+			}
+			if (!digits) {
+				break;
+			}
+			tail = us;
+			++fields;
+		}
+		std::string head, rest;  // head: up to and with the date; rest: "_<level>_<n>"
+		bool        gameName = false;
+		if (fields == 2 && s.rfind("Save", 0) == 0) {
+			const auto us = s.rfind('_', tail - 1);
+			if (us != std::string::npos && tail - us - 1 >= 14) {
+				const auto date = s.substr(us + 1, 14);
+				if (std::all_of(date.begin(), date.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)); })) {
+					head = s.substr(0, us + 1 + 14);  // an earlier tag after the date is replaced
+					rest = s.substr(tail);
+					gameName = true;
+				}
+			}
+		}
+		auto make = [&](int a_n) {
+			const auto t = tag + (a_n > 1 ? std::to_string(a_n) : std::string());
+			const auto name = gameName ? head + t + rest : s + "_" + t;
+			auto       p = a_save;
+			p.replace_filename(std::filesystem::path(std::u8string(name.begin(), name.end()) + u8".ess"));
+			return p;
+		};
+		auto p = make(1);
+		std::error_code ec;
+		for (int n = 2; a_unique && std::filesystem::exists(p, ec) && n < 1000; ++n) {
+			p = make(n);
+		}
+		return p;
 	}
 }

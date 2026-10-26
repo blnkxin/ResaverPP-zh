@@ -3,6 +3,7 @@
 #include "Game.h"
 #include "Protocol.h"
 #include "Settings.h"
+#include "Transplant.h"
 
 namespace Server
 {
@@ -113,7 +114,7 @@ namespace Server
 							Outcome o;
 							o.ok = ok;
 							if (auto* q = RE::TESForm::LookupByID<RE::TESQuest>(formID)) {
-								o.running = q->IsRunning();
+								o.running = Game::Running(q);
 								o.completed = q->IsCompleted();
 								o.stage = q->GetCurrentStageID();
 							}
@@ -157,9 +158,67 @@ namespace Server
 				}
 				return { "OK", fut.get() ? "1" : "0" };
 			}
+			if (cmd == "SNAPSHOT") {
+				struct State
+				{
+					std::filesystem::path path;
+					std::string           error;
+					std::size_t           lines = 0;
+				};
+				auto st = std::make_shared<State>();
+				if (!Game::RunOnMain([st] { st->path = Transplant::Snapshot(st->error, st->lines); }, 60s)) {
+					return err("the game is busy (it did not answer within 60 seconds)");
+				}
+				if (st->path.empty()) {
+					return err(st->error);
+				}
+				return { "OK", st->path.string(), std::to_string(st->lines) };
+			}
+			if (cmd == "APPLY") {
+				auto       why = std::make_shared<std::string>("the game did not run it");
+				const auto record = std::vector<std::string>(f.begin() + 2, f.end());
+				if (!Game::RunOnMain([why, record] {
+						*why = Transplant::Apply(record);
+						std::string what;
+						for (std::size_t i = 0; i < record.size() && i < 6; ++i) {
+							what += (i ? " " : "") + record[i];
+						}
+						spdlog::info("Apply {}: {}", what, why->empty() ? "done" : *why);
+					}, kWait)) {
+					return { "OK", "?" };
+				}
+				return why->empty() ? std::vector<std::string>{ "OK", "1" } : std::vector<std::string>{ "OK", "0", *why };
+			}
+			if (cmd == "RESOLVE") {
+				auto       id = std::make_shared<std::uint32_t>(0);
+				const auto plugin = arg(0), local = arg(1);
+				if (!Game::RunOnMain([id, plugin, local] {
+						auto* dh = RE::TESDataHandler::GetSingleton();
+						std::uint32_t l = 0;
+						try {
+							l = static_cast<std::uint32_t>(std::stoul(local, nullptr, 16));
+						} catch (...) {
+						}
+						auto* form = dh ? dh->LookupForm(l, plugin) : nullptr;
+						*id = form ? form->GetFormID() : 0;
+					}, kWait)) {
+					return err("the game is busy");
+				}
+				if (!*id) {
+					return err(local + " from " + plugin + " is not in this game");
+				}
+				return { "OK", std::format("{:08X}", *id) };
+			}
 			if (cmd == "REFRESH") {
 				auto       n = std::make_shared<std::atomic<std::size_t>>(0);
 				const auto notify = arg(0);
+				auto blocked = std::make_shared<std::atomic<bool>>(false);
+				if (!Game::RunOnMain([blocked] { blocked->store(Game::MenuBlocksRefresh()); }, kWait)) {
+					return err("the game is busy (it did not answer within 30 seconds)");
+				}
+				if (blocked->load()) {
+					return err("close the game's menus first (the journal is refreshed only while you are playing)");
+				}
 				if (!Game::RunOnMain([n, notify] { n->store(Game::StartRefresh(notify)); }, kWait)) {
 					return err("the game is busy (it did not answer within 30 seconds); the refresh starts when it can");
 				}
@@ -230,7 +289,19 @@ namespace Server
 							const auto line = pending.substr(0, nl);
 							pending.erase(0, nl + 1);
 							const auto fields = proto::Split(line);
-							auto       reply = Handle(fields);
+							const auto cmd = fields.size() > 1 ? fields[1] : std::string();
+							const bool quiet = cmd == "HELLO" || cmd == "APPLY" || cmd == "PROGRESS";  // APPLY logs itself
+							if (!quiet) {
+								std::string what;
+								for (std::size_t i = 1; i < fields.size() && i < 5; ++i) {
+									what += (i > 1 ? " " : "") + fields[i];
+								}
+								spdlog::info("Request: {}", what);
+							}
+							auto reply = Handle(fields);
+							if (!quiet || (!reply.empty() && reply[0] != "OK")) {
+								spdlog::info("Reply to {}: {}{}", cmd, reply.empty() ? "?" : reply[0], reply.size() > 1 ? " " + reply[1] : "");
+							}
 							reply.insert(reply.begin(), fields.empty() ? std::string("0") : fields[0]);
 							const auto out = proto::Join(reply) + "\n";
 							DWORD      wrote = 0;

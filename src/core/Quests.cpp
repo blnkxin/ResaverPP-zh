@@ -5,6 +5,7 @@
 #include "ChangeFormData.h"
 
 #include <algorithm>
+#include <unordered_map>
 #include <cctype>
 #include <stdexcept>
 #include <cstdio>
@@ -378,10 +379,20 @@ namespace ess::quests
 		return best;
 	}
 
+	bool QuestState::inJournal() const
+	{
+		for (const auto& o : journal) {
+			if (o.state == 1 || o.state == 3 || o.state == 5) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	std::size_t QuestState::shownObjectives() const
 	{
 		std::size_t n = 0;
-		for (const auto& o : objectives) {
+		for (const auto& o : journalKnown ? journal : objectives) {
 			n += (o.state == 1 || o.state == 3 || o.state == 5) ? 1 : 0;
 		}
 		return n;
@@ -458,6 +469,75 @@ namespace ess::quests
 		}
 	}
 
+	std::vector<JournalEntry> ReadJournal(const SaveFile& a_save, bool* a_found)
+	{
+		if (a_found) {
+			*a_found = false;
+		}
+		const ChangeForm* player = nullptr;
+		for (const auto& c : a_save.changeForms) {
+			if (static_cast<ChangeFormType>(c.typeCode()) == ChangeFormType::ACHR && a_save.formIDOf(c.refID) == 0x14) {
+				player = &c;
+				break;
+			}
+		}
+		if (!player) {
+			return {};
+		}
+		const auto d = cf::Body(*player);
+		auto       u32 = [&](std::size_t p) { return static_cast<std::uint32_t>(d[p]) | (d[p + 1] << 8) | (d[p + 2] << 16) | (static_cast<std::uint32_t>(d[p + 3]) << 24); };
+		// a vsval count: the low 2 bits say 1, 2 or 3 bytes
+		auto vsval = [&](std::size_t p, std::size_t& a_len) -> std::uint32_t {
+			const auto sz = d[p] & 3;
+			if (sz == 0) {
+				a_len = 1;
+				return d[p] >> 2;
+			}
+			if (sz == 1 && p + 1 < d.size()) {
+				a_len = 2;
+				return (d[p] | (d[p + 1] << 8)) >> 2;
+			}
+			if (sz == 2 && p + 2 < d.size()) {
+				a_len = 3;
+				return (d[p] | (d[p + 1] << 8) | (d[p + 2] << 16)) >> 2;
+			}
+			a_len = 0;
+			return 0;
+		};
+		auto entryOk = [&](std::size_t r) {
+			const std::uint32_t ref = (d[r] << 16) | (d[r + 1] << 8) | d[r + 2];
+			return ref != 0 && (ref >> 22) != 3 && u32(r + 3) < 1000 && u32(r + 7) <= 0xFFFF && u32(r + 11) <= 5;
+		};
+		// the longest run of well-formed entries preceded by its own count
+		std::size_t bestAt = 0, bestN = 0;
+		for (std::size_t p = 0; p + 4 < d.size(); ++p) {
+			std::size_t len = 0;
+			const auto  n = vsval(p, len);
+			if (n == 0 || n > 5000 || n <= bestN || p + len + 15 * static_cast<std::size_t>(n) > d.size()) {
+				continue;
+			}
+			bool good = true;
+			for (std::uint32_t k = 0; k < n && good; ++k) {
+				good = entryOk(p + len + 15 * k);
+			}
+			if (good) {
+				bestAt = p + len;
+				bestN = n;
+			}
+		}
+		std::vector<JournalEntry> out;
+		for (std::size_t k = 0; k < bestN; ++k) {
+			const auto r = bestAt + 15 * k;
+			RefID      id;
+			id.data = (d[r] << 16) | (d[r + 1] << 8) | d[r + 2];
+			out.push_back({ a_save.formIDOf(id), u32(r + 3), u32(r + 7), u32(r + 11) });
+		}
+		if (a_found) {
+			*a_found = bestN > 0;
+		}
+		return out;
+	}
+
 	std::vector<QuestState> ReadStates(const SaveFile& a_save)
 	{
 		std::vector<QuestState> out;
@@ -471,6 +551,26 @@ namespace ess::quests
 			q.decoded = d.complete;
 			Walk(d.root, q);
 			out.push_back(std::move(q));
+		}
+		bool       found = false;
+		const auto journal = ReadJournal(a_save, &found);
+		if (found) {
+			std::unordered_map<std::uint32_t, std::size_t> at;
+			for (std::size_t i = 0; i < out.size(); ++i) {
+				out[i].journalKnown = true;
+				at[out[i].formID] = i;
+			}
+			for (const auto& e : journal) {
+				auto it = at.find(e.quest);
+				if (it == at.end()) {
+					QuestState q;
+					q.formID = e.quest;
+					q.journalKnown = true;
+					it = at.emplace(e.quest, out.size()).first;
+					out.push_back(std::move(q));
+				}
+				out[it->second].journal.push_back({ static_cast<std::int32_t>(e.index), static_cast<std::int32_t>(e.state) });
+			}
 		}
 		return out;
 	}

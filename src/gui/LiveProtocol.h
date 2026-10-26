@@ -11,11 +11,15 @@
 //   SETSTAGE <formid hex> <stage> <notify> <message>   -> OK <1 set, 0 refused, ? still running>  <running 0|1>  <completed 0|1>  <current stage>
 //   COMPLETE <formid hex> <notify> <message>           -> OK <1 if the quest is now completed, 0 if not, ? still running>
 //                                         (CompleteAllObjectives + CompleteQuest: no stage script runs; version 3)
-//   REFRESH <notify>                      -> OK  <objectives to refresh>        (runs in the background)
+//   REFRESH <notify>                      -> OK  <objectives to refresh>        (runs in the background, one quest at a time;
+//                                            ERR while a menu is open; pauses while one is opened - version 4)
 //   PROGRESS                              -> OK  <done>  <total>  <running 0|1>
 //   GETOPTION <name>                      -> OK  <value>
 //   SETOPTION <name> <value>              -> OK                                 (saved to ReSaverHelper.ini)
 //   NOTIFY <notify> <message>             -> OK
+//   SNAPSHOT                              -> OK  <file written>  <records>      (version 5: see Transplant.h)
+//   APPLY <record fields...>              -> OK  1 | OK 0 <why not> | OK ?     (one snapshot record, applied to the loaded game)
+//   RESOLVE <plugin> <local id hex>       -> OK  <runtime form id hex>
 // <notify>: hud (top-left notification), box (message box), none, or ini (the helper's own setting).
 #include <string>
 #include <vector>
@@ -23,7 +27,7 @@
 namespace proto
 {
 	inline constexpr const wchar_t* kPipeName = L"\\\\.\\pipe\\ReSaverHelper";
-	inline constexpr int            kHelperVersion = 3;
+	inline constexpr int            kHelperVersion = 10;
 
 	inline std::string Escape(const std::string& a_in)
 	{

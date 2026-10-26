@@ -1,0 +1,85 @@
+name: Update another Nexus file
+
+# Manual: uploads a zip that is in this repository (e.g. helper/release/ReSaverHelper.zip) as a new
+# version of an existing file on the mod page (e.g. the optional ReSaverHelper file).
+# The changelog is posted first (under its own version name), then the file.
+
+on:
+  workflow_dispatch:
+    inputs:
+      zip:
+        description: "Path of the zip in this repository"
+        required: true
+        default: "helper/release/ReSaverHelper.zip"
+      file_id:
+        description: "Nexus File ID of the file to update (ReSaverHelper: 8222850)"
+        required: true
+        default: "8222850"
+      name:
+        description: "File name shown on Nexus"
+        required: true
+        default: "ReSaverHelper"
+      version:
+        description: "File version"
+        required: true
+      category:
+        description: "main, optional or miscellaneous"
+        required: true
+        default: "optional"
+      description:
+        description: "File description on the Files tab"
+        required: false
+        default: ""
+      changelog_version:
+        description: "Changelog entry name (letters, digits, . and - only), e.g. ReSaverHelper-4; empty = none"
+        required: false
+        default: ""
+      changelog:
+        description: "Changelog text (' | ' separates lines)"
+        required: false
+        default: ""
+      mod_manager:
+        description: "Allow mod manager downloads"
+        required: false
+        default: "true"
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    environment: nexus
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Post changelog
+        if: ${{ inputs.changelog != '' && inputs.changelog_version != '' }}
+        env:
+          KEY: ${{ secrets.NEXUSMODS_API_KEY }}
+          VERSION: ${{ inputs.changelog_version }}
+          TEXT: ${{ inputs.changelog }}
+        run: |
+          text=$(printf '%s' "$TEXT" | sed 's/ | /\n/g')
+          body=$(jq -n --arg v "$VERSION" --arg c "$text" '{version: $v, changelog: $c}')
+          code=$(curl -sS -o resp.json -w '%{http_code}' -X POST -H "apikey: $KEY" -H "Content-Type: application/json" \
+            -H "User-Agent: ReSaverPP-release" --data "$body" "https://api.nexusmods.com/v3/mods/7318624468677/changelogs")
+          [ "$code" = "201" ] || { echo "::error::Nexus refused the changelog (HTTP $code): $(head -c 300 resp.json)"; exit 1; }
+
+      - name: Upload the new version
+        uses: Nexus-Mods/upload-action@main
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_id: ${{ inputs.file_id }}
+          filename: ${{ inputs.zip }}
+          display_name: ${{ inputs.name }}
+          description: ${{ inputs.description }}
+          version: ${{ inputs.version }}
+          category: ${{ inputs.category }}
+          allow_mod_manager_download: ${{ inputs.mod_manager }}
+          primary_mod_manager_download: false
+          update_mod_version: false
+          archive_existing_version: true

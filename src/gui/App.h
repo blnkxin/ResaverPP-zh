@@ -2,6 +2,7 @@
 // 本地化修改：界面、提示与报告文字改为简体中文（详见 README.zh-CN.md）。
 #pragma once
 
+#include "core/Transplant.h"
 #include "core/Batch.h"
 #include "core/ChangeFormData.h"
 #include "core/Compare.h"
@@ -15,6 +16,7 @@
 #include "core/Ops.h"
 #include "core/ScriptSources.h"
 #include "Live.h"
+#include "imgui.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -61,6 +63,7 @@ public:
 	~App();
 	void open(const std::filesystem::path& a_path);
 	void openAny(const std::filesystem::path& a_path);  // .ess, .pex or ModOrganizer.ini
+	void openNewestAtStart();  // with "Open the newest save at start" on: opens it (main.cpp, when no file was given)
 	void draw();  // whole UI for one frame
 	bool wantsQuit() const { return _quit; }
 	bool hasUnsavedChanges() const { return _dirty; }
@@ -88,6 +91,27 @@ public:
 			}
 		} else if (w == "arrays") {
 			_showArrays = true;
+		} else if (w.rfind("transplant:", 0) == 0) {
+			// test: bad save | good save, both read from their files
+			const auto bar = w.find('|');
+			transplantFromFile(w.substr(11, bar - 11));
+			const auto goodPath = bar == std::string::npos ? std::string() : w.substr(bar + 1);
+			if (bar == std::string::npos || goodPath.empty()) {
+				// bad save only
+			} else if (goodPath.size() > 4 && goodPath.substr(goodPath.size() - 4) == ".txt") {
+				_tpGood = ess::transplant::ReadSnapshot(goodPath);
+			} else {
+				auto good = ess::SaveFile::load(goodPath);
+				_tpGood = ess::transplant::FromSave(*good, "good");
+			}
+			_tpDirty = true;
+			_showTransplant = true;
+			if (const char* after = std::getenv("RESAVERPP_TEST_TPAFTER")) {
+				// test: the game's journal after a run, from a snapshot file
+				_tpChanges = ess::transplant::Diff(_tpGood, _tpBad);
+				_tpDirty = false;
+				transplantMissing(ess::transplant::ReadSnapshot(after));
+			}
 		} else if (w == "settings") {
 			_showSettings = true;
 		} else if (w == "support") {
@@ -139,12 +163,86 @@ public:
 	void viewScript(const std::string& a_script, const std::string& a_function = {}, const std::string& a_state = {}, int a_instruction = -1);
 	void viewScriptFile(const std::filesystem::path& a_path);  // a .psc or .pex file
 	ImFont* monoFont = nullptr;  // set by main.cpp: fixed-width font for the editor
+	// an error the frame loop caught (shown in the error box; the window keeps running)
+	void    reportError(const std::string& a_text) { _error = a_text; }
+	ImFont* titleFont = nullptr; // set by main.cpp: the big bold font of the start page logo (letters only)
 
 	// set by main.cpp: uploads RGBA pixels, returns an ImTextureID-compatible handle
 	std::function<std::uint64_t(const std::uint8_t*, int, int)> uploadTexture;
 	std::function<void(std::uint64_t)>                          freeTexture;
 
+	// Save check (AppCheck.cpp): how likely something is to break the game
+	enum class Risk
+	{
+		kInfo,
+		kSafe,
+		kCaution,
+		kRisky
+	};
+	struct CheckOption
+	{
+		std::string           label;
+		Risk                  risk = Risk::kSafe;
+		std::string           why;  // why it is safe / risky, in plain words
+		bool                  enabled = true;
+		std::function<void()> act;
+	};
+	struct CheckItem
+	{
+		Risk                     level = Risk::kInfo;  // how serious the finding is
+		std::string              title, what;
+		std::vector<CheckOption> options;
+	};
+
 private:
+	std::vector<CheckItem> checkItems();
+	Risk                   checkWorst();
+	void                   drawSaveCheck();
+	void                   drawCheckSummary();
+	static void            TextWrappedAt(std::uint32_t a_col, const std::string& a_text, float a_x);
+	void                   startLiveRefresh();
+	bool                   _showCheck = false, _checkOnOpen = true;
+
+	// Transplant (AppTransplant.cpp)
+	void                   drawTransplant();
+	void                   transplantSnapshot(bool a_bad);
+	void                   transplantFromFile(const std::filesystem::path& a_path);
+	void                   transplantNames(ess::transplant::Snapshot& a_snap, const ess::SaveFile& a_save);
+	std::int32_t           completionStageOf(const ess::transplant::Quest& a_q) const;
+	void                   transplantStep();
+	void                   transplantCheckJournal();
+	void                   transplantMissing(const ess::transplant::Snapshot& a_now);  // after a run: which quests of the bad save's journal the game's journal lacks
+	void                   transplantOrderQuests(std::vector<std::size_t>& a_run);
+	std::string            transplantGroup(const ess::transplant::Change& a_ch) const;
+	bool                   _tpMarkRefused = true, _tpWaiting = false;
+	struct TpMissing
+	{
+		std::string name, edid, why;
+		bool        completed = false;
+		const ess::transplant::Quest* quest = nullptr;  // in _tpBad
+		std::string done;  // after "Mark as done": the outcome
+	};
+	std::vector<TpMissing> _tpMissing;
+	bool                   _tpChecking = false, _tpChecked = false;
+	double                 _tpWaitStart = 0;  // when the snapshot request was sent (no answer after a while: say so)
+	// tool windows that can fill the whole ReSaver++ window (AppTransplant.cpp)
+	void prepareWindow(const char* a_id, ImVec2 a_defaultFraction);  // before Begin
+	void maximizeControl(const char* a_id);                          // right after Begin
+	std::map<std::string, std::pair<ImVec2, ImVec2>> _maximized, _restoreRects;
+	struct TpResult
+	{
+		std::size_t index = 0;
+		bool        ok = false;
+		std::string why;
+	};
+	bool                                 _showTransplant = false, _tpDirty = false, _tpRunning = false;
+	ess::transplant::Snapshot            _tpBad, _tpGood;
+	std::vector<ess::transplant::Change> _tpChanges;
+	std::vector<TpResult>                _tpResults;
+	std::vector<std::size_t>             _tpRun;
+	std::size_t                          _tpPos = 0;
+	char                                 _tpFilter[128] = "";
+
 	struct Row
 	{
 		std::uint64_t key = 0;
@@ -176,6 +274,7 @@ private:
 
 	// UI pieces
 	void drawMenu();
+	void drawLogo();  // the start page logo (no save open)
 	void drawCategories();
 	void drawList();
 	void drawDetail();
@@ -514,6 +613,7 @@ private:
 	ess::report::Options _reportOpt;
 	// watcher
 	bool                                                              _watch = false;
+	bool                                                              _openNewest = false;  // open the newest save at start
 	double                                                            _watchNext = 0;
 	std::map<std::filesystem::path, std::filesystem::file_time_type>  _watchSeen;
 	std::map<std::filesystem::path, std::pair<std::uintmax_t, double>> _watchPending;

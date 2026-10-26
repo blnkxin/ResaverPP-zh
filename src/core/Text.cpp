@@ -1,6 +1,8 @@
 // ReSaver++ - C++ port of ReSaver (FallrimTools) by Mark Fairchild, Apache License 2.0.
 #include "Text.h"
 
+#include <cstdlib>
+
 #include <atomic>
 
 #ifdef _WIN32
@@ -184,5 +186,34 @@ namespace ess::text
 		}
 		return out;
 #endif
+	}
+
+	std::filesystem::path EnvPath(const char* a_name)
+	{
+#ifdef _WIN32
+		std::wstring w;
+		for (const char* c = a_name; *c; ++c) {
+			w += static_cast<wchar_t>(*c);
+		}
+		const wchar_t* v = _wgetenv(w.c_str());
+		return v ? std::filesystem::path(std::wstring(v)) : std::filesystem::path();
+#else
+		const char* v = std::getenv(a_name);
+		return v ? std::filesystem::path(v) : std::filesystem::path();
+#endif
+	}
+
+	std::filesystem::path PathFrom(const std::string& a_text)
+	{
+		const auto utf8 = IsUtf8(a_text) ? a_text : ToUtf8(a_text);
+		try {
+			return std::filesystem::path(std::u8string(utf8.begin(), utf8.end()));
+		} catch (...) {
+			std::string ascii;
+			for (char c : utf8) {
+				ascii += static_cast<unsigned char>(c) < 0x80 ? c : '_';
+			}
+			return std::filesystem::path(ascii);
+		}
 	}
 }

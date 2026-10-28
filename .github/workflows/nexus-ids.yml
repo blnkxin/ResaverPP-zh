@@ -1,0 +1,37 @@
+name: Nexus file IDs
+
+# Manual: prints the IDs the upload needs (file group ID, unique mod ID) for a mod on any game.
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: "Game domain (skyrim, skyrimspecialedition)"
+        required: true
+        default: "skyrim"
+      mod:
+        description: "Mod ID on that game"
+        required: true
+        default: "122557"
+
+permissions:
+  contents: read
+
+jobs:
+  ids:
+    runs-on: ubuntu-24.04
+    environment: nexus
+    steps:
+      - name: Look up
+        env:
+          KEY: ${{ secrets.NEXUSMODS_API_KEY }}
+          DOMAIN: ${{ inputs.domain }}
+          MOD: ${{ inputs.mod }}
+        run: |
+          h=(-H "apikey: $KEY" -H "User-Agent: ReSaverPP-release")
+          curl -sS "${h[@]}" "https://api.nexusmods.com/v1/games/$DOMAIN/mods/$MOD.json" -o mod.json
+          echo "::notice::MOD uid $(jq -r '.uid' mod.json) game_id $(jq -r '.game_id' mod.json) version $(jq -r '.version' mod.json)"
+          curl -sS "${h[@]}" "https://api.nexusmods.com/v1/games/$DOMAIN/mods/$MOD/files.json" -o files.json
+          for f in $(jq -r '.files[].file_id' files.json); do
+            curl -sS "${h[@]}" "https://api.nexusmods.com/v3/games/$DOMAIN/mod-file-versions/$f" -o fv.json
+            echo "::notice::FILEVERSION $f -> $(jq -c '{group: .data.file.id, name: .data.name, version: .data.version, category: .data.category}' fv.json)"
+          done

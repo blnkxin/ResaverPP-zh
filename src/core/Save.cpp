@@ -84,8 +84,8 @@ namespace ess
 		const auto headerSize = r.u32();
 		const auto start = r.pos();
 		version = r.u32();
-		if (version < 12) {
-			throw FormatError("这是天际传奇版存档；仅支持特别版/周年纪念版存档", 13);
+		if (version < 8 || (version > 9 && version < 12)) {
+			throw FormatError("不支持的存档版本 " + std::to_string(version), 17);
 		}
 		saveNumber = r.u32();
 		playerName = r.wstring();
@@ -99,17 +99,18 @@ namespace ess
 		fileTime = r.u64();
 		shotWidth = r.u32();
 		shotHeight = r.u32();
-		compression = static_cast<Compression>(r.u16());
+		// Legendary Edition: no compression field, never compressed, RGB screenshot
+		compression = isLE() ? Compression::kNone : static_cast<Compression>(r.u16());
 		if (r.pos() - start != headerSize) {
 			throw FormatError("头部大小不匹配", r.pos());
 		}
-		screenshot = r.bytes(static_cast<std::size_t>(shotWidth) * shotHeight * 4);
+		screenshot = r.bytes(static_cast<std::size_t>(shotWidth) * shotHeight * (isLE() ? 3 : 4));
 	}
 
 	std::uint32_t Header::partialSize() const
 	{
 		return static_cast<std::uint32_t>(4 + 4 + (2 + playerName.size()) + 4 + (2 + location.size()) + (2 + gameDate.size()) +
-										  (2 + race.size()) + 2 + 4 + 4 + 8 + 4 + 4 + 2);
+										  (2 + race.size()) + 2 + 4 + 4 + 8 + 4 + 4 + (isLE() ? 0 : 2));
 	}
 
 	std::uint32_t Header::totalSize() const
@@ -134,7 +135,9 @@ namespace ess
 		w.u64(fileTime);
 		w.u32(shotWidth);
 		w.u32(shotHeight);
-		w.u16(static_cast<std::uint16_t>(compression));
+		if (!isLE()) {
+			w.u16(static_cast<std::uint16_t>(compression));
+		}
 		w.bytes(screenshot);
 	}
 
@@ -168,7 +171,7 @@ namespace ess
 			}
 		}
 
-		GlobalData ReadGlobal(Reader& r)
+		GlobalData ReadGlobal(Reader& r, bool a_le)
 		{
 			GlobalData g;
 			g.type = r.u32();
@@ -176,6 +179,7 @@ namespace ess
 			r.need(size);
 			if (g.type == 1001) {
 				Reader sub(r.here(), size);
+				sub.le = a_le;
 				g.papyrus = std::make_unique<Papyrus>();
 				try {
 					g.papyrus->read(sub);
@@ -189,11 +193,12 @@ namespace ess
 			return g;
 		}
 
-		void WriteGlobal(Writer& w, const GlobalData& g)
+		void WriteGlobal(Writer& w, const GlobalData& g, bool a_le)
 		{
 			w.u32(g.type);
 			if (g.papyrus) {
 				Writer pw;
+				pw.le = a_le;
 				g.papyrus->write(pw);
 				w.u32(static_cast<std::uint32_t>(pw.size()));
 				w.bytes(pw.buf);
@@ -318,7 +323,9 @@ namespace ess
 			for (unsigned i = 0; i < full; ++i) {
 				save->plugins.full.push_back(r.wstring());
 			}
-			if (save->formVersion >= 78) {
+			// light plugins: SE form version 78+; Skyrim LE with LE Light Support writes form version 75 and
+			// the same list (a u16 count and the names) when a light plugin is active
+			if (save->formVersion >= 78 || (save->isLE() && save->formVersion == 75)) {
 				save->plugins.hasLite = true;
 				const auto lite = r.u16();
 				for (unsigned i = 0; i < lite; ++i) {
@@ -363,11 +370,11 @@ namespace ess
 		};
 		at(t.table1Offset);
 		for (std::uint32_t i = 0; i < t.table1Count; ++i) {
-			save->table1.push_back(ReadGlobal(r));
+			save->table1.push_back(ReadGlobal(r, save->isLE()));
 		}
 		expect(t.table2Offset, "全局数据表 2");
 		for (std::uint32_t i = 0; i < t.table2Count; ++i) {
-			save->table2.push_back(ReadGlobal(r));
+			save->table2.push_back(ReadGlobal(r, save->isLE()));
 		}
 		expect(t.changeFormsOffset, "变更表单段");
 		save->changeForms.reserve(t.changeFormCount);
@@ -376,7 +383,7 @@ namespace ess
 		}
 		expect(t.table3Offset, "全局数据表 3");
 		for (std::uint32_t i = 0; i < t.table3Count; ++i) {
-			save->table3.push_back(ReadGlobal(r));
+			save->table3.push_back(ReadGlobal(r, save->isLE()));
 		}
 		expect(t.formIDArrayCountOffset, "Form ID 数组段");
 
@@ -432,11 +439,11 @@ namespace ess
 
 		const auto t1 = static_cast<std::uint32_t>(base + w.size());
 		for (const auto& g : table1) {
-			WriteGlobal(w, g);
+			WriteGlobal(w, g, isLE());
 		}
 		const auto t2 = static_cast<std::uint32_t>(base + w.size());
 		for (const auto& g : table2) {
-			WriteGlobal(w, g);
+			WriteGlobal(w, g, isLE());
 		}
 		const auto cf = static_cast<std::uint32_t>(base + w.size());
 		for (const auto& c : changeForms) {
@@ -444,7 +451,7 @@ namespace ess
 		}
 		const auto t3 = static_cast<std::uint32_t>(base + w.size());
 		for (const auto& g : table3) {
-			WriteGlobal(w, g);
+			WriteGlobal(w, g, isLE());
 		}
 		const auto fid = static_cast<std::uint32_t>(base + w.size());
 		w.u32(static_cast<std::uint32_t>(formIDs.size()));

@@ -8,6 +8,7 @@
 
 #include "Platform.h"
 #include "Theme.h"
+#include "Tips.h"
 
 #include "imgui.h"
 
@@ -602,9 +603,7 @@ void App::maximizeControl(const char* a_id)
 	const auto  back = ImGui::GetCursorPos();
 	ImGui::SetCursorPos(ImVec2(ImGui::GetWindowContentRegionMax().x - w, back.y));
 	toggle |= ImGui::SmallButton(label);
-	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("%s（或双击标题栏）", maxed ? "回到原来的大小" : "填满整个 ReSaver++ 窗口");
-	}
+	tips::Tipf("%s（或双击标题栏）", maxed ? "回到原来的大小" : "填满整个 ReSaver++ 窗口");
 	ImGui::SetCursorPos(back);
 	if (toggle) {
 		if (maxed) {
@@ -680,6 +679,7 @@ void App::drawTransplant()
 		ImGui::TextWrapped("%s", Summary(_tpBad).c_str());
 		ImGui::BeginDisabled(!live || !helperOk || busy);
 		const bool badBtn = ImGui::Button("给游戏做快照（游戏里读的是坏档）");
+		tips::Tip("先在游戏里读取坏档。ReSaverHelper 会把游戏看到的角色写下来：等级、技能、专长、法术、龙吼、物品、任务、地图地点。不会改动任何东西。");
 		if (!_tpBad.valid && !busy) {
 			Marquee();
 			ImGui::SameLine();
@@ -698,16 +698,15 @@ void App::drawTransplant()
 				transplantFromFile(*p);
 			}
 		}
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("给游戏完全读不出来的存档用。没有游戏时只能读出其中一部分：\n"
-							  "任务、物品、法术和龙吼、等级。不含技能、专长、力量之语、地图地点和你制作的东西。");
-		}
+		tips::Tip("给游戏完全读不出来的存档用。没有游戏时只能读出其中一部分：\n"
+				  "任务、物品、法术和龙吼、等级。不含技能、专长、力量之语、地图地点和你制作的东西。");
 		if (_save) {
 			if (ImGui::SmallButton("用 ReSaver++ 里打开的这个存档")) {
 				_tpBad = tp::FromSave(*_save, platform::ToUtf8(_path.filename()));
 				transplantNames(_tpBad, *_save);
 				_tpDirty = true;
 			}
+			tips::Tip("把 ReSaver++ 里打开的这个存档当作坏档，不需要游戏。这样只能读出它的一部分（不含技能、专长和地图地点）。");
 		}
 		ImGui::SameLine();
 		if (ImGui::SmallButton("打开快照文件…") && platform::HasNativeDialogs()) {
@@ -715,6 +714,7 @@ void App::drawTransplant()
 				transplantFromFile(*p);
 			}
 		}
+		tips::Tip("打开 ReSaverHelper 以前写下的快照（Documents\\My Games\\...\\SKSE\\ReSaverHelper 里的 .txt 文件）。");
 		ImGui::EndDisabled();
 		if (_tpBad.valid && _tpBad.fromFile) {
 			std::string parts;
@@ -729,6 +729,7 @@ void App::drawTransplant()
 		ImGui::TextWrapped("%s", Summary(_tpGood).c_str());
 		ImGui::BeginDisabled(!live || !helperOk || !_tpBad.valid || busy);
 		const bool goodBtn = ImGui::Button(_tpGood.valid ? "再给游戏做一次快照（游戏里读的是好档）" : "给游戏做快照（游戏里读的是好档）");
+		tips::Tip("先在游戏里读取好档（一个能正常用的较旧存档），并先做一个备份存档。ReSaverHelper 会把它的内容写下来，ReSaver++ 就能列出坏档多出来的部分。");
 		if (_tpBad.valid && !_tpGood.valid && !busy) {
 			Marquee();
 			ImGui::SameLine();
@@ -777,10 +778,12 @@ void App::drawTransplant()
 	if (ImGui::SmallButton("全部展开")) {
 		openAll = 1;
 	}
+	tips::Tip("展开下面所有分组。");
 	ImGui::SameLine();
 	if (ImGui::SmallButton("全部折叠")) {
 		openAll = 0;
 	}
+	tips::Tip("折叠下面所有分组。");
 	ImGui::SameLine();
 	ImGui::BeginDisabled(_tpRunning);
 	if (ImGui::SmallButton("全选")) {
@@ -788,16 +791,19 @@ void App::drawTransplant()
 			c.tick = c.available;
 		}
 	}
+	tips::Tip("勾选所有能带过去的内容（模组不在游戏里的那些保持不勾选）。");
 	ImGui::SameLine();
 	if (ImGui::SmallButton("全不选")) {
 		for (auto& c : _tpChanges) {
 			c.tick = false;
 		}
 	}
+	tips::Tip("全部取消勾选，比如之后只勾你想要的那几项。");
 	ImGui::EndDisabled();
 	ImGui::SameLine(0, 20);
 	ImGui::SetNextItemWidth(-1);
 	ImGui::InputTextWithHint("##tpfilter", "搜索（展开匹配组）", _tpFilter, sizeof(_tpFilter));
+	tips::Tip("只显示名字包含这段文字的内容；匹配的分组会自动展开。");
 	const auto needle = Lower(_tpFilter);
 	if (!needle.empty()) {
 		openAll = 1;
@@ -813,6 +819,7 @@ void App::drawTransplant()
 		ImGui::BeginDisabled(!ch.available || _tpRunning);
 		ImGui::Checkbox("##t", &ch.tick);
 		ImGui::EndDisabled();
+		tips::Tip(ch.available ? "点「移植」时，勾选的内容会被放进游戏。" : "不能带过去：它来自的模组不在这个游戏里。");
 		ImGui::SameLine();
 		Dot(RiskCol(ch.risk));
 		ImGui::TextUnformatted(ch.label.c_str());
@@ -837,12 +844,14 @@ void App::drawTransplant()
 				_tpChanges[i].tick = _tpChanges[i].available;
 			}
 		}
+		tips::Tip("勾选这个分组里的全部内容。");
 		ImGui::SameLine();
 		if (ImGui::SmallButton("全不选")) {
 			for (auto i : a_in) {
 				_tpChanges[i].tick = false;
 			}
 		}
+		tips::Tip("取消勾选这个分组里的全部内容。");
 		ImGui::EndDisabled();
 	};
 	auto counts = [&](const std::vector<std::size_t>& a_in) {
@@ -863,6 +872,7 @@ void App::drawTransplant()
 			ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(theme::Caution()));
 			ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
 			const bool open = ImGui::CollapsingHeader(Fmt("没能带过去的任务（%zu）###tpmissing", _tpMissing.size()).c_str());
+			tips::Tip("坏档日志里有、但移植后游戏日志里没有的任务，以及原因。");
 			ImGui::PopStyleColor();
 			if (open) {
 				ImGui::Indent();
@@ -902,6 +912,7 @@ void App::drawTransplant()
 							});
 						}
 						ImGui::EndDisabled();
+						tips::Tip("在游戏里把这个任务标记为完成，就像坏档里那样。不会给奖励，后续任务也不会开始。");
 						ImGui::SameLine();
 					}
 					Dot(m.completed ? theme::Caution() : theme::Bad());
@@ -918,15 +929,14 @@ void App::drawTransplant()
 				if (ImGui::SmallButton("复制列表")) {
 					ImGui::SetClipboardText(all.c_str());
 				}
+				tips::Tip("把这些任务以及它们缺失的原因复制成文本。");
 				ImGui::SameLine();
 				ImGui::BeginDisabled(!_live.info().connected || _tpRunning || _tpChecking);
 				if (ImGui::SmallButton("再核对一次日志")) {
 					transplantCheckJournal();
 				}
 				ImGui::EndDisabled();
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::SetTooltip("移植后任务可能还要加载一两分钟：过一会儿再核对。");
-				}
+				tips::Tip("移植后任务可能还要加载一两分钟：过一会儿再核对。");
 				ImGui::Unindent();
 			}
 		}
@@ -968,6 +978,7 @@ void App::drawTransplant()
 			}
 		}
 		const bool open = ImGui::CollapsingHeader(Fmt("%s   (%s)###cat", tp::CategoryName(static_cast<tp::Category>(c)), counts(in).c_str()).c_str());
+		tips::Tip("坏档有、好档没有的一类进度。展开它，勾选要带过去的内容。");
 		if (appearance) {
 			// a glow around the header
 			const auto mn = ImGui::GetItemRectMin(), mx = ImGui::GetItemRectMax();
@@ -1031,15 +1042,14 @@ void App::drawTransplant()
 	ImGui::BeginDisabled(_tpRunning);
 	ImGui::Checkbox("被拒绝的任务标记为完成", &_tpMarkRefused);
 	ImGui::EndDisabled();
-	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("游戏拒绝某个任务的阶段时（它的人物或地点在这个存档里没有设置好），就把这个任务\n"
-						  "标记为完成，列表里也会写明（“游戏拒绝了阶段 10，已标记为完成”）。标记的任务没有奖励，\n"
-						  "也不会启动通常跟在后面的任务。只有坏档进度更靠前的任务也适用这一条。\n"
-						  "不想这样就不勾选，被拒绝的任务保持原样。");
-	}
+	tips::Tip("游戏拒绝某个任务的阶段时（它的人物或地点在这个存档里没有设置好），就把这个任务\n"
+					  "标记为完成，列表里也会写明（“游戏拒绝了阶段 10，已标记为完成”）。标记的任务没有奖励，\n"
+					  "也不会启动通常跟在后面的任务。只有坏档进度更靠前的任务也适用这一条。\n"
+					  "不想这样就不勾选，被拒绝的任务保持原样。");
 	ImGui::SameLine(0, 30);
 	ImGui::BeginDisabled(!live || !helperOk || run.empty() || busy);
 	const bool goBtn = ImGui::Button(Fmt("把勾选的 %zu 项移植进游戏", run.size()).c_str());
+	tips::Tip("按正常方式把勾选的内容放进游戏（游戏里必须已读取好档）。先在游戏里存一次档；移植完成后再在游戏里存档，得到干净存档。");
 	if (!busy && _tpResults.empty() && !run.empty() && live && helperOk) {
 		Marquee();
 		ImGui::SameLine();

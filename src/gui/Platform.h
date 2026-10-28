@@ -26,4 +26,6 @@ namespace platform
 	std::filesystem::path                ExeFolder();  // folder of ReSaverPP.exe
 	bool                                 RunningUnderMO2();  // started from Mod Organizer (its virtual file system is loaded)
 	std::filesystem::path                FromUtf8(const std::string& a_utf8);
+	// Moves files to the Recycle Bin (Windows); elsewhere deletes them. True if all of them went.
+	bool                                 MoveToRecycleBin(const std::vector<std::filesystem::path>& a_files);
 }

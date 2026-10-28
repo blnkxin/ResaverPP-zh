@@ -486,7 +486,7 @@ namespace ess::quests
 		}
 		const auto d = cf::Body(*player);
 		auto       u32 = [&](std::size_t p) { return static_cast<std::uint32_t>(d[p]) | (d[p + 1] << 8) | (d[p + 2] << 16) | (static_cast<std::uint32_t>(d[p + 3]) << 24); };
-		// a vsval count: the low 2 bits say 1, 2 or 3 bytes
+		// a vsval count: the low 2 bits say 1, 2 or 4 bytes
 		auto vsval = [&](std::size_t p, std::size_t& a_len) -> std::uint32_t {
 			const auto sz = d[p] & 3;
 			if (sz == 0) {
@@ -497,16 +497,17 @@ namespace ess::quests
 				a_len = 2;
 				return (d[p] | (d[p + 1] << 8)) >> 2;
 			}
-			if (sz == 2 && p + 2 < d.size()) {
-				a_len = 3;
-				return (d[p] | (d[p + 1] << 8) | (d[p + 2] << 16)) >> 2;
+			if (sz == 2 && p + 3 < d.size()) {
+				a_len = 4;
+				return u32(p) >> 2;
 			}
 			a_len = 0;
 			return 0;
 		};
 		auto entryOk = [&](std::size_t r) {
 			const std::uint32_t ref = (d[r] << 16) | (d[r + 1] << 8) | d[r + 2];
-			return ref != 0 && (ref >> 22) != 3 && u32(r + 3) < 1000 && u32(r + 7) <= 0xFFFF && u32(r + 11) <= 5;
+			// objective indices are 16-bit (mods use 1000, 2000, 4101...); instances are small; states 0 to 5
+			return ref != 0 && (ref >> 22) != 3 && u32(r + 3) <= 0xFFFF && u32(r + 7) <= 0xFFFF && u32(r + 11) <= 5;
 		};
 		// the longest run of well-formed entries preceded by its own count
 		std::size_t bestAt = 0, bestN = 0;

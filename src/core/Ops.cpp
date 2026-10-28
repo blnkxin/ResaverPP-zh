@@ -3,6 +3,8 @@
 #include "Ops.h"
 
 #include <algorithm>
+#include <cctype>
+#include <set>
 #include <cstdio>
 #include <map>
 #include <unordered_map>
@@ -907,6 +909,68 @@ namespace ess::ops
 		section("函数消息", r.messagesByFunction);
 		section("按脚本统计的脚本实例", r.instancesByScript);
 		section("按类型统计的变更表单", r.changeFormsByType);
+		return out;
+	}
+
+	namespace
+	{
+		std::string LowerName(std::string a)
+		{
+			for (auto& c : a) {
+				c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+			}
+			return a;
+		}
+		std::string Stem(const std::string& a)
+		{
+			const auto dot = a.find_last_of('.');
+			return LowerName(dot == std::string::npos ? a : a.substr(0, dot));
+		}
+		bool PluginExt(const std::string& a)
+		{
+			const auto l = LowerName(a);
+			return l.size() > 4 && (l.ends_with(".esp") || l.ends_with(".esm") || l.ends_with(".esl"));
+		}
+	}
+
+	std::string RenamePlugin(SaveFile& s, const std::string& a_from, const std::string& a_to)
+	{
+		if (!PluginExt(a_to) || a_to.size() > 255 || a_to.find_first_of("\\/:*?\"<>|") != std::string::npos) {
+			return "「" + a_to + "」不是插件文件名（.esp、.esm 或 .esl）";
+		}
+		std::string* entry = nullptr;
+		for (auto* list : { &s.plugins.full, &s.plugins.lite }) {
+			for (auto& p : *list) {
+				if (LowerName(p) == LowerName(a_to) && LowerName(p) != LowerName(a_from)) {
+					return "存档里已经有一个名为「" + a_to + "」的插件：没有做任何修改";
+				}
+				if (LowerName(p) == LowerName(a_from)) {
+					entry = &p;
+				}
+			}
+		}
+		if (!entry) {
+			return "存档里没有名为「" + a_from + "」的插件";
+		}
+		*entry = a_to;
+		return {};
+	}
+
+	std::vector<std::string> RenameCandidates(const SaveFile& s, const std::string& a_missing, const std::vector<std::string>& a_installed)
+	{
+		std::set<std::string> inSave;
+		for (const auto* list : { &s.plugins.full, &s.plugins.lite }) {
+			for (const auto& p : *list) {
+				inSave.insert(LowerName(p));
+			}
+		}
+		std::vector<std::string> out;
+		const auto stem = Stem(a_missing);
+		for (const auto& p : a_installed) {
+			if (!inSave.contains(LowerName(p)) && LowerName(p) != LowerName(a_missing) && Stem(p) == stem && PluginExt(p)) {
+				out.push_back(p);
+			}
+		}
 		return out;
 	}
 }

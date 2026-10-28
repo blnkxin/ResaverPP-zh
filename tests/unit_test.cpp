@@ -1,5 +1,6 @@
 // ReSaver++ unit and regression tests that need no save files: each builds the data it needs in memory.
 // Run by CTest (rs_unit). Exit code 0 = all passed.
+#include "core/MergedPatch.h"
 #include "core/ModRemove.h"
 #include "core/Ops.h"
 #include "core/Pex.h"
@@ -384,10 +385,145 @@ namespace
 		std::filesystem::remove(dir);
 	}
 
+
+	// ---- merged patch ---------------------------------------------------------------------------
+	merge::Sub MS(const char* a_sig, std::vector<std::uint8_t> a_data)
+	{
+		merge::Sub s;
+		std::memcpy(s.sig, a_sig, 4);
+		s.data = std::move(a_data);
+		return s;
+	}
+	std::vector<std::uint8_t> U32v(std::initializer_list<std::uint32_t> a)
+	{
+		std::vector<std::uint8_t> o;
+		for (auto v : a) {
+			for (int i = 0; i < 4; ++i) o.push_back(static_cast<std::uint8_t>(v >> (8 * i)));
+		}
+		return o;
+	}
+	std::vector<std::uint8_t> Lvlo(std::uint16_t a_level, std::uint32_t a_form, std::uint16_t a_count)
+	{
+		std::vector<std::uint8_t> o{ static_cast<std::uint8_t>(a_level), static_cast<std::uint8_t>(a_level >> 8), 0, 0 };
+		auto f = U32v({ a_form });
+		o.insert(o.end(), f.begin(), f.end());
+		o.push_back(static_cast<std::uint8_t>(a_count));
+		o.push_back(0);
+		o.push_back(0);
+		o.push_back(0);
+		return o;
+	}
+	merge::Record MR(const char* a_sig, std::uint32_t a_id, std::vector<merge::Sub> a_subs)
+	{
+		merge::Record r;
+		std::memcpy(r.sig, a_sig, 4);
+		r.formID = a_id;
+		r.subs = std::move(a_subs);
+		return r;
+	}
+	merge::Record Leveled(std::uint32_t a_id, std::vector<std::uint32_t> a_items)
+	{
+		std::vector<merge::Sub> subs{ MS("EDID", { 'L', 'L', 0 }), MS("LVLD", { 0 }), MS("LVLF", { 1 }),
+			MS("LLCT", { static_cast<std::uint8_t>(a_items.size()) }) };
+		for (auto i : a_items) {
+			subs.push_back(MS("LVLO", Lvlo(1, i, 1)));
+		}
+		return MR("LVLI", a_id, std::move(subs));
+	}
+
+	void TestMergedPatch()
+	{
+		namespace fs = std::filesystem;
+		const auto dir = fs::path("rs_unit_tmp_merge");  // under the working directory: %TEMP% may be read-only here
+		fs::remove_all(dir);
+		fs::create_directories(dir);
+		auto save = [&](const char* a_name, const std::vector<std::uint8_t>& a_data) {
+			std::ofstream(dir / a_name, std::ios::binary).write(reinterpret_cast<const char*>(a_data.data()), static_cast<std::streamsize>(a_data.size()));
+		};
+		// Base.esm: a leveled list with items 0x900 (A) and 0x901 (B); a container with A x1; an armour with keyword 0x950;
+		// an NPC in faction 0x960 with spell 0x970
+		auto npc = [](std::vector<merge::Sub> a_extra) {
+			std::vector<merge::Sub> subs{ MS("EDID", { 'N', 0 }), MS("ACBS", std::vector<std::uint8_t>(24, 0)) };
+			subs.insert(subs.end(), a_extra.begin(), a_extra.end());
+			subs.push_back(MS("RNAM", U32v({ 0x980 })));
+			subs.push_back(MS("AIDT", std::vector<std::uint8_t>(20, 0)));
+			subs.push_back(MS("CNAM", U32v({ 0x990 })));
+			subs.push_back(MS("DATA", {}));
+			return MR("NPC_", 0x800, subs);
+		};
+		save("Base.esm", merge::WritePlugin({}, 1, {
+			Leveled(0x810, { 0x900, 0x901 }),
+			MR("CONT", 0x820, { MS("EDID", { 'C', 0 }), MS("COCT", U32v({ 1 })), MS("CNTO", U32v({ 0x900, 1 })), MS("DATA", { 0, 0, 0, 0, 0 }) }),
+			MR("ARMO", 0x830, { MS("EDID", { 'A', 0 }), MS("KSIZ", U32v({ 1 })), MS("KWDA", U32v({ 0x950 })), MS("DATA", U32v({ 10, 0 })), MS("DNAM", U32v({ 0 })) }),
+			npc({ MS("SNAM", U32v({ 0x960, 0 })), MS("SPCT", U32v({ 1 })), MS("SPLO", U32v({ 0x970 })) }),
+		}));
+		// ModA.esp (master Base): adds C (0x902) to the list, removes B; container A x5; adds keyword 0x951
+		save("ModA.esp", merge::WritePlugin({ "Base.esm" }, 0, {
+			Leveled(0x810, { 0x900, 0x902 }),
+			MR("CONT", 0x820, { MS("EDID", { 'C', 0 }), MS("COCT", U32v({ 1 })), MS("CNTO", U32v({ 0x900, 5 })), MS("DATA", { 0, 0, 0, 0, 0 }) }),
+			MR("ARMO", 0x830, { MS("EDID", { 'A', 0 }), MS("KSIZ", U32v({ 2 })), MS("KWDA", U32v({ 0x950, 0x951 })), MS("DATA", U32v({ 10, 0 })), MS("DNAM", U32v({ 0 })) }),
+			npc({ MS("SNAM", U32v({ 0x960, 0 })), MS("SNAM", U32v({ 0x961, 0 })), MS("SPCT", U32v({ 1 })), MS("SPLO", U32v({ 0x970 })) }),
+		}));
+		// ModB.esp (master Base): adds D (0x903); container adds 0x904 x2; armour value changed (winner's value stays)
+		save("ModB.esp", merge::WritePlugin({ "Base.esm" }, 0, {
+			Leveled(0x810, { 0x900, 0x901, 0x903 }),
+			MR("CONT", 0x820, { MS("EDID", { 'C', 0 }), MS("COCT", U32v({ 2 })), MS("CNTO", U32v({ 0x900, 1 })), MS("CNTO", U32v({ 0x904, 2 })), MS("DATA", { 0, 0, 0, 0, 0 }) }),
+			MR("ARMO", 0x830, { MS("EDID", { 'A', 0 }), MS("KSIZ", U32v({ 1 })), MS("KWDA", U32v({ 0x950 })), MS("DATA", U32v({ 99, 0 })), MS("DNAM", U32v({ 0 })) }),
+			npc({ MS("SNAM", U32v({ 0x960, 0 })), MS("SPCT", U32v({ 2 })), MS("SPLO", U32v({ 0x970 })), MS("SPLO", U32v({ 0x971 })) }),
+		}));
+		// ModC.esp (masters Base, ModA): adds its own new item E (0x01000800 = ModC's 0x800) to the list built on ModA's version
+		save("ModC.esp", merge::WritePlugin({ "Base.esm", "ModA.esp" }, 0, {
+			MR("MISC", 0x02000800, { MS("EDID", { 'E', 0 }) }),
+			Leveled(0x810, { 0x900, 0x902, 0x02000800 }),
+		}));
+		merge::Options o;
+		o.loadOrder = { "Base.esm", "ModA.esp", "ModB.esp", "ModC.esp" };
+		o.findPlugin = [&](const std::string& n) -> std::optional<fs::path> { return dir / n; };
+		const auto r = merge::Build(o);
+		Check(r.ok, "merge: patch built");
+		Check(r.conflicts == 4 && r.merged.size() == 4, "merge: four conflicting records, all merged");
+		Check(r.masters == std::vector<std::string>{ "Base.esm", "ModC.esp" }, "merge: masters are only Base.esm and ModC.esp (the plugin of the new item)");
+		save("Patch.esp", r.file);
+		const auto pf = merge::ReadPlugin(dir / "Patch.esp");
+		Check(pf.flags == 0x200 && pf.masters.size() == 2, "merge: patch is light-flagged with two masters");
+		auto find = [&](const char* sig) -> const merge::Record* {
+			for (const auto& rec : pf.records) {
+				if (std::memcmp(rec.sig, sig, 4) == 0) return &rec;
+			}
+			return nullptr;
+		};
+		auto list = [&](const merge::Record* rec, const char* sig, std::size_t off) {
+			std::vector<std::uint32_t> v;
+			for (const auto& s : rec->subs) {
+				if (std::memcmp(s.sig, sig, 4) == 0) {
+					std::uint32_t x;
+					std::memcpy(&x, s.data.data() + off, 4);
+					v.push_back(x);
+				}
+			}
+			return v;
+		};
+		const auto* lv = find("LVLI");
+		Check(lv && list(lv, "LVLO", 4) == std::vector<std::uint32_t>{ 0x900, 0x902, 0x01000800, 0x903 } && lv->subs[3].data[0] == 4,
+			"merge: leveled list has A, C, E (as the patch's master 1) and D; B removed; count 4");
+		const auto* ct = find("CONT");
+		Check(ct && list(ct, "CNTO", 0) == std::vector<std::uint32_t>{ 0x900, 0x904 } && list(ct, "CNTO", 4) == std::vector<std::uint32_t>{ 5, 2 },
+			"merge: container keeps ModA's count 5 for A and ModB's new item");
+		const auto* ar = find("ARMO");
+		Check(ar && list(ar, "KWDA", 0) == std::vector<std::uint32_t>{ 0x950 } && list(ar, "KWDA", 4) == std::vector<std::uint32_t>{ 0x951 } &&
+				  list(ar, "KSIZ", 0) == std::vector<std::uint32_t>{ 2 } && list(ar, "DATA", 0) == std::vector<std::uint32_t>{ 99 },
+			"merge: armour gets ModA's keyword and keeps the winner's (ModB's) value");
+		const auto* np = find("NPC_");
+		Check(np && list(np, "SNAM", 0) == std::vector<std::uint32_t>{ 0x960, 0x961 } && list(np, "SPLO", 0) == std::vector<std::uint32_t>{ 0x970, 0x971 } &&
+				  list(np, "SPCT", 0) == std::vector<std::uint32_t>{ 2 },
+			"merge: NPC gets ModA's faction and ModB's spell");
+		fs::remove_all(dir);
+	}
 }
 
 int main()
 {
+	std::setvbuf(stdout, nullptr, _IONBF, 0);  // unbuffered: a crash must not swallow what ran
 	TestFloatLiteral();
 	TestCreationClub();
 	TestCheck();
@@ -396,6 +532,7 @@ int main()
 	TestPapyrusRoundTrip();
 	TestEditedName();
 	TestTransplant();
+	TestMergedPatch();
 	std::printf("%d passed, %d failed\n", g_pass, g_fail);
 	return g_fail ? 1 : 0;
 }

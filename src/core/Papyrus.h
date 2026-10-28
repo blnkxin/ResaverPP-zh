@@ -279,7 +279,7 @@ namespace ess
 
 		const std::string& str(TStr i) const
 		{
-			static const std::string bad = "<bad string index>";
+			static const std::string bad = "<字符串索引无效>";
 			return i < strings.size() ? strings[i] : bad;
 		}
 		TStr findString(const std::string& s) const;  // returns UINT32_MAX when missing

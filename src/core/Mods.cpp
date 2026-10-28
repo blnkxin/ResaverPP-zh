@@ -72,17 +72,24 @@ namespace ess::mods
 		};
 
 		// the row a mod folder maps to: its first plugin if it has one, else the folder itself
+		// Folders shared by many plugins are not one mod: the game's Data folder (everything installed by hand
+		// or by Vortex, vanilla included) and Mod Organizer's Overwrite. A plugin sitting there must not be
+		// credited with every script in that folder (a hair mod "shipping" 12,000 scripts).
+		auto shared = [](const std::string& folder) { return folder == "Game Data" || folder == "Data" || folder == "Overwrite"; };
 		std::unordered_map<std::string, std::size_t> folderRow;  // folder -> row index
 		if (t.hasSources) {
 			for (const auto& [plugin, folder] : a_sources->pluginFolder) {
+				if (shared(folder)) {
+					continue;
+				}
 				if (auto it = rowOf.find(plugin); it != rowOf.end()) {
 					folderRow.emplace(folder, it->second);
 				}
 			}
 		}
 		auto rowForFolder = [&](const std::string& folder) -> ModRow* {
-			// vanilla scripts say nothing about which mod spawned an object
-			if (folder.empty() || folder == "Game Data") {
+			// vanilla scripts say nothing about which mod spawned an object; nor does the shared Data folder
+			if (folder.empty() || folder == "Game Data" || folder == "Data") {
 				return nullptr;
 			}
 			if (auto it = folderRow.find(folder); it != folderRow.end()) {

@@ -372,10 +372,15 @@ int RunApp(int argc, char** argv)
 		glDeleteTextures(1, &tex);
 	};
 
-	if (argc > 1) {
+	std::error_code argEc;
+	if (argc > 1 && std::filesystem::is_regular_file(platform::FromUtf8(argv[1]), argEc)) {
 		Step("打开 " + std::string(argv[1]));
 		app.openAny(platform::FromUtf8(argv[1]));
 	} else if (!std::getenv("RESAVERPP_SCREENSHOT")) {
+		// 没有给出文件（启动器可能传了个不是文件的参数，例如 Wine/Proton 脚本）：打开最新的存档
+		if (argc > 1) {
+			Log(std::string("参数不是文件，已忽略：") + argv[1]);
+		}
 		Step("打开最新的存档");
 		app.openNewestAtStart();
 	}

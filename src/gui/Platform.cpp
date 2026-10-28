@@ -7,6 +7,7 @@
 #	include <windows.h>
 #	include <shellapi.h>
 #	include <shlobj.h>
+#	include <shellapi.h>
 #	include <commdlg.h>
 #endif
 
@@ -291,4 +292,32 @@ namespace platform
 	std::filesystem::path ExeFolder() { return std::filesystem::current_path(); }
 	bool                  RunningUnderMO2() { return std::getenv("RESAVERPP_TEST_MO2") != nullptr; }
 #endif
+
+	bool MoveToRecycleBin(const std::vector<std::filesystem::path>& a_files)
+	{
+		if (a_files.empty()) {
+			return true;
+		}
+#ifdef _WIN32
+		// a double-null-terminated list of full paths
+		std::wstring list;
+		for (const auto& f : a_files) {
+			list += std::filesystem::absolute(f).wstring();
+			list.push_back(L'\0');
+		}
+		list.push_back(L'\0');
+		SHFILEOPSTRUCTW op{};
+		op.wFunc = FO_DELETE;
+		op.pFrom = list.c_str();
+		op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
+		return SHFileOperationW(&op) == 0 && !op.fAnyOperationsAborted;
+#else
+		bool ok = true;
+		for (const auto& f : a_files) {
+			std::error_code ec;
+			ok = std::filesystem::remove(f, ec) && ok;
+		}
+		return ok;
+#endif
+	}
 }

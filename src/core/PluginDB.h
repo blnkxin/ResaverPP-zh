@@ -43,6 +43,8 @@ namespace ess
 			std::uint32_t base = 0;           // NAME of a placed reference (runtime form ID)
 			std::uint16_t plugin = 0;         // index into plugins(): last plugin that defines it
 			char          type[4]{};
+			std::uint8_t  spellType = 0xFF;   // SPEL: 0 spell, 1 disease, 2 power, 3 lesser power, 4 ability, 5 poison,
+			                                  // 10 addiction, 11 voice... (0xFF: not read)
 		};
 
 		// Reads every plugin of the save that can be found. Safe to call on a worker thread.

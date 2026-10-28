@@ -6,6 +6,7 @@
 #include "App.h"
 
 #include "Theme.h"
+#include "Tips.h"
 
 #include "core/Orphans.h"
 
@@ -134,9 +135,11 @@ void App::drawOrphansModal()
 			if (ImGui::Checkbox("##sel", &tick)) {
 				_orphanSel[gi] = tick ? 1 : 0;
 			}
+			tips::Tip("勾选：移除这个模组的、位于已不存在的生成对象上的脚本实例。");
 			ImGui::TableNextColumn();
-			const bool open = ImGui::TreeNodeEx("##mod", ImGuiTreeNodeFlags_SpanAvailWidth, "%s  （%zu 个脚本%s）", g.mod.c_str(),
-				g.scripts.size(), g.scripts.size() == 1 ? "" : "");
+			const bool open = ImGui::TreeNodeEx("##mod", ImGuiTreeNodeFlags_SpanAvailWidth, "%s  （%zu 个脚本）", g.mod.c_str(),
+				g.scripts.size());
+			tips::Tip("展开可以看到这个模组里、在缺失的生成对象上留有实例的脚本。");
 			ImGui::TableNextColumn();
 			ImGui::PushStyleColor(ImGuiCol_Text, StatusColor(g.status));
 			ImGui::TextUnformatted(orphans::StatusText(g.status));
@@ -159,9 +162,7 @@ void App::drawOrphansModal()
 					if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
 						viewScript(s.script);
 					}
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("双击查看脚本");
-					}
+					tips::Tip("双击查看脚本");
 					ImGui::Unindent();
 					ImGui::TableNextColumn();
 					ImGui::TableNextColumn();
@@ -185,16 +186,20 @@ void App::drawOrphansModal()
 			_orphanSel[i] = DefaultTick(_orphans[i].status) ? 1 : 0;
 		}
 	}
+	tips::Tip("只勾选已不再安装的模组：最安全的选择。");
 	ImGui::SameLine();
 	if (ImGui::Button("全选")) {
 		std::fill(_orphanSel.begin(), _orphanSel.end(), 1);
 	}
+	tips::Tip("勾选列表里的每个模组，包括仍然安装着的。");
 	ImGui::SameLine();
 	if (ImGui::Button("全不选")) {
 		std::fill(_orphanSel.begin(), _orphanSel.end(), 0);
 	}
+	tips::Tip("取消勾选所有模组。");
 	ImGui::SameLine();
 	ImGui::Checkbox("保留被引用的实例（更安全）", &_orphansKeepHeld);
+	tips::Tip("被引用的实例仍被某个脚本变量或数组指着。保留它们可以避免弄坏还在使用它们的脚本。");
 
 	std::set<EID> ids;
 	for (std::size_t i = 0; i < _orphans.size(); ++i) {
@@ -218,10 +223,12 @@ void App::drawOrphansModal()
 		markEdited(Fmt("已移除 %zu 个位于缺失生成对象上的实例", n));
 	}
 	ImGui::EndDisabled();
+	tips::Tip("从已载入的存档里删除勾选的脚本实例。在 文件 > 另存为 之前不会写入磁盘；保留原始存档。");
 	ImGui::SameLine();
 	if (ImGui::Button("取消", ImVec2(120, 0))) {
 		ImGui::CloseCurrentPopup();
 	}
+	tips::Tip("关闭，不做任何改动。");
 	ImGui::SameLine();
 	TextColored(theme::Dim(), "只有内存中已编辑的存档会变化；请用文件 > 另存为写入。");
 	ImGui::EndPopup();

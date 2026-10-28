@@ -191,7 +191,7 @@ namespace ess::pex
 						_pending.erase(it);
 						return e;
 					}
-					warnings.push_back("temporary " + n + " read before it was set");
+					warnings.push_back("临时变量 " + n + " 在赋值之前被读取");
 					return { n, 0, typeOfName(n) };
 				}
 				if (IsNoneVar(n)) {
@@ -536,7 +536,7 @@ namespace ess::pex
 								continue;
 							}
 							emit(out, "; unstructured " + std::string(OpcodeName(in.op)) + " " + c);
-							warnings.push_back("unstructured jump");
+							warnings.push_back("无法还原结构的跳转");
 							++i;
 							continue;
 						}
@@ -546,7 +546,7 @@ namespace ess::pex
 							continue;
 						}
 						emit(out, "; unstructured jmp");
-						warnings.push_back("unstructured jump");
+						warnings.push_back("无法还原结构的跳转");
 						++i;
 						continue;
 					default:
@@ -697,7 +697,7 @@ namespace ess::pex
 					}
 				default:
 					emit(out, std::string("; ") + OpcodeName(in.op));
-					warnings.push_back(std::string("unhandled opcode ") + OpcodeName(in.op));
+					warnings.push_back(std::string("未处理的指令码 ") + OpcodeName(in.op));
 					break;
 				}
 			}

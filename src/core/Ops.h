@@ -130,4 +130,12 @@ namespace ess::ops
 	};
 	Report Analyze(SaveFile& s);
 	std::string FormatReport(const Report& r, std::size_t a_top = 20);
+
+	// Points the save at a plugin that was renamed (Mod.esp -> Mod.esl, ...): the save's plugin list entry is
+	// renamed, so the game finds the plugin again by its new name and keeps everything the save holds from it.
+	// Only for a rename: if the plugin's records were renumbered (compacted), the save's ids no longer match.
+	// Returns "" when done, else why not.
+	std::string RenamePlugin(SaveFile& s, const std::string& a_from, const std::string& a_to);
+	// Installed plugins that look like a renamed copy of a_missing (same name, other extension).
+	std::vector<std::string> RenameCandidates(const SaveFile& s, const std::string& a_missing, const std::vector<std::string>& a_installed);
 }

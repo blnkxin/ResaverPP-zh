@@ -7,6 +7,7 @@
 #include "App.h"
 
 #include "Theme.h"
+#include "Tips.h"
 
 #include "imgui.h"
 
@@ -140,6 +141,7 @@ void App::drawModCharged(const std::string& a_plugin)
 	if (broken) {
 		ImGui::SetNextItemWidth(120);
 		ImGui::InputInt("要赋予的最大充能", &_chargeFixValue, 100, 500);
+		tips::Tip("给破损物品赋予的最大附魔充能。大灵魂石或黑色灵魂石可容纳 3000。");
 		_chargeFixValue = std::clamp(_chargeFixValue, 1, 65535);
 		ImGui::SameLine();
 		ImGui::TextDisabled("（大灵魂石或黑色灵魂石可容纳 3000）");
@@ -153,6 +155,7 @@ void App::drawModCharged(const std::string& a_plugin)
 			const auto n = cf::FixCharges(*_save, static_cast<std::uint16_t>(_chargeFixValue), only);
 			markEdited(Fmt("将 %zu 个物品（属于 %s）的最大充能设为 %d", n, a_plugin.c_str(), _chargeFixValue));
 		}
+		tips::Tip("给这些附魔物品一个最大充能，使它们能重新用灵魂石充能（它们的最大充能丢失了，通常是移除某个模组之后）。");
 		ImGui::TextDisabled("只有内存中已编辑的存档会变化；请用文件 > 另存为写入。");
 	}
 }

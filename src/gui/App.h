@@ -2,10 +2,14 @@
 // 本地化修改：界面、提示与报告文字改为简体中文（详见 README.zh-CN.md）。
 #pragma once
 
+#include <array>
 #include "core/Transplant.h"
 #include "core/Batch.h"
 #include "core/ChangeFormData.h"
 #include "core/Compare.h"
+#include "core/Extras.h"
+#include "core/MergedPatch.h"
+#include "core/LoadOrder.h"
 #include "core/ModRemove.h"
 #include "core/Orphans.h"
 #include "core/Pex.h"
@@ -25,6 +29,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <map>
+#include <mutex>
 #include <memory>
 #include <thread>
 #include <tuple>
@@ -91,6 +96,21 @@ public:
 			}
 		} else if (w == "arrays") {
 			_showArrays = true;
+		} else if (w == "leftovers") {
+			_showLeftovers = true;
+		} else if (w == "history") {
+			_showHistory = true;
+		} else if (w == "plog") {
+			_showPapyrusLog = true;
+		} else if (w == "saves") {
+			_showSavesMgr = true;
+		} else if (w == "merge") {
+			_showMerge = true;
+		} else if (w == "actors") {
+			_showActors = true;
+		} else if (w == "player") {
+			_showPlayer = true;
+			_pvLoaded = false;
 		} else if (w.rfind("transplant:", 0) == 0) {
 			// test: bad save | good save, both read from their files
 			const auto bar = w.find('|');
@@ -338,6 +358,7 @@ private:
 		std::size_t changeForms = 0, scripts = 0, instances = 0, threads = 0;
 		bool        planned = false, blocked = false;
 		std::string planText;
+		std::vector<std::string> renamedTo;  // enabled plugins that look like this one renamed (Mod.esp -> Mod.esl)
 	};
 	std::vector<MissingMod> _missing;
 	std::string             _missingSource;  // which load order it was compared with
@@ -448,8 +469,68 @@ private:
 	void        pollNames();
 	bool        namesLoading() const;
 	void        drawLookup();
+	void        drawPlayer();
+	// Main screen shortcuts: the Clean and Tools menu entries as buttons under the overview (AppHome.cpp)
+	enum class Sc
+	{
+		kRemoveUnattached, kRemoveUndefined, kTerminateUndefined, kMissingMods, kOrphans,
+		kMcm, kHavok, kPurify, kBatch, kPurge,
+		kPlayer, kActors, kTransplant, kLookup,
+		kMods, kQuests, kCompare, kReport, kAnalysis, kArrays, kOpenPex,
+		kLeftovers, kHistory, kPapyrusLog, kSavesMgr
+	};
+	void        shortcut(Sc a_which);  // what the menu entry or the button does
+	void        drawHome();            // the shortcut buttons
+	bool        anyToolOpen() const;
+	void        goHome();              // "Main menu": close the tools, back to the overview with its shortcuts
+	bool        _homePanel = true;
+	void        drawActors();
+	// leftover items, save history, Papyrus log, saves folder (AppExtras.cpp)
+	void        drawLeftovers();
+	void        drawMergedPatch();
+	void        drawHistory();
+	void        drawPapyrusLog();
+	void        drawSavesManager();
+	void        recordHistory();  // adds the open save's numbers to the history file
+	ess::loadorder::Active currentLoadOrder() const;
+	struct LeftoverGroup
+	{
+		std::string plugin, reason;
+		bool        selected = true;
+		std::map<std::uint32_t, std::vector<std::uint32_t>> items;  // item form id -> holders (change form RefIDs, raw)
+		std::size_t entries = 0;
+	};
+	bool                       _showLeftovers = false, _leftoversDirty = true;
+	std::vector<LeftoverGroup> _leftovers;
+	std::string                _leftoversNote;
+	bool                       _showHistory = false, _historyLoaded = false;
+	std::vector<ess::extras::SaveStat> _history;
+	std::string                _historyChar;
+	std::thread                _historyThread;
+	std::atomic<bool>          _historyBusy{ false }, _historyCancel{ false };
+	std::atomic<std::size_t>   _historyDone{ 0 }, _historyTotal{ 0 };
+	std::mutex                 _historyMutex;
+	std::vector<ess::extras::SaveStat> _historyIncoming;
+	bool                       _showPapyrusLog = false, _plogLoaded = false;
+	ess::extras::LogSummary    _plog;
+	int                        _plogOpen = -1;
+	bool                       _showSavesMgr = false, _savesLoaded = false;
+	std::vector<ess::extras::SaveInfo> _saves;
+	std::vector<char>          _saveSel;
+	int                        _keepNewest = 5;
+	std::string                _savesCharFilter;
+	// merged patch
+	bool                                   _showMerge = false;
+	std::thread                            _mergeThread;
+	std::unique_ptr<ess::merge::Progress>  _mergeProgress;
+	std::unique_ptr<ess::merge::Result>    _mergeResult, _mergeIncoming;
+	std::atomic<bool>                      _mergeBusy{ false };
+	std::string                            _mergeSaved;  // where the last patch was written
+	std::size_t                            _mergeLoadOrder = 0;
+	bool                                   _mergeWaitScan = false;  // build once the mods scan is done
 	void        drawCfNode(const ess::cf::Node& n, int a_depth, int a_index);
 	void        detailChangeFormDecoded(const ess::ChangeForm& c);
+	void        actorFixes(const ess::ChangeForm& c, const ess::cf::Decoded& d);
 	void        resetHavok();
 	void        purifyFormLists();
 	void        drawBatchModal();
@@ -465,6 +546,30 @@ private:
 	bool                  drawFiltersButton();
 	void                  pluginActions(const std::set<std::string>& a_plugins);
 	std::set<std::string> selectedPlugins() const;
+	// what a plugin's buttons would delete, listed under them (grouped, collapsible, click to open)
+	void pluginContents(const std::set<std::string>& a_plugins);
+	struct PluginContents
+	{
+		struct Row
+		{
+			std::uint64_t key = 0;
+			std::string   text;   // first column (form ID / thread)
+			std::string   right;  // second column (size), right-aligned
+			std::string   rest;   // the rest (name, "on" form)
+		};
+		using Groups = std::vector<std::pair<std::string, std::vector<Row>>>;
+		std::set<std::string> plugins;
+		std::uint64_t         gen = UINT64_MAX;
+		const void*           save = nullptr;
+		Groups                forms, instances;  // by change form type / by script
+		std::vector<Row>      threads;
+		std::size_t           nForms = 0, nInstances = 0;
+	};
+	PluginContents _plContents;
+
+	// actor change form fixes: which extra data entries can be removed (tried on a copy), cached per form
+	std::string       _actorFixKey;
+	std::vector<char> _actorExtraOk;
 	void                  exportPluginList();
 	void                  arrayEditor(ess::ArrayInfo& a);
 	void                  drawArraysAnalysis();
@@ -506,7 +611,7 @@ private:
 	std::unique_ptr<ess::SaveFile> _save;
 	std::unique_ptr<ess::ops::Report> _report;
 	std::filesystem::path          _path;
-	std::string                    _status = "打开 Skyrim SE/AE 存档（文件 > 打开，或将 .ess 拖到本窗口）。";
+	std::string                    _status = "打开 Skyrim SE/AE/VR/LE 存档（文件 > 打开，或将 .ess 拖到本窗口）。";
 	bool                           _dirty = false;
 	bool                           _quit = false;
 	bool                           _quitPending = false;
@@ -589,6 +694,36 @@ private:
 	bool                                     _autoNames = true;
 	// lookup
 	bool                       _showLookup = false;
+	// Find NPCs window: every actor with where the save has it
+	struct ActorRow
+	{
+		ess::cf::ActorPlace place;
+		std::string         name, where, filterKey;
+		float               distance = -1;  // from the player, when in the same cell or worldspace
+	};
+	bool                       _showActors = false;
+	std::vector<ActorRow>      _actorRows;
+	const void*                _actorRowsSave = nullptr;
+	const void*                _actorRowsDb = nullptr;
+	std::uint64_t              _actorRowsGen = UINT64_MAX;
+	char                       _actorFilter[128] = {};
+	bool                       _actorNearOnly = false, _actorMovedOnly = true;
+	int                        _actorSortCol = 2;
+	bool                       _actorSortAsc = true;
+	bool                       _showPlayer = false;
+	// player editor: the values read from the save, and the edits being typed
+	bool                       _pvLoaded = false;
+	bool                       _pvAllFactions = false;
+	ess::cf::PlayerValues      _pv;
+	int                        _pvGold = 0;
+	float                      _pvSkills[18]{};
+	std::vector<std::array<int, 2>> _pvBounty;
+	int                        _pvLevel = 0, _pvPerks = 0, _pvSouls = 0;
+	float                      _pvXP = 0;
+	int                        _pvLegend[18]{};
+	std::map<std::uint32_t, float> _pvAVEdit;
+	std::map<std::uint32_t, int>   _pvItemEdit;
+	char                       _pvAVFilter[64]{}, _pvItemFilter[64]{}, _pvSpellFilter[64]{};
 	char                       _lookupBuf[256] = "";
 	bool                       _lookupAuto = false;
 	std::vector<std::uint32_t> _lookupResults;

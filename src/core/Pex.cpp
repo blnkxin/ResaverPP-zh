@@ -20,7 +20,7 @@ namespace ess::pex
 			void need(std::size_t n) const
 			{
 				if (_p + n > _d.size()) {
-					throw std::runtime_error("unexpected end of script file at byte " + std::to_string(_p));
+					throw std::runtime_error("脚本文件意外结束（第 " + std::to_string(_p) + " 字节）");
 				}
 			}
 			std::uint8_t u8()
@@ -96,7 +96,7 @@ namespace ess::pex
 			case 3: v.i = static_cast<std::int32_t>(r.u32()); break;
 			case 4: v.f = r.f32(); break;
 			case 5: v.b = r.u8() != 0; break;
-			default: throw std::runtime_error("bad value type " + std::to_string(v.type));
+			default: throw std::runtime_error("无效的值类型 " + std::to_string(v.type));
 			}
 			return v;
 		}
@@ -120,7 +120,7 @@ namespace ess::pex
 				Instruction in;
 				in.op = r.u8();
 				if (in.op >= kOpCount) {
-					throw std::runtime_error("unknown opcode " + std::to_string(in.op));
+					throw std::runtime_error("未知的指令码 " + std::to_string(in.op));
 				}
 				for (int k = 0; k < kOps[in.op].fixed; ++k) {
 					in.args.push_back(ReadValue(r));
@@ -147,7 +147,7 @@ namespace ess::pex
 
 	const std::string& File::str(std::uint32_t i) const
 	{
-		static const std::string bad = "<bad string>";
+		static const std::string bad = "<字符串无效>";
 		return i < strings.size() ? strings[i] : bad;
 	}
 
@@ -158,10 +158,10 @@ namespace ess::pex
 		BE         r(a_bytes);
 		const auto magic = r.u32();
 		if (magic == 0xDEC057FA) {
-			throw std::runtime_error("this is a Fallout 4 script (little-endian .pex); only Skyrim scripts are supported");
+			throw std::runtime_error("这是 Fallout 4 的脚本（小端 .pex）；只支持天际的脚本");
 		}
 		if (magic != 0xFA57C0DE) {
-			throw std::runtime_error("not a compiled Papyrus script (.pex)");
+			throw std::runtime_error("不是编译过的 Papyrus 脚本（.pex）");
 		}
 		File f;
 		f.major = r.u8();
@@ -248,7 +248,7 @@ namespace ess::pex
 	{
 		std::ifstream in(a_path, std::ios::binary);
 		if (!in) {
-			throw std::runtime_error("cannot open the script file");
+			throw std::runtime_error("无法打开脚本文件");
 		}
 		std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 		return Read(bytes);

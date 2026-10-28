@@ -373,8 +373,8 @@ namespace ess::psc
 			for (std::size_t k = stack.size(); k-- > 0;) {
 				if (a.blocks[stack[k]].type == t) {
 					for (std::size_t j = stack.size(); j-- > k + 1;) {
-						a.problems.push_back("line " + std::to_string(a.blocks[stack[j]].startLine + 1) + ": block is not closed before line " +
-											 std::to_string(w.line + 1));
+						a.problems.push_back("第 " + std::to_string(a.blocks[stack[j]].startLine + 1) + " 行：代码块没有在第 " +
+											 std::to_string(w.line + 1) + " 行之前闭合");
 					}
 					auto& b = a.blocks[stack[k]];
 					b.keywords.push_back(w);
@@ -383,7 +383,7 @@ namespace ess::psc
 					return;
 				}
 			}
-			a.problems.push_back("line " + std::to_string(w.line + 1) + ": " + w.text + " without a matching opening keyword");
+			a.problems.push_back("第 " + std::to_string(w.line + 1) + " 行：" + w.text + " 没有对应的开头关键字");
 		};
 
 		for (std::size_t li = 0; li < words.size(); ++li) {
@@ -442,7 +442,7 @@ namespace ess::psc
 				if (!stack.empty() && a.blocks[stack.back()].type == Block::Type::kIf) {
 					a.blocks[stack.back()].keywords.push_back(w);
 				} else {
-					a.problems.push_back("line " + std::to_string(line + 1) + ": " + w.text + " outside an If");
+					a.problems.push_back("第 " + std::to_string(line + 1) + " 行：" + w.text + " 不在 If 内");
 				}
 			} else if (l == "function" || l == "event") {
 				const bool native = Has(ws, "native");
@@ -495,7 +495,7 @@ namespace ess::psc
 			}
 		}
 		for (const auto i : stack) {
-			a.problems.push_back("line " + std::to_string(a.blocks[i].startLine + 1) + ": " + a.blocks[i].keywords.front().text + " is never closed");
+			a.problems.push_back("第 " + std::to_string(a.blocks[i].startLine + 1) + " 行：" + a.blocks[i].keywords.front().text + " 从未闭合");
 		}
 		return a;
 	}

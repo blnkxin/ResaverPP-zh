@@ -1,3 +1,5 @@
+#include <cctype>
+#include <tuple>
 // ReSaver++ command line - C++ port of ReSaver (FallrimTools) by Mark Fairchild, Apache License 2.0.
 #include "core/Batch.h"
 #include "core/ChangeFormData.h"
@@ -8,6 +10,8 @@
 #include "core/PluginDB.h"
 
 #include <chrono>
+#include "core/LoadOrder.h"
+#include "core/MergedPatch.h"
 #include "core/Mods.h"
 #include "core/Ops.h"
 #include "core/ScriptSources.h"
@@ -32,10 +36,12 @@ using namespace ess;
 static void Usage()
 {
 	std::puts(
-		"ReSaver++ version " RESAVERPP_VERSION " command line (Skyrim SE/AE/VR saves)\n"
+		"ReSaver++ version " RESAVERPP_VERSION " command line (Skyrim SE/AE/VR and Legendary Edition saves)\n"
 		"usage: resaverpp-cli <save.ess> [actions] [-o <out.ess>]\n"
 		"       resaverpp-cli <script.pex>       disassemble a compiled script\n"
 		"       resaverpp-cli <script.pex> --psc decompile it to Papyrus source\n"
+		"       resaverpp-cli --merged-patch <out.esp> --sources <mods folder> [--profile <folder>] [--game <folder>]\n"
+		"                 build a merged patch of the profile's load order (a report is written next to it)\n"
 		"\n"
 		"  (no action)               print the analysis report\n"
 		"  --purge-script <name>     delete every thread, suspended stack, message and instance of a script\n"
@@ -58,6 +64,33 @@ static void Usage()
 		"  --remove-nonexistent      Clean > Remove instances on non-existent created forms (all of them)\n"
 		"  --quests [text]           list the quests in the save (state, stage, journal objectives); with text,\n"
 		"                            details of the matching ones. Uses --sources to read the plugins.\n"
+		"  --remove-flag <formid> <bit>  remove one part of an NPC_ or actor (ACHR) change form: clear its change\n"
+		"                            flag and cut out its data, keeping the rest. NPC_: e.g. 11 = NPC_FACE (the\n"
+		"                            face goes back to the plugins'). Actors: 1 = REFR_MOVE (back to its editor\n"
+		"                            position), 4 = REFR_SCALE, 5 = REFR_INVENTORY, 28 = REFR_ANIMATION (unstick a\n"
+		"                            frozen NPC). Not the player. Needs -o.\n"
+		"  --remove-extra <formid> <name>  remove one extra data entry from an actor (e.g. Package, SceneData,\n"
+		"                            FactionChanges, Ownership, DismemberedLimbs); the game falls back to the\n"
+		"                            plugin's value. Not the player. Needs -o.\n"
+		"  --player                  show the player's gold, skills and bounties\n"
+		"  --set-gold <n>            set the gold the player carries. Needs -o.\n"
+		"  --set-skill <skill> <n>   set a skill (e.g. OneHanded, Archery, Speech) to n. Needs -o.\n"
+		"  --set-bounty <faction formid> <violent> <non-violent>  set the bounty with a hold's crime faction.\n"
+		"                            Needs -o.\n"
+		"  --set-level <n> / --set-xp <n> / --set-perks <n> / --set-souls <n>  the player's level, level-up XP,\n"
+		"                            perk points, dragon souls. Needs -o.\n"
+		"  --set-av <name> <n> / --reset-av <name> / --clear-av-mods <name>  an actor value (e.g. CarryWeight,\n"
+		"                            HealRateMult): set its base, reset it to the race's, clear permanent and\n"
+		"                            damage changes. Needs -o.\n"
+		"  --set-item <formid> <n> / --remove-item <formid> / --remove-spell <formid> / --set-legendary <skill> <n>\n"
+		"  --clear-crimes <faction formid>  bounty and crime totals with that faction to 0. Needs -o.\n"
+		"  --npcs [formid text]      list every actor with where the save has it (cell or worldspace and position)\n"
+		"  --move-to-player <formid> move an actor (e.g. a lost follower) next to the player and reset its AI.\n"
+		"                            Only actors the game has moved before. Needs -o.\n"
+		"  --rename-plugin <old> <new>  point the save at a renamed plugin (e.g. Mod.esp -> Mod.esl), so the game\n"
+		"                            finds it again and keeps its data. Not for compacted plugins. Needs -o.\n"
+		"  --reset-ai <formid>       reset an actor's saved AI (process, movement and combat state) so the game\n"
+		"                            builds it fresh: for NPCs stuck in combat, a package or a pose. Needs -o.\n"
 		"  --journal                 list the quests the player's journal shows (in progress and completed), as\n"
 		"                            the save lists them. Uses --sources to name them.\n"
 		"  --allow-damaged           edit and write a save even though it has structural problems (risky)\n"
@@ -82,6 +115,84 @@ static void Usage()
 		"  --names                   with --sources: read the plugins and print form-name statistics\n"
 		"  --find <text>             with --sources: find forms by editor ID / name / hex form ID\n"
 		"  --dry-run                 with --remove-mod: only print the safety check\n");
+}
+
+static bool _stricmp_portable(const std::string& a_a, const std::string& a_b)
+{
+	return a_a.size() == a_b.size() && std::equal(a_a.begin(), a_a.end(), a_b.begin(), [](char x, char y) {
+		return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y));
+	});
+}
+
+// resaverpp-cli --merged-patch <out.esp> --sources <mods> [--profile <dir>] [--game <dir>] [--plugins-txt <file>] [--language <lang>]
+static int MergedPatchMain(int argc, char** argv)
+{
+	if (argc < 3) {
+		Usage();
+		return 1;
+	}
+	const std::filesystem::path out = argv[2];
+	std::filesystem::path       mods, profile, game, pluginsTxt, overwrite;
+	std::string                 language = "english";
+	for (int i = 3; i < argc; ++i) {
+		const std::string a = argv[i];
+		auto              next = [&]() -> std::string {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "missing value after %s\n", a.c_str());
+                std::exit(1);
+            }
+            return argv[++i];
+		};
+		if (a == "--sources") mods = next();
+		else if (a == "--profile") profile = next();
+		else if (a == "--game") game = next();
+		else if (a == "--plugins-txt") pluginsTxt = next();
+		else if (a == "--overwrite") overwrite = next();
+		else if (a == "--language") language = next();
+		else {
+			std::fprintf(stderr, "unknown option %s\n", a.c_str());
+			return 1;
+		}
+	}
+	if (mods.empty()) {
+		std::fprintf(stderr, "--sources <MO2 mods folder or game Data folder> is needed\n");
+		return 1;
+	}
+	if (auto mo2 = FindMo2Instance(mods)) {
+		if (profile.empty()) profile = mo2->profilesDir / mo2->selectedProfile;
+		if (overwrite.empty()) overwrite = mo2->overwriteDir;
+		if (game.empty()) game = mo2->gamePath;
+	}
+	if (pluginsTxt.empty()) {
+		pluginsTxt = profile.empty() ? loadorder::GamePluginsTxt() : profile / "plugins.txt";
+	}
+	const auto order = profile.empty() ? std::vector<std::string>{} : LoadModList(profile);
+	ScriptSources src;
+	const auto    t0 = std::chrono::steady_clock::now();
+	src.scan(mods, order.empty() ? nullptr : &order, overwrite, game.empty() ? std::filesystem::path{} : game / "Data");
+	std::printf("scanned %zu mod folders, %zu strings files\n", src.modsScanned, src.stringsFiles.size());
+	merge::Options opt;
+	opt.loadOrder = merge::ReadLoadOrder(pluginsTxt, game);
+	opt.language = language;
+	opt.patchName = out.filename().string();
+	merge::UseSources(opt, src);
+	std::printf("load order: %zu plugins (%s)\n", opt.loadOrder.size(), pluginsTxt.string().c_str());
+	const auto r = merge::Build(opt);
+	const auto secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+	if (!r.ok) {
+		std::fprintf(stderr, "error: %s\n", r.error.c_str());
+		return 2;
+	}
+	{
+		std::ofstream f(out, std::ios::binary);
+		f.write(reinterpret_cast<const char*>(r.file.data()), static_cast<std::streamsize>(r.file.size()));
+	}
+	auto rep = out;
+	rep.replace_extension(".txt");
+	std::ofstream(rep) << r.report();
+	std::printf("%zu plugins read, %zu conflicting records, %zu merged, %zu not merged, %zu masters; %.1f s\nwrote %s and %s\n", r.pluginsRead,
+		r.conflicts, r.merged.size(), r.skipped.size(), r.masters.size(), secs, out.string().c_str(), rep.string().c_str());
+	return 0;
 }
 
 int main(int argc, char** argv)
@@ -114,6 +225,9 @@ int main(int argc, char** argv)
 			}
 		}
 	}
+	if (std::string(argv[1]) == "--merged-patch") {
+		return MergedPatchMain(argc, argv);
+	}
 	std::vector<std::string> purge;
 	bool                     fixMcm = false, delForms = false, keepInst = false, unattached = false, undefined = false, termUndef = false, nonexist = false;
 	std::size_t              top = 20;
@@ -125,6 +239,19 @@ int main(int argc, char** argv)
 	int                      fixCharges = 0;
 	bool                     questsView = false;
 	bool journalOnly = false;
+	std::uint32_t removeFlagForm = 0;
+	int removeFlagBit = -1;
+	std::uint32_t removeExtraForm = 0, resetAiForm = 0;
+	std::vector<std::uint32_t> moveToPlayer;
+	bool          npcsView = false;
+	std::string   npcFilter;
+	std::vector<std::pair<std::string, std::string>> renamePlugins;
+	bool          playerView = false;
+	int           playerGold = -1;
+	std::vector<std::pair<std::string, float>> playerSkills;
+	std::vector<std::tuple<std::uint32_t, int, int>> playerBounties;
+	std::vector<std::pair<std::string, std::vector<std::string>>> playerEdits;  // the other player edits, in order
+	std::string   removeExtraName;
 	std::string              questFilter;
 	modremove::Options       removeOpt;
 	for (int i = 2; i < argc; ++i) {
@@ -152,6 +279,42 @@ int main(int argc, char** argv)
 			termUndef = true;
 		} else if (a == "--remove-nonexistent") {
 			nonexist = true;
+		} else if (a == "--remove-extra") {
+			removeExtraForm = static_cast<std::uint32_t>(std::stoul(next(), nullptr, 16));
+			removeExtraName = next();
+		} else if (a == "--player") {
+			playerView = true;
+		} else if (a == "--set-gold") {
+			playerGold = std::atoi(next().c_str());
+		} else if (a == "--set-skill") {
+			const auto name = next();
+			playerSkills.emplace_back(name, static_cast<float>(std::atof(next().c_str())));
+		} else if (a == "--set-level" || a == "--set-xp" || a == "--set-perks" || a == "--set-souls" || a == "--reset-av" ||
+				   a == "--clear-av-mods" || a == "--remove-item" || a == "--remove-spell" || a == "--clear-crimes") {
+			playerEdits.push_back({ a, { next() } });
+		} else if (a == "--set-av" || a == "--set-item" || a == "--set-legendary") {
+			const auto x = next();
+			playerEdits.push_back({ a, { x, next() } });
+		} else if (a == "--set-bounty") {
+			const auto fac = static_cast<std::uint32_t>(std::stoul(next(), nullptr, 16));
+			const int  v = std::atoi(next().c_str());
+			const int  nv = std::atoi(next().c_str());
+			playerBounties.emplace_back(fac, v, nv);
+		} else if (a == "--move-to-player") {
+			moveToPlayer.push_back(static_cast<std::uint32_t>(std::stoul(next(), nullptr, 16)));
+		} else if (a == "--npcs") {
+			npcsView = true;
+			if (i + 1 < argc && argv[i + 1][0] != '-') {
+				npcFilter = argv[++i];
+			}
+		} else if (a == "--rename-plugin") {
+			const auto from = next();
+			renamePlugins.emplace_back(from, next());
+		} else if (a == "--reset-ai") {
+			resetAiForm = static_cast<std::uint32_t>(std::stoul(next(), nullptr, 16));
+		} else if (a == "--remove-flag") {
+			removeFlagForm = static_cast<std::uint32_t>(std::stoul(next(), nullptr, 16));
+			removeFlagBit = std::atoi(next().c_str());
 		} else if (a == "--journal") {
 			questsView = true;
 			journalOnly = true;
@@ -254,7 +417,58 @@ int main(int argc, char** argv)
 				std::fprintf(stderr, "  - %s\n", pr.c_str());
 			}
 		}
-		const bool edits = !purge.empty() || unattached || undefined || termUndef || nonexist || !removeMod.empty() || fixMcm || havok || purify || !batchFile.empty() || spawnedGone || fixCharges > 0;
+		const bool edits = !purge.empty() || unattached || undefined || termUndef || nonexist || !removeMod.empty() || fixMcm || havok || purify || !batchFile.empty() || spawnedGone || fixCharges > 0 || removeFlagBit >= 0 || !removeExtraName.empty() || resetAiForm != 0 || !moveToPlayer.empty() || !renamePlugins.empty() || playerGold >= 0 || !playerSkills.empty() || !playerBounties.empty() || !playerEdits.empty();
+		if (npcsView) {
+			std::size_t shown = 0, total = 0, placed = 0;
+			std::string flt = npcFilter;
+			for (auto& ch : flt) {
+				ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+			}
+			for (const auto& a : cf::ListActors(*save)) {
+				++total;
+				placed += a.hasPosition ? 1 : 0;
+				char id[16];
+				std::snprintf(id, sizeof(id), "%08X", a.formID);
+				if (!flt.empty() && std::string(id).find(flt) == std::string::npos) {
+					continue;
+				}
+				++shown;
+				if (!a.hasPosition) {
+					std::printf("%08X  %s  at its plugin's position (never moved)\n", a.formID, a.isPlayer ? "PLAYER" : "      ");
+				} else {
+					std::printf("%08X  %s  in %08X  at %.0f, %.0f, %.0f%s\n", a.formID, a.isPlayer ? "PLAYER" : "      ", a.cell, a.pos[0],
+						a.pos[1], a.pos[2], a.startCell ? (" (started in " + [&] { char b[16]; std::snprintf(b, 16, "%08X", a.startCell); return std::string(b); }() + ")").c_str() : "");
+				}
+			}
+			std::printf("%zu actors, %zu with a saved position, %zu listed\n", total, placed, shown);
+			return 0;
+		}
+		if (playerView) {
+			const auto pv = cf::ReadPlayer(*save);
+			if (!pv.error.empty()) {
+				std::fprintf(stderr, "%s\n", pv.error.c_str());
+				return 1;
+			}
+			std::printf("level: %d  level-up XP: %g of %g  perk points: %d\n", pv.level, pv.xp, pv.xpNext, pv.perkPoints);
+			std::printf("gold: %d%s\n", pv.gold, pv.hasGold ? "" : " (none carried)");
+			for (const auto& av : pv.avs) {
+				if (av.id < 6 || av.id > 23) {
+					std::printf("av %-24s base %s  permanent %g  temporary %g  damage %g\n", cf::ActorValueName(av.id),
+						av.hasBase ? std::to_string(av.base).c_str() : "(plugin)", av.permanent, av.temporary, av.damage);
+				}
+			}
+			std::printf("items: %zu kinds, spells added in game: %zu\n", pv.items.size(), pv.spells.size());
+			for (int i = 0; i < 18; ++i) {
+				std::printf("skill %-12s %g\n", cf::kSkillNames[i], pv.skills[i]);
+			}
+			for (const auto& b : pv.bounties) {
+				if (b.violent || b.nonViolent || b.violentTotal || b.nonViolentTotal) {
+					std::printf("faction %08X: bounty %d violent + %d non-violent (crime totals %d violent, %d non-violent)\n", b.faction,
+						b.violent, b.nonViolent, b.violentTotal, b.nonViolentTotal);
+				}
+			}
+			return 0;
+		}
 		if (edits && !save->problems.empty() && !allowDamaged) {
 			std::fprintf(stderr, "error: not editing a damaged save (use --allow-damaged to write it anyway, at your own risk)\n");
 			return 3;
@@ -673,6 +887,184 @@ int main(int argc, char** argv)
 		if (!p) {
 			std::fputs("save has no Papyrus section\n", stderr);
 			return 1;
+		}
+		if (removeFlagBit >= 0) {
+			ChangeForm* target = nullptr;
+			for (auto& c : save->changeForms) {
+				if (save->formIDOf(c.refID) == removeFlagForm) {
+					target = &c;
+					break;
+				}
+			}
+			if (!target) {
+				std::fprintf(stderr, "no change form for %08X in this save\n", removeFlagForm);
+				return 1;
+			}
+			const auto why = cf::RemoveFlag(*save, *target, removeFlagBit);
+			if (!why.empty()) {
+				std::fprintf(stderr, "could not remove flag %d from %08X: %s\n", removeFlagBit, removeFlagForm, why.c_str());
+				return 1;
+			}
+			std::printf("removed change flag %d from %08X\n", removeFlagBit, removeFlagForm);
+		}
+		auto findCf = [&](std::uint32_t a_form) -> ChangeForm* {
+			for (auto& c : save->changeForms) {
+				if (save->formIDOf(c.refID) == a_form) {
+					return &c;
+				}
+			}
+			return nullptr;
+		};
+		if (!removeExtraName.empty()) {
+			auto* target = findCf(removeExtraForm);
+			if (!target) {
+				std::fprintf(stderr, "no change form for %08X in this save\n", removeExtraForm);
+				return 1;
+			}
+			const auto d = cf::Decode(*save, *target);
+			std::size_t idx = d.extras.size();
+			for (std::size_t k = 0; k < d.extras.size(); ++k) {
+				if (d.extras[k].name == removeExtraName) {
+					idx = k;
+					break;
+				}
+			}
+			if (idx == d.extras.size()) {
+				std::fprintf(stderr, "%08X has no \"%s\" extra data\n", removeExtraForm, removeExtraName.c_str());
+				return 1;
+			}
+			const auto why = cf::RemoveExtra(*save, *target, idx);
+			if (!why.empty()) {
+				std::fprintf(stderr, "could not remove %s from %08X: %s\n", removeExtraName.c_str(), removeExtraForm, why.c_str());
+				return 1;
+			}
+			std::printf("removed %s from %08X\n", removeExtraName.c_str(), removeExtraForm);
+		}
+		if (playerGold >= 0) {
+			const auto why = cf::SetPlayerGold(*save, playerGold);
+			if (!why.empty()) {
+				std::fprintf(stderr, "could not set gold: %s\n", why.c_str());
+				return 1;
+			}
+			std::printf("set the player's gold to %d\n", playerGold);
+		}
+		for (const auto& [name, level] : playerSkills) {
+			int idx = -1;
+			for (int i = 0; i < 18; ++i) {
+				std::string a = cf::kSkillNames[i], b = name;
+				std::erase_if(a, [](char ch) { return ch == ' ' || ch == '-'; });
+				std::erase_if(b, [](char ch) { return ch == ' ' || ch == '-'; });
+				if (_stricmp_portable(a, b)) {
+					idx = i;
+				}
+			}
+			if (idx < 0) {
+				std::fprintf(stderr, "no skill called %s\n", name.c_str());
+				return 1;
+			}
+			const auto why = cf::SetPlayerSkill(*save, idx, level);
+			if (!why.empty()) {
+				std::fprintf(stderr, "could not set %s: %s\n", cf::kSkillNames[idx], why.c_str());
+				return 1;
+			}
+			std::printf("set the player's %s to %g\n", cf::kSkillNames[idx], level);
+		}
+		for (const auto& [op, args] : playerEdits) {
+			auto avId = [](const std::string& a_s) -> std::uint32_t {
+				for (std::uint32_t i = 0; i < 164; ++i) {
+					if (_stricmp_portable(cf::ActorValueName(i), a_s)) {
+						return i;
+					}
+				}
+				return static_cast<std::uint32_t>(std::stoul(a_s));
+			};
+			auto hex = [](const std::string& a_s) { return static_cast<std::uint32_t>(std::stoul(a_s, nullptr, 16)); };
+			auto skill = [](const std::string& a_s) {
+				for (int i = 0; i < 18; ++i) {
+					std::string a = cf::kSkillNames[i], b = a_s;
+					std::erase_if(a, [](char ch) { return ch == ' ' || ch == '-'; });
+					std::erase_if(b, [](char ch) { return ch == ' ' || ch == '-'; });
+					if (_stricmp_portable(a, b)) {
+						return i;
+					}
+				}
+				return -1;
+			};
+			std::string why;
+			try {
+				if (op == "--set-level") {
+					why = cf::SetPlayerLevel(*save, std::stoi(args[0]));
+				} else if (op == "--set-xp") {
+					why = cf::SetPlayerXP(*save, std::stof(args[0]));
+				} else if (op == "--set-perks") {
+					why = cf::SetPlayerPerkPoints(*save, std::stoi(args[0]));
+				} else if (op == "--set-souls") {
+					why = cf::SetPlayerDragonSouls(*save, std::stoi(args[0]));
+				} else if (op == "--reset-av") {
+					why = cf::ResetPlayerAV(*save, avId(args[0]));
+				} else if (op == "--clear-av-mods") {
+					why = cf::ClearPlayerAVModifiers(*save, avId(args[0]), 1 | 4);
+				} else if (op == "--remove-item") {
+					why = cf::RemovePlayerItem(*save, hex(args[0]));
+				} else if (op == "--remove-spell") {
+					why = cf::RemovePlayerSpell(*save, hex(args[0]));
+				} else if (op == "--clear-crimes") {
+					why = cf::ClearPlayerCrimes(*save, hex(args[0]));
+				} else if (op == "--set-av") {
+					why = cf::SetPlayerAV(*save, avId(args[0]), std::stof(args[1]));
+				} else if (op == "--set-item") {
+					why = cf::SetPlayerItemCount(*save, hex(args[0]), std::stoi(args[1]));
+				} else if (op == "--set-legendary") {
+					why = cf::SetPlayerLegendary(*save, skill(args[0]), std::stoi(args[1]));
+				}
+			} catch (const std::exception&) {
+				why = "bad value";
+			}
+			if (!why.empty()) {
+				std::fprintf(stderr, "%s %s: %s\n", op.c_str(), args[0].c_str(), why.c_str());
+				return 1;
+			}
+			std::printf("%s %s: done\n", op.c_str(), args[0].c_str());
+		}
+		for (const auto& [fac, v, nv] : playerBounties) {
+			const auto why = cf::SetPlayerBounty(*save, fac, v, nv);
+			if (!why.empty()) {
+				std::fprintf(stderr, "could not set the bounty with %08X: %s\n", fac, why.c_str());
+				return 1;
+			}
+			std::printf("set the player's bounty with %08X to %d violent + %d non-violent\n", fac, v, nv);
+		}
+		for (const auto& [from, to] : renamePlugins) {
+			if (const auto why = ops::RenamePlugin(*save, from, to); !why.empty()) {
+				std::fprintf(stderr, "could not rename %s: %s\n", from.c_str(), why.c_str());
+				return 1;
+			}
+			std::printf("the save now loads %s where it had %s\n", to.c_str(), from.c_str());
+		}
+		for (const auto fid : moveToPlayer) {
+			auto* target = findCf(fid);
+			if (!target) {
+				std::fprintf(stderr, "no change form for %08X in this save\n", fid);
+				return 1;
+			}
+			if (const auto why = cf::MoveActorToPlayer(*save, *target); !why.empty()) {
+				std::fprintf(stderr, "could not move %08X: %s\n", fid, why.c_str());
+				return 1;
+			}
+			std::printf("moved %08X next to the player\n", fid);
+		}
+		if (resetAiForm != 0) {
+			auto* target = findCf(resetAiForm);
+			if (!target) {
+				std::fprintf(stderr, "no change form for %08X in this save\n", resetAiForm);
+				return 1;
+			}
+			const auto why = cf::ResetAI(*save, *target);
+			if (!why.empty()) {
+				std::fprintf(stderr, "could not reset the AI of %08X: %s\n", resetAiForm, why.c_str());
+				return 1;
+			}
+			std::printf("reset the AI of %08X\n", resetAiForm);
 		}
 		for (const auto& name : purge) {
 			const auto r = ops::PurgeScript(*save, name, delForms, keepInst);

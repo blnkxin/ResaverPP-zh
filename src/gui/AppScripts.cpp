@@ -8,6 +8,7 @@
 
 #include "Platform.h"
 #include "Theme.h"
+#include "Tips.h"
 
 #include "core/PapyrusCompiler.h"
 #include "core/PapyrusSyntax.h"
@@ -255,9 +256,7 @@ void App::scriptItem(const std::string& a_script, const std::string& a_function,
 	if (a_script.empty()) {
 		return;
 	}
-	if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_NoSharedDelay)) {
-		ImGui::SetTooltip("双击查看 %s%s", a_script.c_str(), a_function.empty() ? "" : " 在此处的位置");
-	}
+	tips::Tipf("双击查看 %s%s", a_script.c_str(), a_function.empty() ? "" : " 在此处的位置");
 	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
 		viewScript(a_script, a_function, a_state, a_instruction);
 	}
@@ -593,10 +592,12 @@ void App::drawDoc(ScriptDoc& d)
 	if (ImGui::Button("保存") || (keys && io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S, false))) {
 		saveDoc(d, false);
 	}
+	tips::Tip("保存脚本源码（Ctrl+S）。之后还要编译，游戏才会用上改动。");
 	ImGui::SameLine();
 	if (ImGui::Button("另存为…") || (keys && io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S, false))) {
 		saveDoc(d, true);
 	}
+	tips::Tip("把源码另存到别的名字或文件夹（Ctrl+Shift+S）。");
 	ImGui::SameLine();
 	ImGui::TextDisabled("|");
 	ImGui::SameLine();
@@ -606,13 +607,12 @@ void App::drawDoc(ScriptDoc& d)
 		startCompile(d);
 	}
 	ImGui::EndDisabled();
-	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-		ImGui::SetTooltip("使用游戏的 Papyrus 编译器编译。\n输出：%s", platform::ToUtf8(compileOutputFolder(d)).c_str());
-	}
+	tips::Tipf("使用游戏的 Papyrus 编译器编译。\n输出：%s", platform::ToUtf8(compileOutputFolder(d)).c_str());
 	ImGui::SameLine();
 	if (ImGui::Button("编译设置…")) {
 		_showCompileSettings = true;
 	}
+	tips::Tip("Papyrus 编译器在哪、它的标志文件、导入文件夹，以及编译出的脚本放在哪里。");
 	ImGui::SameLine();
 	ImGui::TextDisabled("|");
 	ImGui::SameLine();
@@ -625,20 +625,24 @@ void App::drawDoc(ScriptDoc& d)
 		findNext(io.KeyShift);
 		ImGui::SetKeyboardFocusHere(-1);
 	}
+	tips::Tip("在脚本里查找文字。回车找下一个，Shift+回车找上一个（F3 / Shift+F3 也可以）。");
 	ImGui::SameLine();
 	if (ImGui::ArrowButton("##prev", ImGuiDir_Up) || (keys && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_F3, false))) {
 		findNext(true);
 	}
+	tips::Tip("上一个匹配项（Shift+F3）。");
 	ImGui::SameLine();
 	if (ImGui::ArrowButton("##next", ImGuiDir_Down) || (keys && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_F3, false))) {
 		findNext(false);
 	}
+	tips::Tip("下一个匹配项（F3）。");
 	ImGui::SameLine();
 	if (ImGui::Button("跳转到行") || (keys && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_G, false))) {
 		_gotoLine = ed.GetCursorPosition().mLine + 1;
 		_gotoOpen = true;
 		ImGui::OpenPopup("gotoline");
 	}
+	tips::Tip("跳到某一行（Ctrl+G）。");
 	if (ImGui::BeginPopup("gotoline")) {
 		ImGui::SetNextItemWidth(120);
 		if (_gotoOpen) {
@@ -649,18 +653,22 @@ void App::drawDoc(ScriptDoc& d)
 			ed.ScrollToLine(std::clamp(_gotoLine, 1, ed.GetTotalLines()) - 1);
 			ImGui::CloseCurrentPopup();
 		}
+		tips::Tip("要跳到的行号；按回车。");
 		ImGui::EndPopup();
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("全部折叠")) {
 		ed.FoldAll();
 	}
+	tips::Tip("折叠所有函数和代码块，只留首行。");
 	ImGui::SameLine();
 	if (ImGui::Button("全部展开")) {
 		ed.UnfoldAll();
 	}
+	tips::Tip("展开所有已折叠的块。");
 	ImGui::SameLine();
 	ImGui::Checkbox("大纲", &d.showOutline);
+	tips::Tip("在代码旁边列出脚本的属性、变量、事件和函数；点一下即可跳转。");
 
 	// ---- where it came from
 	if (d.decompiled) {
@@ -714,9 +722,7 @@ void App::drawDoc(ScriptDoc& d)
 				if (ImGui::Selectable(label.c_str(), it.line == cur)) {
 					ed.ScrollToLine(it.line);
 				}
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
-					ImGui::SetTooltip("%s", it.detail.c_str());
-				}
+				tips::Tipf("%s", it.detail.c_str());
 				ImGui::PopID();
 			}
 			ImGui::EndChild();
@@ -901,6 +907,7 @@ void App::drawDoc(ScriptDoc& d)
 				}
 				ImGui::SetClipboardText(all.c_str());
 			}
+			tips::Tip("把反汇编复制到剪贴板。");
 			ImGui::SameLine();
 			ImGui::TextDisabled("游戏加载的编译脚本，逐条指令列出。");
 			if (monoFont) {
@@ -1247,6 +1254,7 @@ void App::drawCompileSettings()
 	ImGui::SeparatorText("Papyrus 编译器");
 	const auto detected = papc::FindCompiler(gameFolder());
 	pathInput("##compiler", _compilerSetting, detected ? platform::ToUtf8(*detected).c_str() : "PapyrusCompiler.exe 的路径");
+	tips::Tip("PapyrusCompiler.exe 的路径（随 Creation Kit 提供）。留空就用游戏文件夹里的那个。");
 	ImGui::SameLine();
 	if (ImGui::Button("浏览…##c") && platform::HasNativeDialogs()) {
 		if (auto p = platform::OpenFileDialog(gameFolder(), "exe", "PapyrusCompiler.exe")) {
@@ -1254,6 +1262,7 @@ void App::drawCompileSettings()
 			changed = true;
 		}
 	}
+	tips::Tip("选择 PapyrusCompiler.exe。");
 	if (_compilerSetting.empty()) {
 		if (detected) {
 			ImGui::TextDisabled("使用在游戏文件夹中找到的版本。");
@@ -1268,16 +1277,23 @@ void App::drawCompileSettings()
 		_compileFlags = flags;
 		changed = true;
 	}
+	tips::Tip("编译器标志文件，通常是 TESV_Papyrus_Flags.flg。它必须在某个导入文件夹里。");
 	changed |= ImGui::Checkbox("优化（-op）", &_compileOptimize);
+	tips::Tip("用优化编译：脚本更小、略快。只用于调试的行会被丢掉。");
 	ImGui::SameLine();
 	changed |= ImGui::Checkbox("匿名化 .pex（清空其中保存的源码路径、用户名和机器名）", &_compileAnonymize);
+	tips::Tip("清空编译器写进 .pex 的源码路径、用户名和机器名，发布时就不会带出去。");
 
 	ImGui::SeparatorText("编译后 .pex 的输出位置");
 	changed |= ImGui::RadioButton("脚本所属的模组（<mod>\\Scripts）", &_compileOutMode, 0);
+	tips::Tip("把编译出的 .pex 放进源码所属模组的 Scripts 文件夹，替换它的脚本。");
 	changed |= ImGui::RadioButton("Mod Organizer 的 Overwrite 文件夹（Overwrite\\Scripts）", &_compileOutMode, 1);
+	tips::Tip("把编译出的 .pex 放进 Mod Organizer 的 Overwrite 文件夹，它会压过所有模组。容易撤销：在那里删掉即可。");
 	changed |= ImGui::RadioButton("指定文件夹：", &_compileOutMode, 2);
+	tips::Tip("把编译出的 .pex 放进你指定的文件夹。");
 	ImGui::SameLine();
 	pathInput("##outdir", _compileOutDir, "文件夹");
+	tips::Tip("选择「指定文件夹」时，编译出的脚本放在这里。");
 	ImGui::SameLine();
 	if (ImGui::Button("浏览…##o") && platform::HasNativeDialogs()) {
 		if (auto p = platform::PickFolderDialog("编译后脚本的文件夹")) {
@@ -1286,7 +1302,9 @@ void App::drawCompileSettings()
 			changed = true;
 		}
 	}
+	tips::Tip("选择编译后脚本的文件夹。");
 	changed |= ImGui::Checkbox("替换编译脚本前保留 .pex.bak 备份（仅一次）", &_compileBackup);
+	tips::Tip("第一次替换编译脚本之前，把原文件留成 .pex.bak，以便回退。");
 
 	ImGui::SeparatorText("额外的导入文件夹（优先搜索；每行一个）");
 	char imports[4096];
@@ -1295,6 +1313,7 @@ void App::drawCompileSettings()
 		_compileImports = imports;
 		changed = true;
 	}
+	tips::Tip("额外的脚本源码文件夹，编译器会优先在这些地方找（每行一个），例如 SKSE 或 SkyUI 的源码。");
 	std::size_t enabled = 0;
 	for (const auto& [dir, on] : _sources.sourceDirs) {
 		enabled += on ? 1 : 0;
@@ -1327,15 +1346,18 @@ void App::drawDecompilePrompt()
 	if (ImGui::Checkbox("总是反编译，不再询问", &_decompileAlways)) {
 		saveSettings();
 	}
+	tips::Tip("以后没有源码的脚本直接反编译，不再问这一句。");
 	ImGui::Spacing();
 	if (ImGui::Button("反编译", ImVec2(140, 0))) {
 		ImGui::CloseCurrentPopup();
 		openDoc(_decompileScript, {}, true, _decompileFn, _decompileState, _decompileInstr);
 	}
+	tips::Tip("用内置反编译器把编译脚本还原成可读源码。注释和原始排版无法恢复。");
 	ImGui::SameLine();
 	if (ImGui::Button("取消", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 		ImGui::CloseCurrentPopup();
 	}
+	tips::Tip("关闭，不打开脚本。");
 	ImGui::EndPopup();
 }
 
@@ -1572,5 +1594,12 @@ void App::openNewestAtStart()
 	}
 	if (!best.empty()) {
 		openAny(best);
+	} else {
+		std::string where;
+		for (const auto& d : dirs) {
+			where += (where.empty() ? "" : "; ") + platform::ToUtf8(d);
+		}
+		_status = "打开最新的存档：在以下位置都没找到存档 " + (where.empty() ? std::string("（没有找到存档文件夹）") : where) +
+				  "。请在 选项 > 设置 里指定存档文件夹。";
 	}
 }

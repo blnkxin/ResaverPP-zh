@@ -5,6 +5,7 @@
 #include "App.h"
 
 #include "Theme.h"
+#include "Tips.h"
 
 #include "imgui.h"
 
@@ -80,10 +81,8 @@ namespace
 	// "needs the running game" hint on a disabled button
 	void LiveHint(const LiveLink::Info& a_info)
 	{
-		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-			ImGui::SetTooltip("%s", !a_info.connected ? "安装 ReSaverHelper.dll 并用 SKSE 启动游戏后才能用（Nexus 上的可选下载）。"
-														: "请先在游戏里读一个存档。");
-		}
+		tips::Tipf("%s", !a_info.connected ? "安装 ReSaverHelper.dll 并用 SKSE 启动游戏后才能用（ReSaver Plus 页面上的可选下载）。"
+													: "请先在游戏里读一个存档。");
 	}
 }
 
@@ -353,9 +352,7 @@ void App::drawQuestNotifyChoice()
 	if (ImGui::Combo("##qnotify", &_liveNotify, modes, 3)) {
 		saveSettings();
 	}
-	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("游戏用什么方式告诉你结果（选项 > 设置里的「实时游戏」也能改）。");
-	}
+	tips::Tip("游戏用什么方式告诉你结果（选项 > 设置里的「实时游戏」也能改）。");
 }
 
 // ---- live status (status bar) -------------------------------------------------------------------
@@ -366,9 +363,7 @@ void App::drawLiveStatus()
 	const auto info = _live.info();
 	if (!info.connected) {
 		ImGui::TextDisabled("实时游戏：未连接");
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("安装 ReSaverHelper.dll 并用 SKSE 启动游戏后，就能在这里完成任务、设置阶段、刷新任务日志。");
-		}
+		tips::Tip("安装 ReSaverHelper.dll 并用 SKSE 启动游戏后，就能在这里完成任务、设置阶段、刷新任务日志。");
 		return;
 	}
 	TextColored(theme::Good(), Fmt("实时游戏：%s %s%s", info.runtime.c_str(), info.gameVersion.c_str(), info.inGame ? "" : "（主菜单）"));
@@ -420,11 +415,9 @@ void App::drawRefreshJournal(bool a_compact)
 	ImGui::EndDisabled();
 	if (!can) {
 		LiveHint(info);
-	} else if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("对每个进行中的任务，把日志里显示的目标先隐藏再显示（已完成/已失败的复原），让游戏重建列表。\n"
-						  "能把日志不再显示的任务和目标找回来（和 Quest Journal Limit Bug Fixer 是同一个修法）。\n\n"
-						  "先在游戏里存个档，并在它做完之前不要打开菜单（helper 4 会等菜单关掉）。");
-	}
+	} else tips::Tip("对每个进行中的任务，把日志里显示的目标先隐藏再显示（已完成/已失败的复原），让游戏重建列表。\n"
+					  "能把日志不再显示的任务和目标找回来（和 Quest Journal Limit Bug Fixer 是同一个修法）。\n\n"
+					  "先在游戏里存个档，并在它做完之前不要打开菜单（helper 4 会等菜单关掉）。");
 	if (_liveRefresh.running) {
 		ImGui::SameLine();
 		const float frac = _liveRefresh.total ? float(_liveRefresh.done) / float(_liveRefresh.total) : 0.0f;
@@ -468,11 +461,9 @@ void App::drawRefreshJournal(bool a_compact)
 		});
 	}
 	ImGui::EndDisabled();
-	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-		ImGui::SetTooltip("%s", info.connected ? "写在 ReSaverHelper.ini 的 bRefreshJournalOnLoad 里。读档后等几秒再刷新。\n"
+	tips::Tipf("%s", info.connected ? "写在 ReSaverHelper.ini 的 bRefreshJournalOnLoad 里。读档后等几秒再刷新。\n"
 											   "游戏里的提示由 ReSaver++ 发，可以在设置里关掉。"
 											   : "装上 ReSaverHelper.dll 启动游戏才能改；也可以直接改 ReSaverHelper.ini 的 bRefreshJournalOnLoad=1。");
-	}
 }
 
 // ---- list -----------------------------------------------------------------------------------------
@@ -506,16 +497,19 @@ void App::drawQuestsList()
 	ImGui::SetNextItemWidth(-1);
 	const char* shows[] = { "在日志中", "进行中", "已完成", "本存档全部", "游戏中的全部任务" };
 	ImGui::Combo("##qshow", &_questShow, shows, 5);
+	tips::Tip("列出哪些任务：你的日志显示的、进行中的、已完成的、这个存档里的全部，或者你插件里的全部任务。");
 	ImGui::AlignTextToFramePadding();
 	ImGui::TextUnformatted("查找");
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(_questFilter[0] ? -60.0f : -1.0f);
 	ImGui::InputTextWithHint("##qfilter", "任务名称里的任意词、编辑器 ID 或 Form ID", _questFilter, sizeof(_questFilter));
+	tips::Tip("输入任务名称里的任意词、编辑器 ID 或 Form ID 就能找到它。");
 	if (_questFilter[0]) {
 		ImGui::SameLine();
 		if (ImGui::Button("清空", ImVec2(-1, 0))) {
 			_questFilter[0] = 0;
 		}
+		tips::Tip("清空查找内容。");
 	}
 	if (_questShow == 4 && !_db) {
 		Dim("「游戏中的全部任务」来自你的插件：插件还没有读取。");
@@ -720,6 +714,7 @@ void App::drawQuestDetail()
 		if (ImGui::SmallButton("在游戏里查一下")) {
 			liveQuest(q->formID);
 		}
+		tips::Tip("向正在运行的游戏询问这个任务当前的阶段和状态。");
 	}
 
 	// ---- actions
@@ -763,6 +758,8 @@ void App::drawQuestDetail()
 		LiveHint(info);
 	} else if (completion.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
 		ImGui::SetTooltip("这个任务没有任何阶段被标记为完成它。");
+	} else if (live) {
+		tips::Tip("在运行中的游戏里把任务设到它的完成阶段。该阶段自己的脚本会运行，所以奖励会正常发放，后续任务也会照常开始。先在游戏里存个档。");
 	}
 	ImGui::SameLine();
 	ImGui::BeginDisabled(!live || !helperAtLeast(3));
@@ -779,6 +776,8 @@ void App::drawQuestDetail()
 		LiveHint(info);
 	} else if (!helperAtLeast(3) && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
 		ImGui::SetTooltip("需要 ReSaverHelper 3 或更新的版本（你的是 %s）。", info.helperVersion.c_str());
+	} else if (live) {
+		tips::Tip("在运行中的游戏里把任务标记为完成，但不运行它的阶段脚本：没有奖励，后续任务也不会开始。用于游戏拒绝完成阶段的时候。");
 	}
 	// the Chinese labels are wider than the English ones: the stage controls start a new line
 	ImGui::NewLine();
@@ -792,7 +791,9 @@ void App::drawQuestDetail()
 	_setStageIdx = std::clamp(_setStageIdx, 0, std::max(0, static_cast<int>(stageList.size()) - 1));
 	ImGui::SetNextItemWidth(150);  // "阶段 1000" needs more room than "stage 1000"
 	ImGui::BeginDisabled(stageList.empty());
-	if (ImGui::BeginCombo("##stage", stageList.empty() ? "阶段" : Fmt("阶段 %u", stageList[_setStageIdx]).c_str())) {
+	const bool tipOpen722 = ImGui::BeginCombo("##stage", stageList.empty() ? "阶段" : Fmt("阶段 %u", stageList[_setStageIdx]).c_str());
+	tips::Tip("「在游戏中设置阶段」和「复制控制台命令」用的是这个阶段。阶段来自任务的插件。");
+	if (tipOpen722) {
 		for (int i = 0; i < static_cast<int>(stageList.size()); ++i) {
 			if (ImGui::Selectable(Fmt("阶段 %u", stageList[i]).c_str(), i == _setStageIdx)) {
 				_setStageIdx = i;
@@ -811,6 +812,9 @@ void App::drawQuestDetail()
 	ImGui::EndDisabled();
 	if (!live) {
 		LiveHint(info);
+	} else {
+		tips::Tip("在运行中的游戏里把任务设到左侧选中的阶段。该阶段的脚本会运行。跳过阶段可能"
+				  "让一些事情永远做不完；先在游戏里存个档。");
 	}
 	ImGui::SameLine();
 	ImGui::BeginDisabled(!def || def->edid.empty() || (completion.empty() && stageList.empty()));
@@ -820,9 +824,7 @@ void App::drawQuestDetail()
 		_status = Fmt("已复制：setstage %s %u （在游戏控制台里按 Ctrl+V 粘贴）", def->edid.c_str(), st);
 	}
 	ImGui::EndDisabled();
-	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-		ImGui::SetTooltip("复制能完成该任务的控制台命令（用它的完成阶段），或设置左侧选中的阶段。");
-	}
+	tips::Tip("复制能完成该任务的控制台命令（用它的完成阶段），或设置左侧选中的阶段。");
 	ImGui::TextDisabled("游戏如何告知结果：");
 	ImGui::SameLine();
 	drawQuestNotifyChoice();
@@ -851,6 +853,7 @@ void App::drawQuestDetail()
 				}
 				ImGui::PushID(static_cast<int>(c.formID));
 				ImGui::Checkbox(c.name.c_str(), &c.tick);
+				tips::Tip("勾选的前置任务会先被完成（最早的优先），然后才是这个任务。");
 				ImGui::SameLine();
 				ImGui::TextDisabled("阶段 %u%s", c.stage, c.alternative ? "   （此处有多种达成方式之一）" : "");
 				ImGui::PopID();
@@ -882,6 +885,7 @@ void App::drawQuestDetail()
 						runChain();
 					});
 			}
+			tips::Tip("把这条任务线上勾选的、更早的任务一个个完成，然后完成当前这个，每个都走它自己的完成阶段。游戏拒绝某个阶段时就停住。");
 			ImGui::EndDisabled();
 			if (!live) {
 				LiveHint(info);

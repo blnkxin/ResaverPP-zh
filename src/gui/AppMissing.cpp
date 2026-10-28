@@ -7,6 +7,7 @@
 
 #include "Platform.h"
 #include "Theme.h"
+#include "Tips.h"
 
 #include "core/LoadOrder.h"
 #include "core/ModRemove.h"
@@ -193,8 +194,25 @@ void App::checkMissingPlugins()
 			}
 		}
 	}
+	// renamed rather than removed (Mod.esp -> Mod.esl, ...): offer to point the save at the new name instead
+	{
+		std::vector<std::string> enabled;
+		for (const auto& low : active.plugins) {
+			std::string name = low;
+			if (const auto path = _sources.pluginPath(low)) {
+				name = platform::ToUtf8(path->filename());
+			}
+			enabled.push_back(name);
+		}
+		for (auto& m : _missing) {
+			m.renamedTo = ops::RenameCandidates(*_save, m.plugin, enabled);
+		}
+	}
 	// nothing left of it: nothing to clean, the game already dropped it
 	for (auto& m : _missing) {
+		if (!m.renamedTo.empty()) {
+			m.selected = false;  // probably renamed: never cleaned by default
+		}
 		if (m.changeForms == 0 && m.scripts == 0 && m.threads == 0) {
 			m.selected = false;
 		}
@@ -246,13 +264,12 @@ void App::drawMissingBanner()
 		}
 		_missingOpen = true;
 	}
+	tips::Tip("列出这个存档用过、现在已经不再安装的模组，以及每个留下了什么，并把它们的残留清进一个新的存档文件。在你确认之前什么都不会改。");
 	ImGui::SameLine();
 	if (ImGui::Button("隐藏")) {
 		_missingDismissed = true;
 	}
-	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("隐藏到下次打开存档为止。清理 > 已不再安装的模组与脚本… 可以让它重新出现。");
-	}
+	tips::Tip("隐藏到下次打开存档为止。清理 > 已不再安装的模组与脚本… 可以让它重新出现。");
 	ImGui::EndChild();
 	ImGui::PopStyleColor();
 }
@@ -334,8 +351,36 @@ void App::drawMissingModal()
 			ImGui::BeginDisabled(nothing);
 			ImGui::Checkbox(m.plugin.c_str(), &m.selected);
 			ImGui::EndDisabled();
+			tips::Tip(nothing ? "这个模组在存档里什么都没留下：没有可移除的东西。" : "勾选：移除这个模组的残留（它的变更表单、脚本、实例和线程）。会先做安全检查，可能弄坏存档的移除会被拒绝。");
 			ImGui::TableSetColumnIndex(1);
-			if (m.installed) {
+			if (!m.renamedTo.empty()) {
+				TextColored(theme::Warn(), "改名了？现在以这些名字启用：");
+				for (const auto& to : m.renamedTo) {
+					ImGui::PushID(to.c_str());
+					ImGui::BulletText("%s", to.c_str());
+					ImGui::SameLine();
+					if (ImGui::SmallButton("让存档改指向它")) {
+						const auto from = m.plugin;
+						confirm("让存档指向改名后的插件",
+							"把存档里的条目 " + from + " 改成 " + to + "？\n\n用于你给插件改了名的情况（例如 .esp 改成 .esl）。"
+							"游戏之后就会用新名字找到它，并保留存档里属于它的一切：放置的对象、NPC "
+							"变更、任务进度和它的脚本。\n\n如果插件的记录被重新编号过（“compacted”，"
+							"例如 ESLifier 或 xEdit 的 Compact FormIDs），千万不要这么做：存档里的 id 已经对不上，"
+							"只能开新档或撤销那次转换。\n\n请保留原始存档的副本。",
+							[this, from, to] {
+								if (auto why = ops::RenamePlugin(*_save, from, to); !why.empty()) {
+									_error = "无法让存档指向 " + to + "：" + why;
+									return;
+								}
+								markChanged("存档现在加载 " + to + "，取代原来的 " + from);
+								checkMissingPlugins();
+							});
+					}
+					tips::Tip("把存档里这个插件的条目改成已启用的那个插件名，让游戏在这个存档里保留该模组的数据。只适用于改过名的插件，"
+							  "不适用于 compacted 过的插件。");
+					ImGui::PopID();
+				}
+			} else if (m.installed) {
 				TextColored(theme::Warn(), "已安装但未启用" + (m.folder.empty() ? std::string() : "（" + m.folder + "）"));
 			} else {
 				ImGui::TextUnformatted("未安装");
@@ -362,6 +407,7 @@ void App::drawMissingModal()
 				if (ImGui::SmallButton("详情")) {
 					ImGui::OpenPopup("plan");
 				}
+				tips::Tip("看这个模组具体会被移除什么，或者安全检查为什么拒绝了它。");
 				if (ImGui::BeginPopup("plan")) {
 					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 45);
 					ImGui::TextUnformatted(m.planText.c_str());
@@ -379,6 +425,7 @@ void App::drawMissingModal()
 							_missingScripts.size())
 							.c_str(),
 			&_removeMissingScripts);
+		tips::Tip("同时删除那些文件已彻底不存在的脚本的线程、排队调用和实例。游戏无法运行它们，它们只会拖慢读档并让日志报错。");
 		if (ImGui::TreeNode("missing scripts", "显示")) {
 			for (const auto& [name, n] : _missingScripts) {
 				ImGui::BulletText("%s  （%zu 个仍在使用）", name.c_str(), n);
@@ -397,6 +444,7 @@ void App::drawMissingModal()
 									  "核对模组文件夹。移除模组仍在使用的脚本，会让它的任务和 MCM 重新开始。",
 							  _sourcesPath.c_str(), _sources.modsScanned, _sources.pexFound));
 		ImGui::Checkbox(Fmt("同时移除这 %zu 个脚本（仅当你卸载了它们的模组）", _unfoundScripts.size()).c_str(), &_removeUnfoundScripts);
+		tips::Tip("只有在你确实卸载了这些模组时才勾选。如果它们还安装着、只是 ReSaver++ 找错了文件夹，移除它们会让任务和 MCM 重新开始。");
 		if (ImGui::TreeNode("unfound scripts", "显示")) {
 			for (const auto& [name, n] : _unfoundScripts) {
 				ImGui::BulletText("%s  （%zu 个仍在使用）", name.c_str(), n);
@@ -477,9 +525,11 @@ void App::drawMissingModal()
 		}
 	}
 	ImGui::EndDisabled();
+	tips::Tip("移除勾选的残留，并把结果作为一个新的存档文件写在原存档旁边（原存档保留）。进游戏读这个新存档，确认没问题再继续玩。");
 	ImGui::SameLine();
 	if (ImGui::Button("取消", ImVec2(120, 0))) {
 		ImGui::CloseCurrentPopup();
 	}
+	tips::Tip("关闭，不做任何改动。");
 	ImGui::EndPopup();
 }

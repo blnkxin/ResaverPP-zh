@@ -97,6 +97,24 @@
 | tempering | 强化 | 磨刀石/工作台强化 |
 | poisoned | 已涂毒 | |
 | quest item | 任务物品 | |
+| hover tip / tips::Tip | 悬停提示 | v28 新增：鼠标停留 3 秒出现；选项里可关 |
+| player editor | 玩家编辑 | 金币/等级/技能/奖赏等 |
+| bounty | 赏金 | |
+| gold | 金币 | |
+| save history | 存档历史 | 每个存档的实例/生成对象/大小随时间变化 |
+| Papyrus log | Papyrus 日志 | `Papyrus.0.log` 保留文件名 |
+| saves folder manager | 存档文件夹管理 | 按角色列出全部存档、批量删除 |
+| leftover items | 残留物品 | 已移除模组留下的物品 |
+| Find NPCs / Move to me | 查找 NPC / 叫到我身边 | 把走失的随从叫过来 |
+| rename plugin / point the save at it | 插件改名 / 让存档改指向它 | `.esp` → `.esl` |
+| merged patch | 合并补丁 | v33 stage 1：合并同级列表/容器/NPC/关键字等冲突 |
+| merge | 合并 | |
+| Legendary Edition (LE) | 传奇版（LE） | 存档版本 9 |
+| light plugin / light-flagged | 轻型插件 / 轻型标记 | `.esl`、FormID 以 FE 开头 |
+| ACHR / actor change form | ACHR / 角色变更表单 | 记录码不译 |
+| extra data | 额外数据 | 角色记录里的 REFR/ACHR 附加块 |
+| change flag | 变更标志 | |
+| shortcut buttons | 快捷按钮 | 主界面「清理 / 工具」按钮 |
 
 标点：中文句子用全角标点（，。：；！？（）），数字与英文术语两侧不加空格（如“3 个脚本”可写“3 个脚本”，数字与量词之间留半角空格风格统一即可）。
 长度：按钮/菜单/列标题尽量 2–6 个字；提示句可完整。

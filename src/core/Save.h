@@ -33,8 +33,9 @@ namespace ess
 		std::uint64_t             fileTime = 0;
 		std::uint32_t             shotWidth = 0, shotHeight = 0;
 		Compression               compression = Compression::kLZ4;
-		std::vector<std::uint8_t> screenshot;  // RGBA, shotWidth * shotHeight * 4
+		std::vector<std::uint8_t> screenshot;  // SE: RGBA (4 bytes a pixel); LE: RGB (3)
 
+		bool          isLE() const { return version < 12; }  // Skyrim Legendary Edition (save version 9)
 		void          read(Reader& r);
 		void          write(Writer& w) const;
 		std::uint32_t partialSize() const;  // the value stored in the header-size field
@@ -109,6 +110,7 @@ namespace ess
 		std::filesystem::path     path;
 		Header                    header;
 		std::uint8_t              formVersion = 0;
+		bool                      isLE() const { return header.isLE(); }
 		PluginInfo                plugins;
 		FileLocationTable         flt;
 		std::vector<GlobalData>   table1, table2, table3;

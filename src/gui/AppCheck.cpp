@@ -9,6 +9,7 @@
 
 #include "Platform.h"
 #include "Theme.h"
+#include "Tips.h"
 
 #include "imgui.h"
 
@@ -206,8 +207,9 @@ std::vector<App::CheckItem> App::checkItems()
 			it.what = "存档创建时找不到它们的脚本文件，所以游戏无法运行它们：死数据。";
 			CheckOption o;
 			o.label = "移除未定义元素";
-			o.risk = Risk::kSafe;
-			o.why = "游戏已无法使用这些脚本。只有当你在存档之后重装过那个模组时，它的数据才还有意义。";
+			o.risk = Risk::kCaution;
+			o.why = "游戏已无法使用这些脚本，但终止它们的线程也会结束调用它们的脚本，可能让任务或模组永远等待。"
+					"如果那个模组又装回来了，或者它继承的某个脚本只是暂时缺失，这些数据仍然有意义。请先备份存档，再进游戏确认。";
 			o.act = [this, p] {
 				confirm("移除未定义元素",
 					"删除 .pex 已不再安装的脚本、它们的实例和引用，并终止正在运行它们的线程？"
@@ -423,6 +425,7 @@ void App::drawSaveCheck()
 			if (RiskButton(o.label, o.risk, o.enabled)) {
 				o.act();
 			}
+			tips::Tip(o.risk == Risk::kRisky ? "危险：可能弄坏某个模组或任务。请先读它旁边的说明，并备份存档。" : o.risk == Risk::kCaution ? "先看清楚：通常没事，但用之前读一下旁边的说明。" : "安全：不会伤到游戏。保存之前不会写入磁盘（文件 > 保存 或 另存为）。");
 			ImGui::SameLine();
 			const float x = ImGui::GetCursorPosX();
 			TextWrappedAt(RiskColor(o.risk), std::string(RiskWord(o.risk)) + ": " + o.why, x);
@@ -436,11 +439,13 @@ void App::drawSaveCheck()
 	if (ImGui::Checkbox("打开存档时显示", &_checkOnOpen)) {
 		saveSettings();
 	}
+	tips::Tip("每次打开存档时自动打开这个存档检查窗口。");
 	ImGui::SameLine();
 	ImGui::SetCursorPosX(ImGui::GetWindowWidth() - 140);
 	if (ImGui::Button("关闭", ImVec2(120, 0))) {
 		_showCheck = false;
 	}
+	tips::Tip("关闭存档检查。想再打开：工具 > 存档检查（F2），或概览页上的那个按钮。");
 	ImGui::End();
 }
 
@@ -482,4 +487,5 @@ void App::drawCheckSummary()
 		_showCheck = true;
 		ImGui::SetWindowFocus("存档检查");
 	}
+	tips::Tip("打开 ReSaver++ 对这个存档注意到的一切，以及每一处可以安全地怎么处理（F2）。");
 }

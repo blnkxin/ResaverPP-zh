@@ -38,7 +38,7 @@ namespace ess
 		const auto pos = r.pos();
 		const auto v = r.u8();
 		if (v > 17 || (v >= 8 && v <= 10)) {
-			throw FormatError("invalid variable type " + std::to_string(v), pos);
+			throw FormatError("无效的变量类型 " + std::to_string(v), pos);
 		}
 		return static_cast<VType>(v);
 	}
@@ -48,8 +48,10 @@ namespace ess
 		Variable v;
 		v.type = ReadVType(r);
 		switch (v.type) {
-		case VType::kNull:
 		case VType::kString:
+			v.value = r.tstr();
+			break;
+		case VType::kNull:
 		case VType::kInt:
 		case VType::kFloat:
 		case VType::kBool:
@@ -57,17 +59,17 @@ namespace ess
 			break;
 		case VType::kRef:
 		case VType::kStruct:
-			v.refType = r.u32();
-			v.value = r.u64();
+			v.refType = r.tstr();
+			v.value = r.eid();
 			break;
 		case VType::kVariant:
 			v.inner = std::make_unique<Variable>(Variable::read(r));
 			break;
 		default:  // arrays
 			if (IsRefType(v.type)) {
-				v.refType = r.u32();
+				v.refType = r.tstr();
 			}
-			v.value = r.u64();
+			v.value = r.eid();
 			break;
 		}
 		return v;
@@ -77,8 +79,10 @@ namespace ess
 	{
 		w.u8(static_cast<std::uint8_t>(type));
 		switch (type) {
-		case VType::kNull:
 		case VType::kString:
+			w.tstr(static_cast<std::uint32_t>(value));
+			break;
+		case VType::kNull:
 		case VType::kInt:
 		case VType::kFloat:
 		case VType::kBool:
@@ -86,8 +90,8 @@ namespace ess
 			break;
 		case VType::kRef:
 		case VType::kStruct:
-			w.u32(refType);
-			w.u64(value);
+			w.tstr(refType);
+			w.eid(value);
 			break;
 		case VType::kVariant:
 			if (inner) {
@@ -98,9 +102,9 @@ namespace ess
 			break;
 		default:
 			if (IsRefType(type)) {
-				w.u32(refType);
+				w.tstr(refType);
 			}
-			w.u64(value);
+			w.eid(value);
 			break;
 		}
 	}
@@ -127,7 +131,7 @@ namespace ess
 		{
 			InstanceData d;
 			d.flag = r.u8();
-			d.state = r.u32();
+			d.state = r.tstr();
 			d.unknown1 = r.u32();
 			d.unknown2 = (d.flag & 0x04) ? r.u32() : 0;
 			const auto n = r.u32();
@@ -136,9 +140,9 @@ namespace ess
 		}
 		void WriteInstanceData(Writer& w, EID id, const InstanceData& d)
 		{
-			w.u64(id);
+			w.eid(id);
 			w.u8(d.flag);
-			w.u32(d.state);
+			w.tstr(d.state);
 			w.u32(d.unknown1);
 			if (d.flag & 0x04) {
 				w.u32(d.unknown2);
@@ -161,11 +165,11 @@ namespace ess
 			case 0: break;
 			case 1:
 			case 2:
-			case 8: p.value = r.u32(); break;
+			case 8: p.value = r.tstr(); break;
 			case 3:
 			case 4: p.value = r.u32(); break;
 			case 5: p.value = r.u8(); break;
-			default: throw FormatError("invalid opcode parameter type " + std::to_string(p.type), pos);
+			default: throw FormatError("无效的指令码参数类型 " + std::to_string(p.type), pos);
 			}
 			return p;
 		}
@@ -175,6 +179,9 @@ namespace ess
 			switch (p.type) {
 			case 0: break;
 			case 5: w.u8(static_cast<std::uint8_t>(p.value)); break;
+			case 1:
+			case 2:
+			case 8: w.tstr(p.value); break;
 			default: w.u32(p.value); break;
 			}
 		}
@@ -185,7 +192,7 @@ namespace ess
 			const auto pos = r.pos();
 			o.op = r.u8();
 			if (o.op >= 48) {
-				throw FormatError("invalid opcode " + std::to_string(o.op), pos);
+				throw FormatError("无效的指令码 " + std::to_string(o.op), pos);
 			}
 			const int  args = kOpcodeArgs[o.op];
 			const bool extra = args < 0;
@@ -196,7 +203,7 @@ namespace ess
 			if (extra && !o.params.empty()) {
 				const auto& last = o.params.back();
 				if (last.type != 3) {
-					throw FormatError("variable-argument opcode without an integer count", r.pos());
+					throw FormatError("可变参数指令码缺少整数计数", r.pos());
 				}
 				const auto count = static_cast<std::int32_t>(last.value);
 				for (std::int32_t i = 0; i < count; ++i) {
@@ -211,34 +218,34 @@ namespace ess
 			StackFrame f;
 			const auto varCount = r.u32();
 			if (varCount > 50000) {
-				throw FormatError("invalid stack frame variable count", r.pos());
+				throw FormatError("无效的栈帧变量数", r.pos());
 			}
 			f.flag = r.u8();
 			f.fnType = r.u8();
-			f.scriptName = r.u32();
-			f.baseName = r.u32();
-			f.event = r.u32();
+			f.scriptName = r.tstr();
+			f.baseName = r.tstr();
+			f.event = r.tstr();
 			if (!(f.flag & 1) && f.fnType == 0) {
-				f.status = r.u32();
+				f.status = r.tstr();
 			}
 			f.opMajor = r.u8();
 			f.opMinor = r.u8();
-			f.returnType = r.u32();
-			f.docString = r.u32();
+			f.returnType = r.tstr();
+			f.docString = r.tstr();
 			f.userFlags = r.u32();
 			f.fnFlags = r.u8();
 			const auto pc = r.u16();
 			for (std::uint16_t i = 0; i < pc; ++i) {
 				MemberDesc m;
-				m.name = r.u32();
-				m.type = r.u32();
+				m.name = r.tstr();
+				m.type = r.tstr();
 				f.params.push_back(m);
 			}
 			const auto lc = r.u16();
 			for (std::uint16_t i = 0; i < lc; ++i) {
 				MemberDesc m;
-				m.name = r.u32();
-				m.type = r.u32();
+				m.name = r.tstr();
+				m.type = r.tstr();
 				f.locals.push_back(m);
 			}
 			const auto oc = r.u16();
@@ -256,27 +263,27 @@ namespace ess
 			w.u32(static_cast<std::uint32_t>(f.vars.size()));
 			w.u8(f.flag);
 			w.u8(f.fnType);
-			w.u32(f.scriptName);
-			w.u32(f.baseName);
-			w.u32(f.event);
+			w.tstr(f.scriptName);
+			w.tstr(f.baseName);
+			w.tstr(f.event);
 			if (f.status) {
-				w.u32(*f.status);
+				w.tstr(*f.status);
 			}
 			w.u8(f.opMajor);
 			w.u8(f.opMinor);
-			w.u32(f.returnType);
-			w.u32(f.docString);
+			w.tstr(f.returnType);
+			w.tstr(f.docString);
 			w.u32(f.userFlags);
 			w.u8(f.fnFlags);
 			w.u16(static_cast<std::uint16_t>(f.params.size()));
 			for (const auto& m : f.params) {
-				w.u32(m.name);
-				w.u32(m.type);
+				w.tstr(m.name);
+				w.tstr(m.type);
 			}
 			w.u16(static_cast<std::uint16_t>(f.locals.size()));
 			for (const auto& m : f.locals) {
-				w.u32(m.name);
-				w.u32(m.type);
+				w.tstr(m.name);
+				w.tstr(m.type);
 			}
 			w.u16(static_cast<std::uint16_t>(f.code.size()));
 			for (const auto& o : f.code) {
@@ -308,7 +315,7 @@ namespace ess
 				} else if (t.typeCode == "TopicInfo") {
 					len = 0;
 				} else {
-					throw FormatError("unknown fragment task type '" + t.typeCode + "'", r.pos());
+					throw FormatError("未知的片段任务类型「" + t.typeCode + "」", r.pos());
 				}
 			}
 			t.payload = r.bytes(len);
@@ -334,7 +341,7 @@ namespace ess
 			d.major = r.i8();
 			d.minor = r.i8();
 			if (d.major > 0 && (d.minor < 1 || d.minor > 2)) {
-				throw FormatError("bad active script minor version " + std::to_string(d.minor), r.pos());
+				throw FormatError("活动脚本的次版本号无效 " + std::to_string(d.minor), r.pos());
 			}
 			d.unknownVar = Variable::read(r);
 			d.flag = r.u8();
@@ -346,7 +353,7 @@ namespace ess
 			}
 			const auto count = r.u32();
 			if (count > 100000) {
-				throw FormatError("invalid stack frame count", r.pos());
+				throw FormatError("无效的栈帧数", r.pos());
 			}
 			d.frames.reserve(count);
 			for (std::uint32_t i = 0; i < count; ++i) {
@@ -385,8 +392,8 @@ namespace ess
 		{
 			FunctionMessageData d;
 			d.fnFlags = r.u8();
-			d.scriptName = r.u32();
-			d.event = r.u32();
+			d.scriptName = r.tstr();
+			d.event = r.tstr();
 			d.unknownVar = Variable::read(r);
 			const auto n = r.u32();
 			d.vars = ReadVars(r, n);
@@ -395,8 +402,8 @@ namespace ess
 		void WriteFMData(Writer& w, const FunctionMessageData& d)
 		{
 			w.u8(d.fnFlags);
-			w.u32(d.scriptName);
-			w.u32(d.event);
+			w.tstr(d.scriptName);
+			w.tstr(d.event);
 			d.unknownVar.write(w);
 			w.u32(static_cast<std::uint32_t>(d.vars.size()));
 			WriteVars(w, d.vars);
@@ -459,7 +466,15 @@ namespace ess
 	{
 		header = r.u16();
 
-		const auto strCount = r.u32();
+		std::uint32_t strCount;
+		if (r.le) {
+			strCount = r.u16();
+			if (strCount == 0xFFFF) {
+				strCount = r.u32();
+			}
+		} else {
+			strCount = r.u32();
+		}
 		strings.reserve(strCount);
 		for (std::uint32_t i = 0; i < strCount; ++i) {
 			strings.push_back(r.wstring());
@@ -469,14 +484,14 @@ namespace ess
 		scripts.reserve(scriptCount);
 		for (std::uint32_t i = 0; i < scriptCount; ++i) {
 			Script s;
-			s.name = r.u32();
-			s.parent = r.u32();
+			s.name = r.tstr();
+			s.parent = r.tstr();
 			const auto mc = r.u32();
 			s.members.reserve(mc);
 			for (std::uint32_t m = 0; m < mc; ++m) {
 				MemberDesc d;
-				d.name = r.u32();
-				d.type = r.u32();
+				d.name = r.tstr();
+				d.type = r.tstr();
 				s.members.push_back(d);
 			}
 			scripts.push_back(std::move(s));
@@ -486,8 +501,8 @@ namespace ess
 		instances.reserve(instCount);
 		for (std::uint32_t i = 0; i < instCount; ++i) {
 			ScriptInstance s;
-			s.id = r.u64();
-			s.script = r.u32();
+			s.id = r.eid();
+			s.script = r.tstr();
 			s.unknown2bits = r.u16();
 			s.unknown = r.u16();
 			s.refID = RefID::read(r);
@@ -499,8 +514,8 @@ namespace ess
 		references.reserve(refCount);
 		for (std::uint32_t i = 0; i < refCount; ++i) {
 			Reference x;
-			x.id = r.u64();
-			x.script = r.u32();
+			x.id = r.eid();
+			x.script = r.tstr();
 			references.push_back(std::move(x));
 		}
 
@@ -508,10 +523,10 @@ namespace ess
 		arrays.reserve(arrCount);
 		for (std::uint32_t i = 0; i < arrCount; ++i) {
 			ArrayInfo a;
-			a.id = r.u64();
+			a.id = r.eid();
 			a.type = ReadVType(r);
 			if (IsRefType(a.type)) {
-				a.refType = r.u32();
+				a.refType = r.tstr();
 			}
 			a.length = r.u32();
 			arrays.push_back(std::move(a));
@@ -533,10 +548,10 @@ namespace ess
 		instanceDataOrder.clear();
 		for (std::size_t i = 0; i < instances.size(); ++i) {
 			const auto pos = r.pos();
-			const EID  id = r.u64();
+			const EID  id = r.eid();
 			auto*      inst = findInstance(id);
 			if (!inst) {
-				throw FormatError("script instance data for unknown id", pos);
+				throw FormatError("未知 id 的脚本实例数据", pos);
 			}
 			inst->data = ReadInstanceData(r);
 			instanceDataOrder.push_back(id);
@@ -545,10 +560,10 @@ namespace ess
 		referenceDataOrder.clear();
 		for (std::size_t i = 0; i < references.size(); ++i) {
 			const auto pos = r.pos();
-			const EID  id = r.u64();
+			const EID  id = r.eid();
 			auto*      ref = findReference(id);
 			if (!ref) {
-				throw FormatError("reference data for unknown id", pos);
+				throw FormatError("未知 id 的引用数据", pos);
 			}
 			ref->data = ReadInstanceData(r);
 			referenceDataOrder.push_back(id);
@@ -557,10 +572,10 @@ namespace ess
 		arrayDataOrder.clear();
 		for (std::size_t i = 0; i < arrays.size(); ++i) {
 			const auto pos = r.pos();
-			const EID  id = r.u64();
+			const EID  id = r.eid();
 			auto*      arr = findArray(id);
 			if (!arr) {
-				throw FormatError("array data for unknown id", pos);
+				throw FormatError("未知 id 的数组数据", pos);
 			}
 			arr->vars = ReadVars(r, arr->length);
 			arr->hasData = true;
@@ -573,7 +588,7 @@ namespace ess
 			const ThreadID id = r.u32();
 			auto*          as = findActive(id);
 			if (!as) {
-				throw FormatError("active script data for unknown id", pos);
+				throw FormatError("未知 id 的活动脚本数据", pos);
 			}
 			as->data = ReadActiveData(r);
 			activeDataOrder.push_back(id);
@@ -604,14 +619,14 @@ namespace ess
 		const auto unkCount = r.u32();
 		unknownIDs.reserve(unkCount);
 		for (std::uint32_t i = 0; i < unkCount; ++i) {
-			unknownIDs.push_back(r.u64());
+			unknownIDs.push_back(r.eid());
 		}
 
 		const auto unbindCount = r.u32();
 		unbinds.reserve(unbindCount);
 		for (std::uint32_t i = 0; i < unbindCount; ++i) {
 			QueuedUnbind u;
-			u.id = r.u64();
+			u.id = r.eid();
 			u.unknown = r.u32();
 			unbinds.push_back(u);
 		}
@@ -760,26 +775,35 @@ namespace ess
 	void Papyrus::write(Writer& w) const
 	{
 		w.u16(header);
-		w.u32(static_cast<std::uint32_t>(strings.size()));
+		if (w.le) {
+			if (strings.size() <= 0xFFF0) {
+				w.u16(static_cast<std::uint16_t>(strings.size()));
+			} else {
+				w.u16(0xFFFF);
+				w.u32(static_cast<std::uint32_t>(strings.size()));
+			}
+		} else {
+			w.u32(static_cast<std::uint32_t>(strings.size()));
+		}
 		for (const auto& s : strings) {
 			w.wstring(s);
 		}
 
 		w.u32(static_cast<std::uint32_t>(scripts.size()));
 		for (const auto& s : scripts) {
-			w.u32(s.name);
-			w.u32(s.parent);
+			w.tstr(s.name);
+			w.tstr(s.parent);
 			w.u32(static_cast<std::uint32_t>(s.members.size()));
 			for (const auto& m : s.members) {
-				w.u32(m.name);
-				w.u32(m.type);
+				w.tstr(m.name);
+				w.tstr(m.type);
 			}
 		}
 
 		w.u32(static_cast<std::uint32_t>(instances.size()));
 		for (const auto& s : instances) {
-			w.u64(s.id);
-			w.u32(s.script);
+			w.eid(s.id);
+			w.tstr(s.script);
 			w.u16(s.unknown2bits);
 			w.u16(s.unknown);
 			s.refID.write(w);
@@ -788,16 +812,16 @@ namespace ess
 
 		w.u32(static_cast<std::uint32_t>(references.size()));
 		for (const auto& x : references) {
-			w.u64(x.id);
-			w.u32(x.script);
+			w.eid(x.id);
+			w.tstr(x.script);
 		}
 
 		w.u32(static_cast<std::uint32_t>(arrays.size()));
 		for (const auto& a : arrays) {
-			w.u64(a.id);
+			w.eid(a.id);
 			w.u8(static_cast<std::uint8_t>(a.type));
 			if (IsRefType(a.type)) {
-				w.u32(a.refType);
+				w.tstr(a.refType);
 			}
 			w.u32(a.hasData ? static_cast<std::uint32_t>(a.vars.size()) : a.length);
 		}
@@ -817,12 +841,12 @@ namespace ess
 			WriteInstanceData(w, x.id, x.data ? *x.data : InstanceData{});
 		});
 		WriteInOrder(arrayDataOrder, arrays, [&](const ArrayInfo& a) {
-			w.u64(a.id);
+			w.eid(a.id);
 			WriteVars(w, a.vars);
 		});
 		WriteInOrder(activeDataOrder, activeScripts, [&](const ActiveScript& a) {
 			if (!a.data) {
-				throw std::runtime_error("active script without data cannot be written");
+				throw std::runtime_error("没有数据的活动脚本无法写入");
 			}
 			WriteActiveData(w, a.id, *a.data);
 		});
@@ -848,12 +872,12 @@ namespace ess
 		}
 		w.u32(static_cast<std::uint32_t>(unknownIDs.size()));
 		for (EID id : unknownIDs) {
-			w.u64(id);
+			w.eid(id);
 		}
 
 		w.u32(static_cast<std::uint32_t>(unbinds.size()));
 		for (const auto& u : unbinds) {
-			w.u64(u.id);
+			w.eid(u.id);
 			w.u32(u.unknown);
 		}
 

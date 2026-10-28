@@ -3,15 +3,16 @@
 // The rest of ReSaver's features: filters, plugin actions, array editing, arrays analysis,
 // plugin list export, log, settings, support links, script (.pex) viewer.
 #include "App.h"
+#include <algorithm>
 
 #include "Platform.h"
 #include "Theme.h"
+#include "Tips.h"
 
 #include "core/Text.h"
 
 #include "imgui.h"
 
-#include <algorithm>
 #include <cctype>
 #include <cinttypes>
 #include <cstdio>
@@ -72,48 +73,65 @@ bool App::drawFiltersButton()
 	if (ImGui::Button(active ? "过滤器 *" : "过滤器")) {
 		ImGui::OpenPopup("filters");
 	}
+	tips::Tip("把列表缩窄到有某种问题或内容的行为（ReSaver 的过滤器菜单）。标题带 * 表示有过滤器生效。");
 	if (ImGui::BeginPopup("filters")) {
 		bool ch = false;
 		ImGui::TextDisabled("同一组内勾选的过滤器为“或”关系（显示匹配任一项的行）。");
 		ImGui::SeparatorText("脚本");
 		ch |= ImGui::Checkbox("无父级的脚本", &F.noParent);
+		tips::Tip("父脚本（它继承的脚本）不在这个存档里的脚本。通常无害。");
 		ch |= ImGui::Checkbox("父级缺失的脚本", &F.missingParent);
+		tips::Tip("继承了某个已不在存档里的脚本：常是卸载模组后留下的。");
 		ImGui::SeparatorText("脚本实例");
 		ch |= ImGui::Checkbox("无成员实例（脚本有变量，实例没有）", &F.memberless);
+		tips::Tip("脚本本身有变量、实例却一个都没有的脚本实例：它们的数据丢了。常见于模组更新或卸载之后。");
 		ch |= ImGui::Checkbox("归零的 canary（::iPapyrusDataVerification_var = 0）", &F.zeroedCanary);
+		tips::Tip("::iPapyrusDataVerification_var 校验值为 0 的实例，说明游戏读档时丢弃了它们的数据（模组被改过或已损坏）。");
 		ch |= ImGui::Checkbox("带脚本的表单（变更表单上的实例／带脚本的变更表单）", &F.withScripts);
+		tips::Tip("上面挂着脚本实例的变更表单，以及变更表单上的脚本实例。");
 		ImGui::SeparatorText("字符串");
 		ch |= ImGui::Checkbox("长字符串（512 个字符或更多）", &F.longStrings);
+		tips::Tip("非常长的脚本字符串。巨型字符串常来自用循环拼文本的模组，会把存档撑大。");
 		ImGui::SeparatorText("变更表单");
 		ch |= ImGui::Checkbox("含空项的 FormList", &F.nullLists);
+		tips::Tip("含空项的 FormList（FLST）：来自已移除模组的表单。清理 > 净化 FormList 可以删掉它们。");
 		ch |= ImGui::Checkbox("Cell(-1) 变更表单（被移到已删除的单元格）", &F.cellMinus1);
+		tips::Tip("被移到已删除（无效）单元格的东西。它们已经丢了，通常可以删除。");
 		ch |= ImGui::Checkbox("空 REFR（无变更但初始数据为空）", &F.emptyRef);
+		tips::Tip("没有保存任何变更、只有空初始数据的对象引用：无害的残留。");
 		const char* levels[] = { "忽略", "完全解码", "部分解码", "未解码" };
 		ImGui::SetNextItemWidth(160);
 		ch |= ImGui::Combo("解码状态", &F.parseLevel, levels, 4);
+		tips::Tip("只显示 ReSaver++ 完全解码、部分解码或未解码的变更表单。部分或未解码的不会被编辑改动。");
 		ImGui::TextUnformatted("变更标志：掩码");
 		ImGui::SameLine();
 		ch |= HexInput("##fm", F.flagMask);
+		tips::Tip("变更标志掩码：要测试哪些标志位（十六进制）。当（flags & mask）==（value & mask）时该行通过。0 表示关闭。");
 		ImGui::SameLine();
 		ImGui::TextUnformatted("值");
 		ImGui::SameLine();
 		ch |= HexInput("##fv", F.flagValue);
+		tips::Tip("变更标志值：被掩码的标志必须等于的位（十六进制）。");
 		ImGui::TextUnformatted("表单标志：掩码");
 		ImGui::SameLine();
 		ch |= HexInput("##ffm", F.formFlagMask);
+		tips::Tip("表单标志掩码：要测试哪些记录标志位（十六进制）。0 表示关闭。");
 		ImGui::SameLine();
 		ImGui::TextUnformatted("值");
 		ImGui::SameLine();
 		ch |= HexInput("##ffv", F.formFlagValue);
+		tips::Tip("表单标志值：被掩码的表单标志必须等于的位（十六进制）。");
 		ImGui::TextDisabled("当（flags & mask）==（value & mask）时该行通过；掩码为 0 即关闭。");
 		ImGui::SetNextItemWidth(420);
 		ch |= ImGui::InputTextWithHint("##content", "内容：例如 EXTRADATA/Ownership；INITIAL/CELL/0000003C", F.content, sizeof(F.content));
+		tips::Tip("按字段路径在已解码的变更表单里搜索，例如 EXTRADATA/Ownership。“;” 表示与，“,” 表示或，“!” 表示非。");
 		ImGui::TextDisabled("内容：“;” 表示与，“,” 表示或，“!” 表示非；以值或字段名结尾的字段路径。");
 		ImGui::Separator();
 		if (ImGui::Button("清除所有过滤器")) {
 			F = Filters{};
 			ch = true;
 		}
+		tips::Tip("关掉所有过滤器，重新显示全部行。");
 		if (ch) {
 			_rowsDirty = true;
 		}
@@ -143,6 +161,7 @@ void App::pluginActions(const std::set<std::string>& a_plugins)
 				markEdited(Fmt("已删除 %zu 个变更表单", s.changeForms.size()));
 			});
 	}
+	tips::Tip("删除这个插件定义的每个表单的已保存状态。下次读档时它们会回到插件定义的样子。");
 	ImGui::SameLine();
 	if (ImGui::Button(Fmt("删除其脚本实例（%zu）", both.instances.size()).c_str())) {
 		confirm("删除 " + label + " 的脚本实例",
@@ -154,6 +173,7 @@ void App::pluginActions(const std::set<std::string>& a_plugins)
 				markEdited(Fmt("已删除 %zu 个实例和 %zu 个线程", s.instances.size(), s.threads.size()));
 			});
 	}
+	tips::Tip("删除这个插件表单上的脚本实例，以及跑在它们上面的线程。若模组仍安装着，它的脚本会重新开始。");
 	if (ImGui::Button(Fmt("清除 %s（全部）", label.c_str()).c_str())) {
 		confirm("清除 " + label,
 			Fmt("删除 %zu 个变更表单、%zu 个脚本实例和 %zu 个线程（属于 %s）？\n\n若要安全地移除单个模组，请使用 "
@@ -165,6 +185,7 @@ void App::pluginActions(const std::set<std::string>& a_plugins)
 				markEdited(Fmt("已清除 %zu 个变更表单、%zu 个实例、%zu 个线程", s.changeForms.size(), s.instances.size(), s.threads.size()));
 			});
 	}
+	tips::Tip("同时删除它的变更表单和脚本实例。要带安全检查地移除整个模组，请用「模组 > 从存档移除模组」。");
 	if (a_plugins.size() == 1) {
 		ImGui::SameLine();
 		if (ImGui::Button("为此插件设置过滤器")) {
@@ -175,9 +196,171 @@ void App::pluginActions(const std::set<std::string>& a_plugins)
 			_focus.reset();
 			_rowsDirty = true;
 		}
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("“变更表单”“脚本实例”和“线程”页随后只显示此插件的元素。");
+		tips::Tip("“变更表单”“脚本实例”和“线程”页随后只显示此插件的元素。");
+	}
+}
+
+// The change forms, script instances and threads a plugin's buttons above would delete, so they can be looked
+// through first: in collapsible groups (change forms by type, instances by script), each in form ID order;
+// clicking one opens it in its own list.
+void App::pluginContents(const std::set<std::string>& a_plugins)
+{
+	auto& pc = _plContents;
+	if (pc.plugins != a_plugins || pc.gen != _editGen || pc.save != _save.get()) {
+		pc = PluginContents{};
+		pc.plugins = a_plugins;
+		pc.gen = _editGen;
+		pc.save = _save.get();
+		const auto sel = ops::SelectPluginElements(*_save, a_plugins, true, true);
+
+		// change forms, by type
+		std::map<std::string, std::vector<std::pair<std::uint32_t, PluginContents::Row>>> forms;
+		for (const auto& c : _save->changeForms) {
+			if (!sel.changeForms.count(c.refID.data)) {
+				continue;
+			}
+			const auto  fid = _save->formIDOf(c.refID);
+			std::string name = _db ? _db->describe(fid) : std::string();
+			forms[ChangeFormTypeName(c.typeCode())].push_back({ fid, { c.refID.data, Fmt("%08X", fid), Fmt("%u 字节", static_cast<unsigned>(c.data.size())), std::move(name) } });
 		}
+		for (auto& [type, rows] : forms) {
+			std::sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+			auto& g = pc.forms.emplace_back(type, std::vector<PluginContents::Row>{});
+			for (auto& r : rows) {
+				g.second.push_back(std::move(r.second));
+			}
+			pc.nForms += g.second.size();
+		}
+
+		// script instances, by script
+		if (const auto* p = _save->papyrus()) {
+			std::map<std::string, std::vector<std::pair<std::uint32_t, PluginContents::Row>>> inst;
+			for (const auto& i : p->instances) {
+				if (!sel.instances.count(i.id)) {
+					continue;
+				}
+				std::string text = "on  " + formLabel(i.refID);
+				if (ops::IsUnattached(i)) {
+					text += "  [UNATTACHED]";
+				}
+				inst[p->str(i.script)].push_back(
+					{ _save->formIDOf(i.refID), { static_cast<std::uint64_t>(i.id), std::move(text), {}, {} } });
+			}
+			for (auto& [script, rows] : inst) {
+				std::sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+				auto& g = pc.instances.emplace_back(script, std::vector<PluginContents::Row>{});
+				for (auto& r : rows) {
+					g.second.push_back(std::move(r.second));
+				}
+				pc.nInstances += g.second.size();
+			}
+			for (const auto& a : p->activeScripts) {
+				if (sel.threads.count(a.id)) {
+					pc.threads.push_back({ static_cast<std::uint64_t>(a.id), threadLabel(a), {}, {} });
+				}
+			}
+			std::sort(pc.threads.begin(), pc.threads.end(), [](const auto& a, const auto& b) { return a.key < b.key; });
+		}
+	}
+
+	ImGui::Separator();
+	ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+	ImGui::TextWrapped("上面那些按钮会删掉的内容。展开分组可以逐项查看；点一行即可打开它。");
+	ImGui::PopStyleColor();
+	if (!ImGui::BeginChild("##plcontents", ImVec2(0, 0), ImGuiChildFlags_None)) {
+		ImGui::EndChild();
+		return;
+	}
+	Cat target = Cat::kChangeForms;
+	std::optional<std::uint64_t> go;
+	// screenshots: RESAVERPP_TEST_PLOPEN=1 opens everything, =2 everything but the change forms
+	static const char* testOpen = std::getenv("RESAVERPP_TEST_PLOPEN");
+	bool               skipForms = testOpen && testOpen[0] == '2';
+	auto open = [&] {
+		if (testOpen && !skipForms) {
+			ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+		}
+	};
+	auto rows = [&](const std::vector<PluginContents::Row>& a_rows, Cat a_cat) {
+		ImGuiListClipper clip;
+		clip.Begin(static_cast<int>(a_rows.size()));
+		while (clip.Step()) {
+			for (int r = clip.DisplayStart; r < clip.DisplayEnd; ++r) {
+				const auto& row = a_rows[r];
+				ImGui::PushID(r);
+				const float x = ImGui::GetCursorPosX();
+				if (ImGui::Selectable("##row", false, ImGuiSelectableFlags_AllowOverlap)) {
+					go = row.key;
+					target = a_cat;
+				}
+				tips::Tip("点击在对应的列表里打开它");
+				ImGui::SameLine(x);
+				ImGui::TextUnformatted(row.text.c_str());
+				float next = x + ImGui::CalcTextSize(row.text.c_str()).x + ImGui::GetFontSize();
+				if (!row.right.empty()) {
+					const float col = x + ImGui::CalcTextSize("00000000").x + ImGui::CalcTextSize("0000000 bytes").x + ImGui::GetFontSize();
+					ImGui::SameLine(col - ImGui::CalcTextSize(row.right.c_str()).x);
+					ImGui::TextUnformatted(row.right.c_str());
+					next = col + ImGui::GetFontSize();
+				}
+				if (!row.rest.empty()) {
+					ImGui::SameLine(next);
+					ImGui::TextUnformatted(row.rest.c_str());
+				}
+				ImGui::PopID();
+			}
+		}
+	};
+	auto groups = [&](const PluginContents::Groups& a_groups, Cat a_cat) {
+		for (const auto& [name, list] : a_groups) {
+			open();
+			if (ImGui::TreeNodeEx(name.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth, "%s  (%zu)", name.c_str(), list.size())) {
+				rows(list, a_cat);
+				ImGui::TreePop();
+			}
+		}
+	};
+	if (pc.nForms == 0 && pc.nInstances == 0 && pc.threads.empty()) {
+		ImGui::TextDisabled("这个插件在存档里什么都没有。");
+	}
+	open();
+	const bool tipOpen305 = pc.nForms && ImGui::CollapsingHeader(Fmt("变更表单（%zu）###plcf", pc.nForms).c_str());
+	if (pc.nForms) {
+		tips::Tip("这个插件定义的、在本存档中发生变更的表单。");
+	}
+	if (tipOpen305) {
+		ImGui::PushID("cf");
+		groups(pc.forms, Cat::kChangeForms);
+		ImGui::PopID();
+	}
+	skipForms = false;
+	open();
+	const bool tipOpen312 = pc.nInstances && ImGui::CollapsingHeader(Fmt("脚本实例（%zu），按脚本分组###plsi", pc.nInstances).c_str());
+	if (pc.nInstances) {
+		tips::Tip("挂在这个插件表单上的脚本，按脚本分组。");
+	}
+	if (tipOpen312) {
+		ImGui::PushID("si");
+		groups(pc.instances, Cat::kInstances);
+		ImGui::PopID();
+	}
+	open();
+	const bool tipOpen318 = !pc.threads.empty() && ImGui::CollapsingHeader(Fmt("跑在它们上面的线程（%zu）###plth", pc.threads.size()).c_str());
+	if (!pc.threads.empty()) {
+		tips::Tip("你存档时正跑在这个插件表单上的脚本线程。");
+	}
+	if (tipOpen318) {
+		ImGui::PushID("th");
+		rows(pc.threads, Cat::kThreads);
+		ImGui::PopID();
+	}
+	ImGui::EndChild();
+	if (go) {
+		if (!_pluginFilter.empty()) {
+			_pluginFilter.clear();
+			_rowsDirty = true;
+		}
+		select(target, *go);
 	}
 }
 
@@ -228,6 +411,7 @@ void App::arrayEditor(ArrayInfo& a)
 	}
 	ImGui::SetNextItemWidth(110);
 	ImGui::InputInt("元素编号", &_arrayIndex);
+	tips::Tip("按钮作用于数组的哪个元素（从 0 数起）。");
 	_arrayIndex = std::clamp(_arrayIndex, 0, std::max(0, n - 1));
 	ImGui::SameLine();
 	ImGui::BeginDisabled(n == 0);
@@ -235,6 +419,7 @@ void App::arrayEditor(ArrayInfo& a)
 		a.vars.erase(a.vars.begin() + _arrayIndex);
 		markChanged(Fmt("已移除数组的第 %d 个元素", _arrayIndex));
 	}
+	tips::Tip("从数组里删除这个元素。按位置读数组的脚本会看到后面的元素往前挪。");
 	ImGui::SameLine();
 	ImGui::BeginDisabled(_arrayIndex == 0);
 	if (ImGui::Button("上移")) {
@@ -242,6 +427,7 @@ void App::arrayEditor(ArrayInfo& a)
 		--_arrayIndex;
 		markChanged("已上移一个数组元素");
 	}
+	tips::Tip("把这个元素和前一个交换位置。");
 	ImGui::EndDisabled();
 	ImGui::SameLine();
 	ImGui::BeginDisabled(_arrayIndex + 1 >= n);
@@ -250,6 +436,7 @@ void App::arrayEditor(ArrayInfo& a)
 		++_arrayIndex;
 		markChanged("已下移一个数组元素");
 	}
+	tips::Tip("把这个元素和后一个交换位置。");
 	ImGui::EndDisabled();
 	ImGui::EndDisabled();
 	ImGui::SameLine();
@@ -279,6 +466,7 @@ void App::arrayEditor(ArrayInfo& a)
 		_arrayIndex = static_cast<int>(a.vars.size()) - 1;
 		markChanged("已添加一个数组元素（在上方编辑其值）");
 	}
+	tips::Tip("在数组末尾添加一个该类型的空元素。");
 	ImGui::EndDisabled();
 }
 
@@ -369,6 +557,7 @@ void App::drawArraysAnalysis()
 	if (ImGui::Button("刷新")) {
 		_arraysDirty = true;
 	}
+	tips::Tip("重新统计数组，并找出已经没有任何东西引用的那些。");
 	if (!_arrOrphans.empty()) {
 		ImGui::SameLine();
 		if (ImGui::Button(Fmt("删除 %zu 个无人持有的数组", _arrOrphans.size()).c_str())) {
@@ -379,6 +568,7 @@ void App::drawArraysAnalysis()
 					_arraysDirty = true;
 				});
 		}
+		tips::Tip("删除没有任何脚本实例、引用、数组、线程或排队调用指向的数组。它们只是存档里的死重量。");
 	}
 	if (ImGui::BeginTabBar("arr")) {
 		if (ImGui::BeginTabItem("按元素类型")) {
@@ -412,6 +602,7 @@ void App::drawArraysAnalysis()
 					if (ImGui::SmallButton("跳转")) {
 						select(Cat::kArrays, id);
 					}
+					tips::Tip("在「数组」列表里打开这个数组。");
 					ImGui::SameLine();
 					const auto t = IsRefType(a->type) ? p.str(a->refType) + "[]" : std::string(VTypeName(a->type));
 					ImGui::Text("%016" PRIX64 "  %s%s", id, t.c_str(), showSize ? Fmt("  %zu 个元素", a->vars.size()).c_str() : "");
@@ -472,10 +663,12 @@ void App::drawLog()
 		}
 		ImGui::SetClipboardText(all.c_str());
 	}
+	tips::Tip("把整个日志复制到剪贴板（例如贴进错误报告里）。");
 	ImGui::SameLine();
 	if (ImGui::Button("清空")) {
 		_log.clear();
 	}
+	tips::Tip("清空日志。");
 	ImGui::Separator();
 	ImGui::BeginChild("log");
 	for (const auto& l : _log) {
@@ -499,11 +692,12 @@ void App::drawSettings()
 	ImGui::SeparatorText("游戏");
 	{
 		int g = _vr ? 1 : 0;
-		const char* games[] = { "Skyrim Special Edition / Anniversary Edition", "Skyrim VR" };
-		ImGui::SetNextItemWidth(380);
+		const char* games[] = { "Skyrim SE/AE", "Skyrim VR" };
+		ImGui::SetNextItemWidth(200);
 		if (ImGui::Combo("##game", &g, games, 2)) {
 			setGame(g == 1);
 		}
+		tips::Tip("下面这些文件夹属于哪个游戏。会自动切换到你所打开存档所属的游戏。");
 		ImGui::SameLine();
 		ImGui::TextDisabled("（会自动切换到你所打开存档所属的游戏）");
 	}
@@ -521,6 +715,7 @@ void App::drawSettings()
 			_scanPathPopup = true;
 		}
 	}
+	tips::Tip("选择你的 Mod Organizer “mods” 文件夹、Vortex 的 staging 文件夹或游戏的 Data 文件夹。ReSaver++ 从那里读取脚本和插件名称。");
 	ImGui::SameLine();
 	if (ImGui::Button("使用 ModOrganizer.ini…") && platform::HasNativeDialogs()) {
 		if (auto p = platform::OpenFileDialog({}, "ini", "选择 ModOrganizer.ini")) {
@@ -531,10 +726,12 @@ void App::drawSettings()
 			}
 		}
 	}
+	tips::Tip("选择一个 ModOrganizer.ini：会使用它的 mods 文件夹和配置（对便携版 MO2 很方便）。");
 	ImGui::SameLine();
 	if (ImGui::Button("自动检测")) {
 		autoDetectPaths(true);
 	}
+	tips::Tip("在常见位置寻找 Mod Organizer、Vortex 和游戏，找到什么就用什么。");
 	if (!_detectNote.empty()) {
 		ImGui::TextDisabled("%s", _detectNote.c_str());
 	}
@@ -546,6 +743,7 @@ void App::drawSettings()
 			ch = true;
 		}
 	}
+	tips::Tip("选择游戏文件夹（含 SkyrimSE.exe 或 SkyrimVR.exe 的那个）。Papyrus 编译器和 Data 文件夹需要它。");
 	{
 		const auto comp = compilerPath();
 		std::error_code ec;
@@ -565,6 +763,7 @@ void App::drawSettings()
 				}
 			}
 		}
+		tips::Tip("选择「文件 > 打开」的起始文件夹，也是「监视存档文件夹」监视的文件夹。");
 		if (!custom.empty()) {
 			ImGui::SameLine();
 			if (ImGui::SmallButton("自动查找##saves")) {
@@ -574,6 +773,7 @@ void App::drawSettings()
 					setWatching(true);
 				}
 			}
+			tips::Tip("忘掉你选的文件夹，重新自动查找存档文件夹。");
 		}
 		ImGui::TextDisabled(custom.empty() ? "自动查找：上次打开存档所在的文件夹；否则是有最新存档的那个\n"
 											 "（Documents\\My Games、Skyrim.ini 的 sLocalSavePath、Mod Organizer 配置里的 saves）。"
@@ -597,6 +797,7 @@ void App::drawSettings()
 				if (ImGui::SmallButton("使用")) {
 					scanSources(m->modsDir);
 				}
+				tips::Tip("使用这个 Mod Organizer 实例的 mods 文件夹。");
 				ImGui::SameLine();
 				ImGui::TextDisabled("Mod Organizer “%s”：%s", platform::ToUtf8(e.path().filename()).c_str(), mods.c_str());
 				ImGui::PopID();
@@ -615,7 +816,9 @@ void App::drawSettings()
 	}
 	if (_mo2) {
 		ImGui::TextWrapped("Mod Organizer：%s", platform::ToUtf8(_mo2->ini).c_str());
-		if (ImGui::BeginCombo("MO2 配置", _profile.c_str())) {
+		const bool tipOpen767 = ImGui::BeginCombo("MO2 配置", _profile.c_str());
+		tips::Tip("使用哪个 Mod Organizer 配置的加载顺序和已启用模组。");
+		if (tipOpen767) {
 			for (const auto& pr : _mo2->profiles) {
 				if (ImGui::Selectable(pr.c_str(), pr == _profile)) {
 					_profile = pr;
@@ -631,7 +834,11 @@ void App::drawSettings()
 	if (!_sourcesPath.empty() && ImGui::Button("重新扫描模组文件夹")) {
 		scanSources(platform::FromUtf8(_sourcesPath));
 	}
+	if (!_sourcesPath.empty()) {
+		tips::Tip("重新读取模组文件夹（安装或移除模组之后）。");
+	}
 	ch |= ImGui::Checkbox("自动读取插件名称", &_autoNames);
+	tips::Tip("扫描之后读取你的插件，表单就能显示名称和编辑器 ID。加载顺序很大时要花几秒。");
 	ImGui::SeparatorText("游戏文本语言");
 	{
 		struct Cp
@@ -653,7 +860,9 @@ void App::drawSettings()
 			current = Fmt("自动（本系统：%u）", text::EffectiveCodePage());
 		}
 		ImGui::SetNextItemWidth(420);
-		if (ImGui::BeginCombo("文本编码", current.c_str())) {
+		const bool tipOpen805 = ImGui::BeginCombo("文本编码", current.c_str());
+		tips::Tip("显示非英文游戏保存的名称时用的编码页。自动 = 用你系统的。");
+		if (tipOpen805) {
 			for (const auto& c : cps) {
 				if (ImGui::Selectable(c.name, c.cp == text::CodePage())) {
 					text::SetCodePage(c.cp);
@@ -673,18 +882,21 @@ void App::drawSettings()
 		_saveCompression = c - 1;
 		ch = true;
 	}
+	tips::Tip("ReSaver++ 写出存档时如何压缩。游戏用的是 LZ4；不压缩的存档更大，但读起来一样。");
 	ImGui::SeparatorText("实时游戏（ReSaverHelper.dll）");
 	ImGui::TextDisabled("游戏里装上可选的 ReSaverHelper.dll 后，任务页就能在运行中的游戏里完成任务、设置阶段、\n"
 						"刷新任务日志。没装也不影响其它功能。");
 	if (ImGui::Checkbox("连接到正在运行的游戏", &_liveEnabled)) {
 		ch = true;
 	}
+	tips::Tip("和运行中游戏里的 ReSaverHelper.dll 通信，就能从这里完成任务、设置阶段、刷新日志。");
 	{
 		const char* modes[] = { "左上角通知", "消息框", "不提示" };
 		ImGui::SetNextItemWidth(260);
 		if (ImGui::Combo("游戏用什么方式告诉你结果", &_liveNotify, modes, 3)) {
 			ch = true;
 		}
+		tips::Tip("游戏用什么方式告诉你 ReSaver++ 做了什么：通知、消息框，或者不提示。");
 	}
 	{
 		// ReSaverHelper's own messages are English, so they are silenced and ReSaver++ sends its own (Chinese).
@@ -709,16 +921,20 @@ void App::drawSettings()
 		if (ImGui::Combo("主题", &k, names, 3)) {
 			setTheme(k);
 		}
+		tips::Tip("ReSaver++ 的配色。");
 	}
 	if (ImGui::Checkbox("监视存档文件夹（自动打开新存档）", &watch)) {
 		setWatching(watch);
 	}
+	tips::Tip("游戏写出新存档时立刻打开它。");
 	ch |= ImGui::Checkbox("启动 ReSaver++ 时打开最新的存档", &_openNewest);
+	tips::Tip("ReSaver++ 启动时自动打开你最新的存档。");
 	const char* sorts[] = { "存档顺序", "字母顺序", "大小", "总量" };
 	if (ImGui::Combo("列表排序", &_sortMode, sorts, 4)) {
 		_rowsDirty = true;
 		ch = true;
 	}
+	tips::Tip("列表如何排序：按存档里的顺序、按名称、按自身大小，或按总量（含它包含的东西）。");
 	ImGui::TextDisabled("设置保存在 %s", platform::ToUtf8(platform::SettingsFile()).c_str());
 	if (ch) {
 		saveSettings();
@@ -742,6 +958,7 @@ void App::drawSupport()
 		if (ImGui::Button(l[0], ImVec2(120, 0))) {
 			platform::OpenWithDefaultApp(platform::FromUtf8(l[1]));
 		}
+		tips::Tip("在浏览器里打开这个支持链接。");
 		ImGui::SameLine();
 		ImGui::TextDisabled("%s", l[1]);
 	}

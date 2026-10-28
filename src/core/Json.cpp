@@ -41,7 +41,7 @@ namespace ess::json
 				Value v = value(0);
 				ws();
 				if (_i != _t.size()) {
-					fail("text after the end");
+					fail("结束之后还有多余内容");
 				}
 				return v;
 			}
@@ -50,7 +50,7 @@ namespace ess::json
 			const std::string& _t;
 			std::size_t        _i = 0;
 
-			[[noreturn]] void fail(const char* what) const { throw std::runtime_error(std::string("JSON: ") + what + " at offset " + std::to_string(_i)); }
+			[[noreturn]] void fail(const char* what) const { throw std::runtime_error(std::string("JSON: ") + what + "，偏移 " + std::to_string(_i)); }
 
 			void ws()
 			{
@@ -94,7 +94,7 @@ namespace ess::json
 			unsigned hex4()
 			{
 				if (_i + 4 > _t.size()) {
-					fail("short \\u escape");
+					fail("\\u 转义不完整");
 				}
 				const unsigned v = static_cast<unsigned>(std::strtoul(_t.substr(_i, 4).c_str(), nullptr, 16));
 				_i += 4;
@@ -107,7 +107,7 @@ namespace ess::json
 				std::string out;
 				while (true) {
 					if (_i >= _t.size()) {
-						fail("unterminated string");
+						fail("字符串没有结束");
 					}
 					const char c = _t[_i++];
 					if (c == '"') {
@@ -118,7 +118,7 @@ namespace ess::json
 						continue;
 					}
 					if (_i >= _t.size()) {
-						fail("bad escape");
+						fail("无效的转义");
 					}
 					const char e = _t[_i++];
 					switch (e) {
@@ -141,7 +141,7 @@ namespace ess::json
 							put(out, cp);
 							break;
 						}
-					default: fail("bad escape");
+					default: fail("无效的转义");
 					}
 				}
 			}
@@ -149,11 +149,11 @@ namespace ess::json
 			Value value(int depth)
 			{
 				if (depth > 200) {
-					fail("nested too deeply");
+					fail("嵌套层数过多");
 				}
 				ws();
 				if (_i >= _t.size()) {
-					fail("unexpected end");
+					fail("意外的结束");
 				}
 				Value      v;
 				const char c = _t[_i];
@@ -168,12 +168,12 @@ namespace ess::json
 					while (true) {
 						ws();
 						if (_i >= _t.size() || _t[_i] != '"') {
-							fail("expected a key");
+							fail("需要键名");
 						}
 						std::string key = string();
 						ws();
 						if (_i >= _t.size() || _t[_i] != ':') {
-							fail("expected ':'");
+							fail("需要 ':'");
 						}
 						++_i;
 						v.o[std::move(key)] = value(depth + 1);
@@ -186,7 +186,7 @@ namespace ess::json
 							++_i;
 							return v;
 						}
-						fail("expected ',' or '}'");
+						fail("需要 ',' 或 '}'");
 					}
 				}
 				if (c == '[') {
@@ -208,7 +208,7 @@ namespace ess::json
 							++_i;
 							return v;
 						}
-						fail("expected ',' or ']'");
+						fail("需要 ',' 或 ']'");
 					}
 				}
 				if (c == '"') {
@@ -232,7 +232,7 @@ namespace ess::json
 				const char* start = _t.c_str() + _i;
 				v.n = std::strtod(start, &end);
 				if (end == start) {
-					fail("unexpected character");
+					fail("意外的字符");
 				}
 				v.type = Value::Type::kNumber;
 				_i += static_cast<std::size_t>(end - start);

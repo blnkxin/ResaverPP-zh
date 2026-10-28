@@ -27,7 +27,7 @@ int main(int argc, char** argv)
 		} else {
 			++t.second;
 			std::string e = d.error;
-			if (auto p = e.find(" (at byte"); p != std::string::npos) {
+			if (auto p = e.find("（位于第 "); p != std::string::npos) {
 				e = e.substr(0, p);
 			}
 			++errors[std::string(ChangeFormTypeName(cf.typeCode())) + ": " + e];
